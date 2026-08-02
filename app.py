@@ -1230,12 +1230,14 @@ st.markdown("""
         color: #9ea7b3; font-weight: 500; text-align: left;
         justify-content: flex-start; padding: 0.5rem 0.6rem;
         box-shadow: none;
+        transform: perspective(500px) rotateY(0deg);
         transition: background 0.18s var(--ease), color 0.18s var(--ease),
-                    border-color 0.18s var(--ease), padding-left 0.18s var(--ease);
+                    border-color 0.18s var(--ease), padding-left 0.18s var(--ease),
+                    transform 0.18s var(--ease);
     }
     section[data-testid="stSidebar"] .stButton button:hover {
         background: #161b22; color: #e6e8eb; border-color: #1c2128;
-        padding-left: 0.85rem;
+        padding-left: 0.85rem; transform: perspective(500px) rotateY(-4deg);
     }
     section[data-testid="stSidebar"] .stButton button[kind="primary"] {
         background: #161b22 !important; color: #e6e8eb !important;
@@ -1267,30 +1269,38 @@ st.markdown("""
     }
     div[data-testid="stFileUploader"] {
         border: 1px dashed #2a3038; border-radius: 8px; padding: 0.4rem;
-        transition: border-color 0.2s var(--ease), background 0.2s var(--ease), transform 0.2s var(--ease);
+        transform: perspective(600px) rotateX(0deg) translateY(0);
+        transition: border-color 0.2s var(--ease), background 0.2s var(--ease), transform 0.25s var(--ease);
     }
     div[data-testid="stFileUploader"]:hover {
-        border-color: #2dd4bf; background: rgba(45,212,191,0.05); transform: translateY(-1px);
+        border-color: #2dd4bf; background: rgba(45,212,191,0.05);
+        transform: perspective(600px) rotateX(3deg) translateY(-2px);
     }
     /* Khung "panel" — dùng khi bọc st.container(border=True) */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background: #12151b; border: 1px solid #1c2128 !important;
-        border-radius: 10px; transition: border-color 0.2s var(--ease);
+        border-radius: 10px; transform: perspective(900px) rotateX(0deg);
+        transition: border-color 0.2s var(--ease), transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
         animation: fadeInUp 0.35s var(--ease) both;
     }
     div[data-testid="stVerticalBlockBorderWrapper"]:hover {
         border-color: #262b33 !important;
+        transform: perspective(900px) rotateX(1.2deg);
+        box-shadow: 0 10px 22px rgba(0,0,0,0.28);
     }
     .stButton button, .stDownloadButton button {
         border-radius: 6px; font-weight: 550;
-        transition: transform 0.16s var(--ease), background 0.16s var(--ease),
-                    border-color 0.16s var(--ease), box-shadow 0.16s var(--ease);
+        transform: perspective(500px) rotateX(0deg) translateY(0);
+        transition: transform 0.18s var(--ease), background 0.16s var(--ease),
+                    border-color 0.16s var(--ease), box-shadow 0.18s var(--ease);
     }
     .stButton button:hover, .stDownloadButton button:hover {
-        transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+        transform: perspective(500px) rotateX(4deg) translateY(-1px);
+        box-shadow: 0 8px 16px rgba(0,0,0,0.3);
     }
     .stButton button:active, .stDownloadButton button:active {
-        transform: scale(0.97) translateY(0); box-shadow: none;
+        transform: perspective(500px) rotateX(-3deg) scale(0.97) translateY(0);
+        box-shadow: none;
     }
     .stButton button[kind="primary"], .stDownloadButton button {
         background: #2dd4bf; border-color: #2dd4bf; color: #04342c;
@@ -1316,12 +1326,14 @@ st.markdown("""
     div[data-testid="stMetric"] {
         background: #12151b; border: 1px solid #1c2128; border-radius: 10px;
         padding: 0.9rem 0.75rem 0.75rem; position: relative; overflow: hidden;
-        transition: transform 0.2s var(--ease), border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+        transform: perspective(700px) rotateX(0deg) translateY(0) translateZ(0);
+        transition: transform 0.25s var(--ease), border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
         animation: fadeInUp 0.4s var(--ease) both;
     }
     div[data-testid="stMetric"]:hover {
-        transform: translateY(-3px); border-color: #2a3038;
-        box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+        transform: perspective(700px) rotateX(6deg) translateY(-4px) translateZ(6px);
+        border-color: #2a3038;
+        box-shadow: 0 14px 26px rgba(0,0,0,0.38);
     }
     div[data-testid="stMetric"]::before {
         content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
