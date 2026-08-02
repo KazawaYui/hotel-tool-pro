@@ -1,6 +1,3 @@
-import time as _time_dbg
-_t0_dbg = _time_dbg.time()
-
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -1240,19 +1237,18 @@ if not st.session_state.get("_main_css_injected"):
         box-shadow: none; will-change: transform, background;
         transform: translateX(0);
         transition: background 0.1s var(--ease), color 0.1s var(--ease),
-                    border-color 0.1s var(--ease), padding-left 0.1s var(--ease),
-                    transform 0.1s var(--ease);
+                    border-color 0.1s var(--ease), transform 0.1s var(--ease);
     }
     section[data-testid="stSidebar"] .stButton button:hover {
         background: #161b22; color: #e6e8eb; border-color: #1c2128;
-        padding-left: 1.1rem; transform: translateX(2px);
+        transform: translateX(4px);
     }
     section[data-testid="stSidebar"] .stButton button[kind="primary"] {
         background: rgba(45,212,191,0.16) !important; color: #2dd4bf !important;
         border-color: transparent !important; font-weight: 600;
     }
     section[data-testid="stSidebar"] .stButton button[kind="primary"]:hover {
-        background: rgba(45,212,191,0.24) !important; padding-left: 1.1rem;
+        background: rgba(45,212,191,0.24) !important;
     }
     .sb-brand {padding: 0.2rem 0.4rem 1rem;}
     .sb-brand-title {color:#e6e8eb; font-weight:600; font-size:0.95rem; letter-spacing:-0.01em;}
@@ -1267,12 +1263,19 @@ if not st.session_state.get("_main_css_injected"):
         text-transform:uppercase; letter-spacing:0.06em; padding:0.7rem 0.4rem 0.2rem;}
     .sb-status {display:flex; align-items:center; gap:6px; color:#4d5561;
         font-size:0.72rem; padding-top:0.7rem; margin-top:0.5rem; border-top:1px solid #1c2128;}
-    .sb-dot {width:6px; height:6px; border-radius:50%; background:#3fb950; flex-shrink:0;
-        box-shadow: 0 0 0 0 rgba(63,185,80,0.5); animation: pulse 2.2s infinite;}
+    .sb-dot {
+        position: relative; width:6px; height:6px; border-radius:50%;
+        background:#3fb950; flex-shrink:0;
+    }
+    .sb-dot::after {
+        content: ""; position: absolute; inset: 0; border-radius: 50%;
+        background: #3fb950;
+        animation: pulse 2.2s var(--ease) infinite;
+    }
     @keyframes pulse {
-        0%   {box-shadow: 0 0 0 0 rgba(63,185,80,0.45);}
-        70%  {box-shadow: 0 0 0 5px rgba(63,185,80,0);}
-        100% {box-shadow: 0 0 0 0 rgba(63,185,80,0);}
+        0%   {transform: scale(1);   opacity: 0.55;}
+        70%  {transform: scale(2.6); opacity: 0;}
+        100% {transform: scale(2.6); opacity: 0;}
     }
 
     /* ── Banner chào mừng kiểu One UI: thẻ nổi, bo lớn, kính mờ, đuôi bong bóng thoại ── */
@@ -1362,12 +1365,12 @@ if not st.session_state.get("_main_css_injected"):
     div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"]::after, .stDownloadButton button::after {
         content: ""; position: absolute; top: 0; left: -60%; width: 35%; height: 100%;
         background: linear-gradient(120deg, transparent, rgba(255,255,255,0.55), transparent);
-        transform: skewX(-20deg);
-        transition: left 0.65s ease;
-        pointer-events: none;
+        transform: skewX(-20deg) translateX(0);
+        transition: transform 0.65s ease;
+        pointer-events: none; will-change: transform;
     }
     div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"]:hover::after, .stDownloadButton button:hover::after {
-        left: 130%;
+        transform: skewX(-20deg) translateX(540%);
     }
 
     /* ── Input / checkbox: viền sáng dần khi hover / focus ── */
@@ -1397,10 +1400,11 @@ if not st.session_state.get("_main_css_injected"):
         box-shadow: 0 14px 26px rgba(0,0,0,0.38), 0 0 22px rgba(45,212,191,0.12);
     }
     div[data-testid="stMetric"]::before {
-        content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-        transition: height 0.2s var(--ease);
+        content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+        transform: scaleY(0.75); transform-origin: top;
+        transition: transform 0.2s var(--ease);
     }
-    div[data-testid="stMetric"]:hover::before {height: 4px;}
+    div[data-testid="stMetric"]:hover::before {transform: scaleY(1);}
     div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+1) div[data-testid="stMetric"]::before {background: #2dd4bf;}
     div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+2) div[data-testid="stMetric"]::before {background: #60a5fa;}
     div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+3) div[data-testid="stMetric"]::before {background: #f5a623;}
@@ -2227,7 +2231,3 @@ if st.session_state.menu == "recon_room":
         if n_dup > 0:
             st.warning(f"🟠 {n_dup} phòng bị TRÙNG (xuất hiện nhiều lần) trong file số phòng: "
                        + ", ".join(rr['sys_dup']))
-
-# ── TẠM THỜI: đo thời gian Python xử lý mỗi lần rerun (để chẩn đoán độ trễ) ──
-with st.sidebar:
-    st.caption(f"⏱ Rerun: {(_time_dbg.time() - _t0_dbg)*1000:.0f} ms")
