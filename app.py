@@ -1226,14 +1226,14 @@ st.markdown("""
         color: #9ea7b3; font-weight: 500; text-align: left;
         justify-content: flex-start; padding: 0.55rem 0.9rem;
         box-shadow: none; will-change: transform, background;
-        transform: perspective(500px) rotateY(0deg);
+        transform: translateX(0);
         transition: background 0.1s var(--ease), color 0.1s var(--ease),
                     border-color 0.1s var(--ease), padding-left 0.1s var(--ease),
                     transform 0.1s var(--ease);
     }
     section[data-testid="stSidebar"] .stButton button:hover {
         background: #161b22; color: #e6e8eb; border-color: #1c2128;
-        padding-left: 1.1rem; transform: perspective(500px) rotateY(-4deg);
+        padding-left: 1.1rem; transform: translateX(2px);
     }
     section[data-testid="stSidebar"] .stButton button[kind="primary"] {
         background: rgba(45,212,191,0.16) !important; color: #2dd4bf !important;
@@ -1306,23 +1306,23 @@ st.markdown("""
     }
     div[data-testid="stFileUploader"] {
         border: 1px dashed #2a3038; border-radius: var(--r-lg); padding: 0.4rem;
-        transform: perspective(600px) rotateX(0deg) translateY(0); will-change: transform;
+        transform: translateY(0); will-change: transform;
         transition: border-color 0.12s var(--ease), background 0.12s var(--ease), transform 0.15s var(--ease);
     }
     div[data-testid="stFileUploader"]:hover {
         border-color: #2dd4bf; background: rgba(45,212,191,0.05);
-        transform: perspective(600px) rotateX(3deg) translateY(-2px);
+        transform: translateY(-2px);
     }
     /* Khung "panel" — dùng khi bọc st.container(border=True) */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background: #161b22; border: 1px solid #262b33 !important;
-        border-radius: var(--r-lg); transform: perspective(900px) rotateX(0deg);
+        border-radius: var(--r-lg); transform: translateY(0);
         will-change: transform;
         transition: border-color 0.12s var(--ease), transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
     }
     div[data-testid="stVerticalBlockBorderWrapper"]:hover {
         border-color: #3a4048 !important;
-        transform: perspective(900px) rotateX(1.2deg);
+        transform: translateY(-2px);
         box-shadow: 0 10px 22px rgba(0,0,0,0.28);
     }
     .stButton button, .stDownloadButton button {
@@ -1376,11 +1376,11 @@ st.markdown("""
         background: #161b22; border: 1px solid #262b33; border-radius: var(--r-lg);
         padding: 0.9rem 0.75rem 0.75rem; position: relative; overflow: hidden;
         will-change: transform;
-        transform: perspective(700px) rotateX(0deg) translateY(0) translateZ(0);
+        transform: translateY(0) translateZ(0);
         transition: transform 0.15s var(--ease), border-color 0.12s var(--ease), box-shadow 0.15s var(--ease);
     }
     div[data-testid="stMetric"]:hover {
-        transform: perspective(700px) rotateX(6deg) translateY(-4px) translateZ(6px);
+        transform: translateY(-4px) translateZ(6px);
         border-color: #3a4048;
         box-shadow: 0 14px 26px rgba(0,0,0,0.38), 0 0 22px rgba(45,212,191,0.12);
     }
@@ -1414,9 +1414,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Hiệu ứng khởi động kiểu điện thoại: "Welcome, Tân" rồi mờ dần vào app ──
-# Chỉ chạy 1 lần mỗi khi mở web (guard bằng phần tử đã tồn tại trong DOM gốc,
-# reset khi người dùng tải lại trang thật sự, không lặp lại ở mỗi lần tương tác).
-components.html("""
+# QUAN TRỌNG: chỉ gọi components.html() đúng 1 lần trong session (guard bằng
+# session_state phía Python) — nếu không, Streamlit sẽ tạo lại iframe này ở
+# MỌI lần rerun (mọi cú click), dù JS bên trong có tự bỏ qua, việc tạo lại
+# iframe + gửi lại toàn bộ HTML/JS qua lại vẫn tốn thời gian và gây khựng.
+if not st.session_state.get("_boot_splash_done"):
+    st.session_state["_boot_splash_done"] = True
+    components.html("""
 <script>
 (function(){
     var doc = window.parent.document;
