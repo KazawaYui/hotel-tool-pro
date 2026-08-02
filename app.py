@@ -1,3 +1,6 @@
+import time as _time_dbg
+_t0_dbg = _time_dbg.time()
+
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -2224,3 +2227,7 @@ if st.session_state.menu == "recon_room":
         if n_dup > 0:
             st.warning(f"🟠 {n_dup} phòng bị TRÙNG (xuất hiện nhiều lần) trong file số phòng: "
                        + ", ".join(rr['sys_dup']))
+
+# ── TẠM THỜI: đo thời gian Python xử lý mỗi lần rerun (để chẩn đoán độ trễ) ──
+with st.sidebar:
+    st.caption(f"⏱ Rerun: {(_time_dbg.time() - _t0_dbg)*1000:.0f} ms")
