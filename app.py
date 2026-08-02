@@ -1396,6 +1396,7 @@ components.html("""
     var css = doc.createElement('style');
     css.id = 'boot-splash-style';
     css.textContent = `
+      @import url('https://fonts.googleapis.com/css2?family=Gaegu:wght@700&display=swap');
       #boot-splash {
         position: fixed; inset: 0; z-index: 999999;
         background: #0b0d12;
@@ -1409,9 +1410,11 @@ components.html("""
         animation: bsLogoIn 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.15s forwards;
       }
       #boot-splash .bs-text {
-        margin-top: 16px; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
-        font-size: 1.35rem; font-weight: 600; color: #f5f7fa; letter-spacing: -0.01em;
-        opacity: 0; transform: translateY(10px);
+        margin-top: 18px;
+        font-family: 'ChocoCooky', 'Choco Cooky', 'Gaegu', 'Nanum Pen Script', cursive;
+        font-size: 2.1rem; font-weight: 700; color: #f5f7fa;
+        transform: translateY(10px) rotate(-2deg); transform-origin: center;
+        opacity: 0;
         animation: bsTextIn 0.5s ease 0.55s forwards;
       }
       #boot-splash .bs-sub {
@@ -1421,7 +1424,7 @@ components.html("""
         animation: bsTextIn 0.5s ease 0.85s forwards;
       }
       @keyframes bsLogoIn { to {opacity: 1; transform: scale(1);} }
-      @keyframes bsTextIn { to {opacity: 1; transform: translateY(0);} }
+      @keyframes bsTextIn { to {opacity: 1; transform: translateY(0) rotate(-2deg);} }
     `;
     doc.head.appendChild(css);
 
