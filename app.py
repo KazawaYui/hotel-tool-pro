@@ -1213,6 +1213,13 @@ st.markdown("""
     footer {visibility: hidden;}
     header[data-testid="stHeader"] {background: transparent;}
 
+    .stApp {--ease: cubic-bezier(0.4, 0, 0.2, 1);}
+
+    @keyframes fadeInUp {
+        from {opacity: 0; transform: translateY(6px);}
+        to   {opacity: 1; transform: translateY(0);}
+    }
+
     /* ── Sidebar ── */
     section[data-testid="stSidebar"] {
         background: #0e1116; border-right: 1px solid #1c2128;
@@ -1223,16 +1230,19 @@ st.markdown("""
         color: #9ea7b3; font-weight: 500; text-align: left;
         justify-content: flex-start; padding: 0.5rem 0.6rem;
         box-shadow: none;
+        transition: background 0.18s var(--ease), color 0.18s var(--ease),
+                    border-color 0.18s var(--ease), padding-left 0.18s var(--ease);
     }
     section[data-testid="stSidebar"] .stButton button:hover {
         background: #161b22; color: #e6e8eb; border-color: #1c2128;
+        padding-left: 0.85rem;
     }
     section[data-testid="stSidebar"] .stButton button[kind="primary"] {
         background: #161b22 !important; color: #e6e8eb !important;
         border-left: 2px solid #2dd4bf !important; border-color: transparent;
     }
     section[data-testid="stSidebar"] .stButton button[kind="primary"]:hover {
-        background: #1a2029 !important;
+        background: #1a2029 !important; padding-left: 0.85rem;
     }
     .sb-brand {padding: 0.2rem 0.4rem 1rem;}
     .sb-brand-title {color:#e6e8eb; font-weight:600; font-size:0.95rem; letter-spacing:-0.01em;}
@@ -1241,30 +1251,47 @@ st.markdown("""
         text-transform:uppercase; letter-spacing:0.06em; padding:0.7rem 0.4rem 0.2rem;}
     .sb-status {display:flex; align-items:center; gap:6px; color:#4d5561;
         font-size:0.72rem; padding-top:0.7rem; margin-top:0.5rem; border-top:1px solid #1c2128;}
-    .sb-dot {width:6px; height:6px; border-radius:50%; background:#3fb950; flex-shrink:0;}
+    .sb-dot {width:6px; height:6px; border-radius:50%; background:#3fb950; flex-shrink:0;
+        box-shadow: 0 0 0 0 rgba(63,185,80,0.5); animation: pulse 2.2s infinite;}
+    @keyframes pulse {
+        0%   {box-shadow: 0 0 0 0 rgba(63,185,80,0.45);}
+        70%  {box-shadow: 0 0 0 5px rgba(63,185,80,0);}
+        100% {box-shadow: 0 0 0 0 rgba(63,185,80,0);}
+    }
 
     /* ── Nội dung chính ── */
     .section-label {
         font-size: 0.7rem; font-weight: 650; color: #7d8590;
         text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.75rem;
+        animation: fadeInUp 0.32s var(--ease) both;
     }
     div[data-testid="stFileUploader"] {
         border: 1px dashed #2a3038; border-radius: 8px; padding: 0.4rem;
-        transition: border-color 0.15s ease, background 0.15s ease;
+        transition: border-color 0.2s var(--ease), background 0.2s var(--ease), transform 0.2s var(--ease);
     }
     div[data-testid="stFileUploader"]:hover {
-        border-color: #2dd4bf; background: rgba(45,212,191,0.04);
+        border-color: #2dd4bf; background: rgba(45,212,191,0.05); transform: translateY(-1px);
     }
     /* Khung "panel" — dùng khi bọc st.container(border=True) */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background: #12151b; border: 1px solid #1c2128 !important;
-        border-radius: 10px;
+        border-radius: 10px; transition: border-color 0.2s var(--ease);
+        animation: fadeInUp 0.35s var(--ease) both;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"]:hover {
+        border-color: #262b33 !important;
     }
     .stButton button, .stDownloadButton button {
         border-radius: 6px; font-weight: 550;
-        transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+        transition: transform 0.16s var(--ease), background 0.16s var(--ease),
+                    border-color 0.16s var(--ease), box-shadow 0.16s var(--ease);
     }
-    .stButton button:active, .stDownloadButton button:active {transform: scale(0.97);}
+    .stButton button:hover, .stDownloadButton button:hover {
+        transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+    }
+    .stButton button:active, .stDownloadButton button:active {
+        transform: scale(0.97) translateY(0); box-shadow: none;
+    }
     .stButton button[kind="primary"], .stDownloadButton button {
         background: #2dd4bf; border-color: #2dd4bf; color: #04342c;
     }
@@ -1272,16 +1299,35 @@ st.markdown("""
         background: #26b8a5; border-color: #26b8a5;
     }
 
+    /* ── Input / checkbox: viền sáng dần khi hover / focus ── */
+    .stTextInput input, .stNumberInput input, .stTextArea textarea {
+        transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+    }
+    .stTextInput input:hover, .stNumberInput input:hover, .stTextArea textarea:hover {
+        border-color: #3a4048 !important;
+    }
+    .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {
+        border-color: #2dd4bf !important; box-shadow: 0 0 0 1px rgba(45,212,191,0.35) !important;
+    }
+    .stCheckbox {transition: opacity 0.15s var(--ease);}
+    .stCheckbox:hover {opacity: 0.85;}
+
     /* ── Metric: thẻ có viền + dải màu trên cùng, xoay vòng theo vị trí cột ── */
     div[data-testid="stMetric"] {
         background: #12151b; border: 1px solid #1c2128; border-radius: 10px;
         padding: 0.9rem 0.75rem 0.75rem; position: relative; overflow: hidden;
-        transition: transform 0.15s ease, border-color 0.15s ease;
+        transition: transform 0.2s var(--ease), border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+        animation: fadeInUp 0.4s var(--ease) both;
     }
-    div[data-testid="stMetric"]:hover {transform: translateY(-2px); border-color: #2a3038;}
+    div[data-testid="stMetric"]:hover {
+        transform: translateY(-3px); border-color: #2a3038;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+    }
     div[data-testid="stMetric"]::before {
         content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+        transition: height 0.2s var(--ease);
     }
+    div[data-testid="stMetric"]:hover::before {height: 4px;}
     div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+1) div[data-testid="stMetric"]::before {background: #2dd4bf;}
     div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+2) div[data-testid="stMetric"]::before {background: #60a5fa;}
     div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+3) div[data-testid="stMetric"]::before {background: #f5a623;}
@@ -1289,9 +1335,21 @@ st.markdown("""
     div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+5) div[data-testid="stMetric"]::before {background: #a78bfa;}
     div[data-testid="stMetricValue"] {
         font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-        font-weight: 600;
+        font-weight: 600; transition: color 0.2s var(--ease);
     }
     div[data-testid="stMetricLabel"] {font-size: 0.82rem;}
+
+    /* ── Alert (success/info/warning/error): xuất hiện mượt ── */
+    div[data-testid="stAlert"] {
+        animation: fadeInUp 0.3s var(--ease) both;
+        transition: transform 0.15s var(--ease);
+    }
+    div[data-testid="stAlert"]:hover {transform: translateY(-1px);}
+
+    /* ── Toàn bộ nội dung màn hình: mờ dần vào khi chuyển trang ── */
+    div[data-testid="stMainBlockContainer"] {
+        animation: fadeInUp 0.28s var(--ease) both;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1308,7 +1366,7 @@ def go_menu(name):
 with st.sidebar:
     st.markdown('''
     <div class="sb-brand">
-        <div class="sb-brand-title">&#9670; Tan hotel</div>
+        <div class="sb-brand-title">&#9670; Hotel Ops</div>
         <div class="sb-brand-sub">Front Office toolkit</div>
     </div>
     ''', unsafe_allow_html=True)
