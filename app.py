@@ -1249,6 +1249,8 @@ st.markdown("""
     }
     .sb-brand {padding: 0.2rem 0.4rem 1rem;}
     .sb-brand-title {color:#e6e8eb; font-weight:600; font-size:0.95rem; letter-spacing:-0.01em;}
+    .sb-mascot {display:inline-block; width:18px; height:18px; vertical-align:-4px; margin-right:2px;}
+    .sb-mascot svg {width:100%; height:100%;}
     .sb-brand-sub {color:#4d5561; font-size:0.72rem;}
     .sb-section {color:#4d5561; font-size:0.68rem; font-weight:600;
         text-transform:uppercase; letter-spacing:0.06em; padding:0.7rem 0.4rem 0.2rem;}
@@ -1271,7 +1273,12 @@ st.markdown("""
         border-radius: var(--r-lg); padding: 1rem 1.3rem; margin-bottom: 1.4rem;
         animation: fadeInUp 0.4s var(--ease) both;
     }
-    .welcome-emoji {font-size: 1.6rem; line-height: 1;}
+    .welcome-emoji {width: 40px; height: 40px; flex-shrink: 0; animation: bsBob 2.6s ease-in-out infinite;}
+    .welcome-emoji svg {width: 100%; height: 100%;}
+    @keyframes bsBob {
+        0%, 100% {transform: translateY(0) rotate(0deg);}
+        50%      {transform: translateY(-4px) rotate(-3deg);}
+    }
     .welcome-title {color: #f5f7fa; font-weight: 600; font-size: 1.05rem; letter-spacing: -0.01em;}
     .welcome-sub {color: #9ea7b3; font-size: 0.82rem; margin-top: 2px;}
 
@@ -1404,10 +1411,22 @@ components.html("""
         transition: opacity 0.55s ease;
       }
       #boot-splash.bs-hide { opacity: 0; pointer-events: none; }
-      #boot-splash .bs-logo {
-        font-size: 3.6rem; color: #2dd4bf; line-height: 1;
+      #boot-splash .bs-logo-wrap {
+        position: relative; width: 100px; height: 100px;
         opacity: 0; transform: scale(0.5);
         animation: bsLogoIn 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.15s forwards;
+      }
+      #boot-splash .bs-logo-wrap svg { width: 100%; height: 100%; }
+      #boot-splash .bs-sparkle {
+        position: absolute; color: #ffb3d1; opacity: 0;
+        animation: bsTwinkle 1.6s ease-in-out infinite;
+      }
+      #boot-splash .bs-sparkle.s1 { top: -6px;  left: -18px; font-size: 1.1rem; animation-delay: 0.7s; }
+      #boot-splash .bs-sparkle.s2 { top: 10px;  right: -22px; font-size: 0.85rem; animation-delay: 1.2s; }
+      #boot-splash .bs-sparkle.s3 { bottom: -4px; left: -8px; font-size: 0.7rem; animation-delay: 1.6s; }
+      @keyframes bsTwinkle {
+        0%, 100% {opacity: 0; transform: scale(0.6) rotate(0deg);}
+        50%      {opacity: 1; transform: scale(1.15) rotate(20deg);}
       }
       #boot-splash .bs-text {
         margin-top: 20px;
@@ -1431,7 +1450,21 @@ components.html("""
     var el = doc.createElement('div');
     el.id = 'boot-splash';
     el.innerHTML =
-        '<div class="bs-logo">&#9670;</div>' +
+        '<div class="bs-logo-wrap">' +
+          '<span class="bs-sparkle s1">&#10022;</span>' +
+          '<span class="bs-sparkle s2">&#10022;</span>' +
+          '<span class="bs-sparkle s3">&#10022;</span>' +
+          '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
+            '<polygon points="50,8 88,42 50,92 12,42" fill="#2dd4bf"/>' +
+            '<polygon points="50,8 50,92 12,42" fill="#1fa08f"/>' +
+            '<polygon points="50,8 88,42 50,92" fill="#5de0cd"/>' +
+            '<path d="M32 46 Q38 40 44 46" stroke="#0b2b26" stroke-width="3.2" fill="none" stroke-linecap="round"/>' +
+            '<path d="M56 46 Q62 40 68 46" stroke="#0b2b26" stroke-width="3.2" fill="none" stroke-linecap="round"/>' +
+            '<ellipse cx="30" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>' +
+            '<ellipse cx="70" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>' +
+            '<path d="M44 59 Q50 65 56 59" stroke="#0b2b26" stroke-width="2.6" fill="none" stroke-linecap="round"/>' +
+          '</svg>' +
+        '</div>' +
         '<div class="bs-text">Welcome, Tân</div>' +
         '<div class="bs-sub">Tân Hotel &middot; Front Office toolkit</div>';
     doc.body.appendChild(el);
@@ -1457,7 +1490,18 @@ def go_menu(name):
 with st.sidebar:
     st.markdown('''
     <div class="sb-brand">
-        <div class="sb-brand-title"><span style="color:#2dd4bf;">&#9670;</span> Tân Hotel</div>
+        <div class="sb-brand-title"><span class="sb-mascot">
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <polygon points="50,8 88,42 50,92 12,42" fill="#2dd4bf"/>
+                <polygon points="50,8 50,92 12,42" fill="#1fa08f"/>
+                <polygon points="50,8 88,42 50,92" fill="#5de0cd"/>
+                <path d="M32 46 Q38 40 44 46" stroke="#0b2b26" stroke-width="5" fill="none" stroke-linecap="round"/>
+                <path d="M56 46 Q62 40 68 46" stroke="#0b2b26" stroke-width="5" fill="none" stroke-linecap="round"/>
+                <ellipse cx="30" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>
+                <ellipse cx="70" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>
+                <path d="M44 59 Q50 65 56 59" stroke="#0b2b26" stroke-width="4" fill="none" stroke-linecap="round"/>
+            </svg>
+        </span> Tân Hotel</div>
         <div class="sb-brand-sub">Front Office toolkit</div>
     </div>
     ''', unsafe_allow_html=True)
@@ -1492,7 +1536,18 @@ with st.sidebar:
 
 st.markdown('''
 <div class="welcome-banner">
-    <div class="welcome-emoji">&#128075;</div>
+    <div class="welcome-emoji">
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <polygon points="50,8 88,42 50,92 12,42" fill="#2dd4bf"/>
+            <polygon points="50,8 50,92 12,42" fill="#1fa08f"/>
+            <polygon points="50,8 88,42 50,92" fill="#5de0cd"/>
+            <path d="M32 46 Q38 40 44 46" stroke="#0b2b26" stroke-width="4" fill="none" stroke-linecap="round"/>
+            <path d="M56 46 Q62 40 68 46" stroke="#0b2b26" stroke-width="4" fill="none" stroke-linecap="round"/>
+            <ellipse cx="30" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>
+            <ellipse cx="70" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>
+            <path d="M44 59 Q50 65 56 59" stroke="#0b2b26" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+        </svg>
+    </div>
     <div>
         <div class="welcome-title">Welcome, Tân</div>
         <div class="welcome-sub">Front Office toolkit · Tân Hotel</div>
