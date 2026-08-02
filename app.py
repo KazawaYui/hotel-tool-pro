@@ -1250,20 +1250,48 @@ st.markdown("""
     }
     div[data-testid="stFileUploader"] {
         border: 1px dashed #2a3038; border-radius: 8px; padding: 0.4rem;
+        transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    div[data-testid="stFileUploader"]:hover {
+        border-color: #2dd4bf; background: rgba(45,212,191,0.04);
+    }
+    /* Khung "panel" — dùng khi bọc st.container(border=True) */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background: #12151b; border: 1px solid #1c2128 !important;
+        border-radius: 10px;
     }
     .stButton button, .stDownloadButton button {
         border-radius: 6px; font-weight: 550;
+        transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
     }
+    .stButton button:active, .stDownloadButton button:active {transform: scale(0.97);}
     .stButton button[kind="primary"], .stDownloadButton button {
         background: #2dd4bf; border-color: #2dd4bf; color: #04342c;
     }
     .stButton button[kind="primary"]:hover, .stDownloadButton button:hover {
         background: #26b8a5; border-color: #26b8a5;
     }
+
+    /* ── Metric: thẻ có viền + dải màu trên cùng, xoay vòng theo vị trí cột ── */
+    div[data-testid="stMetric"] {
+        background: #12151b; border: 1px solid #1c2128; border-radius: 10px;
+        padding: 0.9rem 0.75rem 0.75rem; position: relative; overflow: hidden;
+        transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    div[data-testid="stMetric"]:hover {transform: translateY(-2px); border-color: #2a3038;}
+    div[data-testid="stMetric"]::before {
+        content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+1) div[data-testid="stMetric"]::before {background: #2dd4bf;}
+    div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+2) div[data-testid="stMetric"]::before {background: #60a5fa;}
+    div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+3) div[data-testid="stMetric"]::before {background: #f5a623;}
+    div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+4) div[data-testid="stMetric"]::before {background: #f472b6;}
+    div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+5) div[data-testid="stMetric"]::before {background: #a78bfa;}
     div[data-testid="stMetricValue"] {
         font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
         font-weight: 600;
     }
+    div[data-testid="stMetricLabel"] {font-size: 0.82rem;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1468,24 +1496,26 @@ def build_arr(book_bytes):
 if st.session_state.menu == "daily":
     st.write("")
     st.markdown('<div class="section-label">⚙️ Cài đặt</div>', unsafe_allow_html=True)
-    col1, col2 = st.columns(2)
-    with col1:
-        rate = st.number_input("💱 Tỷ giá USD/EUR → VNĐ", value=29535.15, step=0.01, format="%.2f")
-    with col2:
-        today = datetime.date.today()
-        date_str = st.text_input("📅 Ngày (dùng cho tên file)", value=f"{today.day}_{today.month:02d}")
+    with st.container(border=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            rate = st.number_input("💱 Tỷ giá USD/EUR → VNĐ", value=29535.15, step=0.01, format="%.2f")
+        with col2:
+            today = datetime.date.today()
+            date_str = st.text_input("📅 Ngày (dùng cho tên file)", value=f"{today.day}_{today.month:02d}")
 
     st.write("")
     st.markdown('<div class="section-label">📂 Tải file lên</div>', unsafe_allow_html=True)
-    col_x, col_s = st.columns(2)
-    with col_x:
-        xlsx_file = st.file_uploader("File XLSX — Dữ liệu khách (bắt buộc)", type=['xlsx'], key="daily_xlsx")
-    with col_s:
-        xls_file = st.file_uploader("File XLS — Nguồn ĐK14 (tùy chọn)", type=['xls'], key="daily_xls")
+    with st.container(border=True):
+        col_x, col_s = st.columns(2)
+        with col_x:
+            xlsx_file = st.file_uploader("File XLSX — Dữ liệu khách (bắt buộc)", type=['xlsx'], key="daily_xlsx")
+        with col_s:
+            xls_file = st.file_uploader("File XLS — Nguồn ĐK14 (tùy chọn)", type=['xls'], key="daily_xls")
 
-    visa_file = st.file_uploader(
-        "File Visa — dữ liệu thô date visa (tùy chọn, để tự điền cột 'Thời hạn tạm trú tại VN' trong KBTT)",
-        type=['xlsx'], key="daily_visa")
+        visa_file = st.file_uploader(
+            "File Visa — dữ liệu thô date visa (tùy chọn, để tự điền cột 'Thời hạn tạm trú tại VN' trong KBTT)",
+            type=['xlsx'], key="daily_visa")
 
     st.write("")
 
@@ -1606,10 +1636,11 @@ if st.session_state.menu == "regcard":
     st.caption("Điền dữ liệu từ file Arrival Smile lên mẫu Regcard PDF gốc, đồng thời tạo file ARR "
                "(nhóm Conf# · đếm phòng · Cà Thẻ / Thu Tiền / Lunch In) — ra cùng lúc 2 file.")
 
-    rc_file = st.file_uploader("File Excel dữ liệu booking (.xlsx)", type=['xlsx'], key="rc_xlsx")
+    with st.container(border=True):
+        rc_file = st.file_uploader("File Excel dữ liệu booking (.xlsx)", type=['xlsx'], key="rc_xlsx")
 
-    only_main = st.checkbox("Chỉ tạo cho khách chính (có mã Conf#)", value=True,
-                            help="Bỏ chọn để tạo regcard cho tất cả khách, kể cả khách đi cùng phòng")
+        only_main = st.checkbox("Chỉ tạo cho khách chính (có mã Conf#)", value=True,
+                                help="Bỏ chọn để tạo regcard cho tất cả khách, kể cả khách đi cùng phòng")
 
     st.write("")
 
@@ -1931,5 +1962,3 @@ if st.session_state.menu == "recon_room":
         if n_dup > 0:
             st.warning(f"🟠 {n_dup} phòng bị TRÙNG (xuất hiện nhiều lần) trong file số phòng: "
                        + ", ".join(rr['sys_dup']))
-
-
