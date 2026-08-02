@@ -1251,6 +1251,10 @@ st.markdown("""
     .sb-brand-title {color:#e6e8eb; font-weight:600; font-size:0.95rem; letter-spacing:-0.01em;}
     .sb-mascot {display:inline-block; width:18px; height:18px; vertical-align:-4px; margin-right:2px;}
     .sb-mascot svg {width:100%; height:100%;}
+    .sb-mascot .mascot-eye {
+        transform-box: fill-box; transform-origin: center;
+        animation: mascotBlink 5.5s ease-in-out infinite;
+    }
     .sb-brand-sub {color:#4d5561; font-size:0.72rem;}
     .sb-section {color:#4d5561; font-size:0.68rem; font-weight:600;
         text-transform:uppercase; letter-spacing:0.06em; padding:0.7rem 0.4rem 0.2rem;}
@@ -1264,8 +1268,9 @@ st.markdown("""
         100% {box-shadow: 0 0 0 0 rgba(63,185,80,0);}
     }
 
-    /* ── Banner chào mừng kiểu One UI: thẻ nổi, bo lớn, kính mờ ── */
+    /* ── Banner chào mừng kiểu One UI: thẻ nổi, bo lớn, kính mờ, đuôi bong bóng thoại ── */
     .welcome-banner {
+        position: relative;
         display: flex; align-items: center; gap: 14px;
         background: linear-gradient(135deg, rgba(45,212,191,0.14), rgba(96,165,250,0.08));
         backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
@@ -1273,13 +1278,33 @@ st.markdown("""
         border-radius: var(--r-lg); padding: 1rem 1.3rem; margin-bottom: 1.4rem;
         animation: fadeInUp 0.4s var(--ease) both;
     }
+    .welcome-banner::after {
+        content: ""; position: absolute; bottom: -7px; left: 42px;
+        width: 14px; height: 14px; background: rgba(45,212,191,0.14);
+        border-left: 1px solid rgba(45,212,191,0.25);
+        border-bottom: 1px solid rgba(45,212,191,0.25);
+        backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        transform: rotate(-45deg); border-radius: 0 0 0 3px;
+    }
     .welcome-emoji {width: 40px; height: 40px; flex-shrink: 0; animation: bsBob 2.6s ease-in-out infinite;}
     .welcome-emoji svg {width: 100%; height: 100%;}
+    .welcome-emoji .mascot-eye {
+        transform-box: fill-box; transform-origin: center;
+        animation: mascotBlink 4.5s ease-in-out infinite;
+    }
+    @keyframes mascotBlink {
+        0%, 92%, 100% {transform: scaleY(1);}
+        95%           {transform: scaleY(0.1);}
+    }
     @keyframes bsBob {
         0%, 100% {transform: translateY(0) rotate(0deg);}
         50%      {transform: translateY(-4px) rotate(-3deg);}
     }
-    .welcome-title {color: #f5f7fa; font-weight: 600; font-size: 1.05rem; letter-spacing: -0.01em;}
+    .welcome-title {
+        font-weight: 600; font-size: 1.1rem; letter-spacing: -0.01em;
+        background: linear-gradient(90deg, #5eead4, #7dd3fc 55%, #f9a8d4);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
     .welcome-sub {color: #9ea7b3; font-size: 0.82rem; margin-top: 2px;}
 
     /* ── Nội dung chính ── */
@@ -1326,9 +1351,21 @@ st.markdown("""
     }
     .stButton button[kind="primary"], .stDownloadButton button {
         background: #2dd4bf; border-color: #2dd4bf; color: #04342c;
+        position: relative; overflow: hidden;
     }
     .stButton button[kind="primary"]:hover, .stDownloadButton button:hover {
         background: #26b8a5; border-color: #26b8a5;
+        box-shadow: 0 8px 18px rgba(45,212,191,0.35);
+    }
+    .stButton button[kind="primary"]::after, .stDownloadButton button::after {
+        content: ""; position: absolute; top: 0; left: -60%; width: 35%; height: 100%;
+        background: linear-gradient(120deg, transparent, rgba(255,255,255,0.55), transparent);
+        transform: skewX(-20deg);
+        transition: left 0.65s ease;
+        pointer-events: none;
+    }
+    .stButton button[kind="primary"]:hover::after, .stDownloadButton button:hover::after {
+        left: 130%;
     }
 
     /* ── Input / checkbox: viền sáng dần khi hover / focus ── */
@@ -1356,7 +1393,7 @@ st.markdown("""
     div[data-testid="stMetric"]:hover {
         transform: perspective(700px) rotateX(6deg) translateY(-4px) translateZ(6px);
         border-color: #3a4048;
-        box-shadow: 0 14px 26px rgba(0,0,0,0.38);
+        box-shadow: 0 14px 26px rgba(0,0,0,0.38), 0 0 22px rgba(45,212,191,0.12);
     }
     div[data-testid="stMetric"]::before {
         content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
@@ -1431,7 +1468,9 @@ components.html("""
       #boot-splash .bs-text {
         margin-top: 20px;
         font-family: 'ChocoCooky', 'Choco Cooky', 'Patrick Hand', cursive;
-        font-size: 3.2rem; font-weight: 700; color: #f5f7fa;
+        font-size: 3.2rem; font-weight: 700;
+        background: linear-gradient(90deg, #5eead4, #7dd3fc 55%, #f9a8d4);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
         transform: translateY(10px) rotate(-2deg); transform-origin: center;
         opacity: 0;
         animation: bsTextIn 0.5s ease 0.55s forwards;
@@ -1444,6 +1483,14 @@ components.html("""
       }
       @keyframes bsLogoIn { to {opacity: 1; transform: scale(1);} }
       @keyframes bsTextIn { to {opacity: 1; transform: translateY(0) rotate(-2deg);} }
+      #boot-splash .mascot-eye {
+        transform-box: fill-box; transform-origin: center;
+        animation: mascotBlink 4.5s ease-in-out infinite;
+      }
+      @keyframes mascotBlink {
+        0%, 92%, 100% {transform: scaleY(1);}
+        95%           {transform: scaleY(0.1);}
+      }
     `;
     doc.head.appendChild(css);
 
@@ -1458,8 +1505,8 @@ components.html("""
             '<polygon points="50,8 88,42 50,92 12,42" fill="#2dd4bf"/>' +
             '<polygon points="50,8 50,92 12,42" fill="#1fa08f"/>' +
             '<polygon points="50,8 88,42 50,92" fill="#5de0cd"/>' +
-            '<path d="M32 46 Q38 40 44 46" stroke="#0b2b26" stroke-width="3.2" fill="none" stroke-linecap="round"/>' +
-            '<path d="M56 46 Q62 40 68 46" stroke="#0b2b26" stroke-width="3.2" fill="none" stroke-linecap="round"/>' +
+            '<path class="mascot-eye" d="M32 46 Q38 40 44 46" stroke="#0b2b26" stroke-width="3.2" fill="none" stroke-linecap="round"/>' +
+            '<path class="mascot-eye" d="M56 46 Q62 40 68 46" stroke="#0b2b26" stroke-width="3.2" fill="none" stroke-linecap="round"/>' +
             '<ellipse cx="30" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>' +
             '<ellipse cx="70" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>' +
             '<path d="M44 59 Q50 65 56 59" stroke="#0b2b26" stroke-width="2.6" fill="none" stroke-linecap="round"/>' +
@@ -1495,8 +1542,8 @@ with st.sidebar:
                 <polygon points="50,8 88,42 50,92 12,42" fill="#2dd4bf"/>
                 <polygon points="50,8 50,92 12,42" fill="#1fa08f"/>
                 <polygon points="50,8 88,42 50,92" fill="#5de0cd"/>
-                <path d="M32 46 Q38 40 44 46" stroke="#0b2b26" stroke-width="5" fill="none" stroke-linecap="round"/>
-                <path d="M56 46 Q62 40 68 46" stroke="#0b2b26" stroke-width="5" fill="none" stroke-linecap="round"/>
+                <path class="mascot-eye" d="M32 46 Q38 40 44 46" stroke="#0b2b26" stroke-width="5" fill="none" stroke-linecap="round"/>
+                <path class="mascot-eye" d="M56 46 Q62 40 68 46" stroke="#0b2b26" stroke-width="5" fill="none" stroke-linecap="round"/>
                 <ellipse cx="30" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>
                 <ellipse cx="70" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>
                 <path d="M44 59 Q50 65 56 59" stroke="#0b2b26" stroke-width="4" fill="none" stroke-linecap="round"/>
@@ -1541,8 +1588,8 @@ st.markdown('''
             <polygon points="50,8 88,42 50,92 12,42" fill="#2dd4bf"/>
             <polygon points="50,8 50,92 12,42" fill="#1fa08f"/>
             <polygon points="50,8 88,42 50,92" fill="#5de0cd"/>
-            <path d="M32 46 Q38 40 44 46" stroke="#0b2b26" stroke-width="4" fill="none" stroke-linecap="round"/>
-            <path d="M56 46 Q62 40 68 46" stroke="#0b2b26" stroke-width="4" fill="none" stroke-linecap="round"/>
+            <path class="mascot-eye" d="M32 46 Q38 40 44 46" stroke="#0b2b26" stroke-width="4" fill="none" stroke-linecap="round"/>
+            <path class="mascot-eye" d="M56 46 Q62 40 68 46" stroke="#0b2b26" stroke-width="4" fill="none" stroke-linecap="round"/>
             <ellipse cx="30" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>
             <ellipse cx="70" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>
             <path d="M44 59 Q50 65 56 59" stroke="#0b2b26" stroke-width="3.2" fill="none" stroke-linecap="round"/>
