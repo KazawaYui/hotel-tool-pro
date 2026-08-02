@@ -1213,22 +1213,22 @@ st.markdown("""
     footer {visibility: hidden;}
     header[data-testid="stHeader"] {background: transparent;}
 
-    .stApp {--ease: cubic-bezier(0.4, 0, 0.2, 1);}
+    .stApp {--ease: cubic-bezier(0.4, 0, 0.2, 1); --r-lg: 20px; --r-pill: 999px;}
 
     @keyframes fadeInUp {
         from {opacity: 0; transform: translateY(6px);}
         to   {opacity: 1; transform: translateY(0);}
     }
 
-    /* ── Sidebar ── */
+    /* ── Sidebar (kiểu One UI: nav dạng pill nổi) ── */
     section[data-testid="stSidebar"] {
         background: #0e1116; border-right: 1px solid #1c2128;
     }
     section[data-testid="stSidebar"] .stButton button {
         background: transparent; border: 1px solid transparent;
-        border-left: 2px solid transparent; border-radius: 6px;
+        border-radius: var(--r-pill);
         color: #9ea7b3; font-weight: 500; text-align: left;
-        justify-content: flex-start; padding: 0.5rem 0.6rem;
+        justify-content: flex-start; padding: 0.55rem 0.9rem;
         box-shadow: none;
         transform: perspective(500px) rotateY(0deg);
         transition: background 0.18s var(--ease), color 0.18s var(--ease),
@@ -1237,14 +1237,14 @@ st.markdown("""
     }
     section[data-testid="stSidebar"] .stButton button:hover {
         background: #161b22; color: #e6e8eb; border-color: #1c2128;
-        padding-left: 0.85rem; transform: perspective(500px) rotateY(-4deg);
+        padding-left: 1.1rem; transform: perspective(500px) rotateY(-4deg);
     }
     section[data-testid="stSidebar"] .stButton button[kind="primary"] {
-        background: #161b22 !important; color: #e6e8eb !important;
-        border-left: 2px solid #2dd4bf !important; border-color: transparent;
+        background: rgba(45,212,191,0.16) !important; color: #2dd4bf !important;
+        border-color: transparent !important; font-weight: 600;
     }
     section[data-testid="stSidebar"] .stButton button[kind="primary"]:hover {
-        background: #1a2029 !important; padding-left: 0.85rem;
+        background: rgba(45,212,191,0.24) !important; padding-left: 1.1rem;
     }
     .sb-brand {padding: 0.2rem 0.4rem 1rem;}
     .sb-brand-title {color:#e6e8eb; font-weight:600; font-size:0.95rem; letter-spacing:-0.01em;}
@@ -1261,6 +1261,19 @@ st.markdown("""
         100% {box-shadow: 0 0 0 0 rgba(63,185,80,0);}
     }
 
+    /* ── Banner chào mừng kiểu One UI: thẻ nổi, bo lớn, kính mờ ── */
+    .welcome-banner {
+        display: flex; align-items: center; gap: 14px;
+        background: linear-gradient(135deg, rgba(45,212,191,0.14), rgba(96,165,250,0.08));
+        backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(45,212,191,0.25);
+        border-radius: var(--r-lg); padding: 1rem 1.3rem; margin-bottom: 1.4rem;
+        animation: fadeInUp 0.4s var(--ease) both;
+    }
+    .welcome-emoji {font-size: 1.6rem; line-height: 1;}
+    .welcome-title {color: #f5f7fa; font-weight: 600; font-size: 1.05rem; letter-spacing: -0.01em;}
+    .welcome-sub {color: #9ea7b3; font-size: 0.82rem; margin-top: 2px;}
+
     /* ── Nội dung chính ── */
     .section-label {
         font-size: 0.7rem; font-weight: 650; color: #7d8590;
@@ -1268,7 +1281,7 @@ st.markdown("""
         animation: fadeInUp 0.32s var(--ease) both;
     }
     div[data-testid="stFileUploader"] {
-        border: 1px dashed #2a3038; border-radius: 8px; padding: 0.4rem;
+        border: 1px dashed #2a3038; border-radius: var(--r-lg); padding: 0.4rem;
         transform: perspective(600px) rotateX(0deg) translateY(0);
         transition: border-color 0.2s var(--ease), background 0.2s var(--ease), transform 0.25s var(--ease);
     }
@@ -1278,8 +1291,9 @@ st.markdown("""
     }
     /* Khung "panel" — dùng khi bọc st.container(border=True) */
     div[data-testid="stVerticalBlockBorderWrapper"] {
-        background: #161b22; border: 1px solid #262b33 !important;
-        border-radius: 10px; transform: perspective(900px) rotateX(0deg);
+        background: rgba(22,27,34,0.82); border: 1px solid #262b33 !important;
+        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        border-radius: var(--r-lg); transform: perspective(900px) rotateX(0deg);
         transition: border-color 0.2s var(--ease), transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
         animation: fadeInUp 0.35s var(--ease) both;
     }
@@ -1289,7 +1303,7 @@ st.markdown("""
         box-shadow: 0 10px 22px rgba(0,0,0,0.28);
     }
     .stButton button, .stDownloadButton button {
-        border-radius: 6px; font-weight: 550;
+        border-radius: var(--r-pill); font-weight: 550;
         transform: perspective(500px) rotateX(0deg) translateY(0);
         transition: transform 0.18s var(--ease), background 0.16s var(--ease),
                     border-color 0.16s var(--ease), box-shadow 0.18s var(--ease);
@@ -1324,7 +1338,8 @@ st.markdown("""
 
     /* ── Metric: thẻ có viền + dải màu trên cùng, xoay vòng theo vị trí cột ── */
     div[data-testid="stMetric"] {
-        background: #161b22; border: 1px solid #262b33; border-radius: 10px;
+        background: rgba(22,27,34,0.85); border: 1px solid #262b33; border-radius: var(--r-lg);
+        backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
         padding: 0.9rem 0.75rem 0.75rem; position: relative; overflow: hidden;
         transform: perspective(700px) rotateX(0deg) translateY(0) translateZ(0);
         transition: transform 0.25s var(--ease), border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
@@ -1413,6 +1428,16 @@ with st.sidebar:
                   on_click=go_menu, args=("recon",))
 
     st.markdown('<div class="sb-status"><span class="sb-dot"></span>Sẵn sàng</div>', unsafe_allow_html=True)
+
+st.markdown('''
+<div class="welcome-banner">
+    <div class="welcome-emoji">&#128075;</div>
+    <div>
+        <div class="welcome-title">Welcome, Tân</div>
+        <div class="welcome-sub">Front Office toolkit · Tân Hotel</div>
+    </div>
+</div>
+''', unsafe_allow_html=True)
 
 # ── Menu landing screen ───────────────────────────────────────────────────
 
