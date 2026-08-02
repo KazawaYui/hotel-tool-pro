@@ -10,6 +10,7 @@ from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.lib.colors import white, black
 
 # Load Mt Fuji icon for page/PWA icon
+@st.cache_resource
 def _load_app_icon():
     try:
         from PIL import Image
@@ -1208,8 +1209,16 @@ def reconcile(smile_bytes, luutru_bytes, today):
 # ── UI ────────────────────────────────────────────────────────────────────
 
 # Custom CSS — Dark dev-tool style (sidebar + monospace số liệu)
-st.markdown("""
-<style>
+if not st.session_state.get("_main_css_injected"):
+    st.session_state["_main_css_injected"] = True
+    components.html("""
+<script>
+(function(){
+    var doc = window.parent.document;
+    if (doc.getElementById('main-app-style')) return;
+    var css = doc.createElement('style');
+    css.id = 'main-app-style';
+    css.textContent = `
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header[data-testid="stHeader"] {background: transparent;}
@@ -1339,22 +1348,22 @@ st.markdown("""
         transform: perspective(500px) rotateX(-3deg) scale(0.97) translateY(0);
         box-shadow: none;
     }
-    .stButton button[kind="primary"], .stDownloadButton button {
+    div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"], .stDownloadButton button {
         background: #2dd4bf; border-color: #2dd4bf; color: #04342c;
         position: relative; overflow: hidden;
     }
-    .stButton button[kind="primary"]:hover, .stDownloadButton button:hover {
+    div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"]:hover, .stDownloadButton button:hover {
         background: #26b8a5; border-color: #26b8a5;
         box-shadow: 0 8px 18px rgba(45,212,191,0.35);
     }
-    .stButton button[kind="primary"]::after, .stDownloadButton button::after {
+    div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"]::after, .stDownloadButton button::after {
         content: ""; position: absolute; top: 0; left: -60%; width: 35%; height: 100%;
         background: linear-gradient(120deg, transparent, rgba(255,255,255,0.55), transparent);
         transform: skewX(-20deg);
         transition: left 0.65s ease;
         pointer-events: none;
     }
-    .stButton button[kind="primary"]:hover::after, .stDownloadButton button:hover::after {
+    div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"]:hover::after, .stDownloadButton button:hover::after {
         left: 130%;
     }
 
@@ -1410,8 +1419,11 @@ st.markdown("""
     div[data-testid="stAlert"]:hover {transform: translateY(-1px);}
 
     /* Đã bỏ animation mờ dần toàn màn hình để chuyển tab/tương tác nhanh nhất có thể */
-</style>
-""", unsafe_allow_html=True)
+`;
+    doc.head.appendChild(css);
+})();
+</script>
+""", height=0)
 
 # ── Hiệu ứng khởi động kiểu điện thoại: "Welcome, Tân" rồi mờ dần vào app ──
 # QUAN TRỌNG: chỉ gọi components.html() đúng 1 lần trong session (guard bằng
