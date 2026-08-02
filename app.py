@@ -1278,13 +1278,13 @@ st.markdown("""
     }
     /* Khung "panel" — dùng khi bọc st.container(border=True) */
     div[data-testid="stVerticalBlockBorderWrapper"] {
-        background: #12151b; border: 1px solid #1c2128 !important;
+        background: #161b22; border: 1px solid #262b33 !important;
         border-radius: 10px; transform: perspective(900px) rotateX(0deg);
         transition: border-color 0.2s var(--ease), transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
         animation: fadeInUp 0.35s var(--ease) both;
     }
     div[data-testid="stVerticalBlockBorderWrapper"]:hover {
-        border-color: #262b33 !important;
+        border-color: #3a4048 !important;
         transform: perspective(900px) rotateX(1.2deg);
         box-shadow: 0 10px 22px rgba(0,0,0,0.28);
     }
@@ -1324,7 +1324,7 @@ st.markdown("""
 
     /* ── Metric: thẻ có viền + dải màu trên cùng, xoay vòng theo vị trí cột ── */
     div[data-testid="stMetric"] {
-        background: #12151b; border: 1px solid #1c2128; border-radius: 10px;
+        background: #161b22; border: 1px solid #262b33; border-radius: 10px;
         padding: 0.9rem 0.75rem 0.75rem; position: relative; overflow: hidden;
         transform: perspective(700px) rotateX(0deg) translateY(0) translateZ(0);
         transition: transform 0.25s var(--ease), border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
@@ -1332,7 +1332,7 @@ st.markdown("""
     }
     div[data-testid="stMetric"]:hover {
         transform: perspective(700px) rotateX(6deg) translateY(-4px) translateZ(6px);
-        border-color: #2a3038;
+        border-color: #3a4048;
         box-shadow: 0 14px 26px rgba(0,0,0,0.38);
     }
     div[data-testid="stMetric"]::before {
@@ -1345,11 +1345,14 @@ st.markdown("""
     div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+3) div[data-testid="stMetric"]::before {background: #f5a623;}
     div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+4) div[data-testid="stMetric"]::before {background: #f472b6;}
     div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+5) div[data-testid="stMetric"]::before {background: #a78bfa;}
-    div[data-testid="stMetricValue"] {
-        font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-        font-weight: 600; transition: color 0.2s var(--ease);
+    div[data-testid="stMetricValue"], div[data-testid="stMetricValue"] * {
+        font-family: ui-monospace, "SFMono-Regular", Menlo, monospace !important;
+        font-weight: 600 !important; color: #f5f7fa !important;
+        transition: color 0.2s var(--ease);
     }
-    div[data-testid="stMetricLabel"] {font-size: 0.82rem;}
+    div[data-testid="stMetricLabel"], div[data-testid="stMetricLabel"] * {
+        font-size: 0.84rem !important; color: #b8c0cc !important; font-weight: 500 !important;
+    }
 
     /* ── Alert (success/info/warning/error): xuất hiện mượt ── */
     div[data-testid="stAlert"] {
