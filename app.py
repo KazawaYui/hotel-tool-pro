@@ -1308,7 +1308,7 @@ def go_menu(name):
 with st.sidebar:
     st.markdown('''
     <div class="sb-brand">
-        <div class="sb-brand-title">&#9670; Hotel Ops</div>
+        <div class="sb-brand-title">&#9670; Tan hotel</div>
         <div class="sb-brand-sub">Front Office toolkit</div>
     </div>
     ''', unsafe_allow_html=True)
