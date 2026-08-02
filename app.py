@@ -18,7 +18,7 @@ def _load_app_icon():
     except Exception:
         return "🗻"
 
-st.set_page_config(page_title="Tan hotel", page_icon=_load_app_icon(), layout="wide")
+st.set_page_config(page_title="Tân Hotel", page_icon=_load_app_icon(), layout="wide")
 
 # ── Load embedded templates ──────────────────────────────────────────────
 @st.cache_resource
@@ -1378,7 +1378,7 @@ def go_menu(name):
 with st.sidebar:
     st.markdown('''
     <div class="sb-brand">
-        <div class="sb-brand-title">&#9670; Tan hotel</div>
+        <div class="sb-brand-title">&#9670; Tân Hotel</div>
         <div class="sb-brand-sub">Front Office toolkit</div>
     </div>
     ''', unsafe_allow_html=True)
