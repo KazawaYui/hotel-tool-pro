@@ -1396,7 +1396,7 @@ components.html("""
     var css = doc.createElement('style');
     css.id = 'boot-splash-style';
     css.textContent = `
-      @import url('https://fonts.googleapis.com/css2?family=Gaegu:wght@700&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap');
       #boot-splash {
         position: fixed; inset: 0; z-index: 999999;
         background: #0b0d12;
@@ -1405,21 +1405,21 @@ components.html("""
       }
       #boot-splash.bs-hide { opacity: 0; pointer-events: none; }
       #boot-splash .bs-logo {
-        font-size: 2.8rem; color: #2dd4bf; line-height: 1;
+        font-size: 3.6rem; color: #2dd4bf; line-height: 1;
         opacity: 0; transform: scale(0.5);
         animation: bsLogoIn 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.15s forwards;
       }
       #boot-splash .bs-text {
-        margin-top: 18px;
-        font-family: 'ChocoCooky', 'Choco Cooky', 'Gaegu', 'Nanum Pen Script', cursive;
-        font-size: 2.1rem; font-weight: 700; color: #f5f7fa;
+        margin-top: 20px;
+        font-family: 'ChocoCooky', 'Choco Cooky', 'Patrick Hand', cursive;
+        font-size: 3.2rem; font-weight: 700; color: #f5f7fa;
         transform: translateY(10px) rotate(-2deg); transform-origin: center;
         opacity: 0;
         animation: bsTextIn 0.5s ease 0.55s forwards;
       }
       #boot-splash .bs-sub {
-        margin-top: 6px; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
-        font-size: 0.8rem; color: #6b7480;
+        margin-top: 8px; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+        font-size: 1rem; color: #8b95a1;
         opacity: 0;
         animation: bsTextIn 0.5s ease 0.85s forwards;
       }
@@ -1457,7 +1457,7 @@ def go_menu(name):
 with st.sidebar:
     st.markdown('''
     <div class="sb-brand">
-        <div class="sb-brand-title">&#9670; Tân Hotel</div>
+        <div class="sb-brand-title"><span style="color:#2dd4bf;">&#9670;</span> Tân Hotel</div>
         <div class="sb-brand-sub">Front Office toolkit</div>
     </div>
     ''', unsafe_allow_html=True)
