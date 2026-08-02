@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
@@ -1382,6 +1383,63 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# ── Hiệu ứng khởi động kiểu điện thoại: "Welcome, Tân" rồi mờ dần vào app ──
+# Chỉ chạy 1 lần mỗi khi mở web (guard bằng phần tử đã tồn tại trong DOM gốc,
+# reset khi người dùng tải lại trang thật sự, không lặp lại ở mỗi lần tương tác).
+components.html("""
+<script>
+(function(){
+    var doc = window.parent.document;
+    if (doc.getElementById('boot-splash')) return;
+
+    var css = doc.createElement('style');
+    css.id = 'boot-splash-style';
+    css.textContent = `
+      #boot-splash {
+        position: fixed; inset: 0; z-index: 999999;
+        background: #0b0d12;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        transition: opacity 0.55s ease;
+      }
+      #boot-splash.bs-hide { opacity: 0; pointer-events: none; }
+      #boot-splash .bs-logo {
+        font-size: 2.8rem; color: #2dd4bf; line-height: 1;
+        opacity: 0; transform: scale(0.5);
+        animation: bsLogoIn 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.15s forwards;
+      }
+      #boot-splash .bs-text {
+        margin-top: 16px; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+        font-size: 1.35rem; font-weight: 600; color: #f5f7fa; letter-spacing: -0.01em;
+        opacity: 0; transform: translateY(10px);
+        animation: bsTextIn 0.5s ease 0.55s forwards;
+      }
+      #boot-splash .bs-sub {
+        margin-top: 6px; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+        font-size: 0.8rem; color: #6b7480;
+        opacity: 0;
+        animation: bsTextIn 0.5s ease 0.85s forwards;
+      }
+      @keyframes bsLogoIn { to {opacity: 1; transform: scale(1);} }
+      @keyframes bsTextIn { to {opacity: 1; transform: translateY(0);} }
+    `;
+    doc.head.appendChild(css);
+
+    var el = doc.createElement('div');
+    el.id = 'boot-splash';
+    el.innerHTML =
+        '<div class="bs-logo">&#9670;</div>' +
+        '<div class="bs-text">Welcome, Tân</div>' +
+        '<div class="bs-sub">Tân Hotel &middot; Front Office toolkit</div>';
+    doc.body.appendChild(el);
+
+    setTimeout(function(){
+        el.classList.add('bs-hide');
+        setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 600);
+    }, 1900);
+})();
+</script>
+""", height=0)
 
 
 
