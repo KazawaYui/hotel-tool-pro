@@ -1216,11 +1216,6 @@ st.markdown("""
 
     .stApp {--ease: cubic-bezier(0.4, 0, 0.2, 1); --r-lg: 20px; --r-pill: 999px;}
 
-    @keyframes fadeInUp {
-        from {opacity: 0; transform: translateY(6px);}
-        to   {opacity: 1; transform: translateY(0);}
-    }
-
     /* ── Sidebar (kiểu One UI: nav dạng pill nổi) ── */
     section[data-testid="stSidebar"] {
         background: #0e1116; border-right: 1px solid #1c2128;
@@ -1230,11 +1225,11 @@ st.markdown("""
         border-radius: var(--r-pill);
         color: #9ea7b3; font-weight: 500; text-align: left;
         justify-content: flex-start; padding: 0.55rem 0.9rem;
-        box-shadow: none;
+        box-shadow: none; will-change: transform, background;
         transform: perspective(500px) rotateY(0deg);
-        transition: background 0.18s var(--ease), color 0.18s var(--ease),
-                    border-color 0.18s var(--ease), padding-left 0.18s var(--ease),
-                    transform 0.18s var(--ease);
+        transition: background 0.1s var(--ease), color 0.1s var(--ease),
+                    border-color 0.1s var(--ease), padding-left 0.1s var(--ease),
+                    transform 0.1s var(--ease);
     }
     section[data-testid="stSidebar"] .stButton button:hover {
         background: #161b22; color: #e6e8eb; border-color: #1c2128;
@@ -1272,18 +1267,15 @@ st.markdown("""
     .welcome-banner {
         position: relative;
         display: flex; align-items: center; gap: 14px;
-        background: linear-gradient(135deg, rgba(45,212,191,0.14), rgba(96,165,250,0.08));
-        backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        background: linear-gradient(135deg, #16232a, #131a22);
         border: 1px solid rgba(45,212,191,0.25);
         border-radius: var(--r-lg); padding: 1rem 1.3rem; margin-bottom: 1.4rem;
-        animation: fadeInUp 0.4s var(--ease) both;
     }
     .welcome-banner::after {
         content: ""; position: absolute; bottom: -7px; left: 42px;
-        width: 14px; height: 14px; background: rgba(45,212,191,0.14);
+        width: 14px; height: 14px; background: #16232a;
         border-left: 1px solid rgba(45,212,191,0.25);
         border-bottom: 1px solid rgba(45,212,191,0.25);
-        backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
         transform: rotate(-45deg); border-radius: 0 0 0 3px;
     }
     .welcome-emoji {width: 40px; height: 40px; flex-shrink: 0; animation: bsBob 2.6s ease-in-out infinite;}
@@ -1311,12 +1303,11 @@ st.markdown("""
     .section-label {
         font-size: 0.7rem; font-weight: 650; color: #7d8590;
         text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.75rem;
-        animation: fadeInUp 0.32s var(--ease) both;
     }
     div[data-testid="stFileUploader"] {
         border: 1px dashed #2a3038; border-radius: var(--r-lg); padding: 0.4rem;
-        transform: perspective(600px) rotateX(0deg) translateY(0);
-        transition: border-color 0.2s var(--ease), background 0.2s var(--ease), transform 0.25s var(--ease);
+        transform: perspective(600px) rotateX(0deg) translateY(0); will-change: transform;
+        transition: border-color 0.12s var(--ease), background 0.12s var(--ease), transform 0.15s var(--ease);
     }
     div[data-testid="stFileUploader"]:hover {
         border-color: #2dd4bf; background: rgba(45,212,191,0.05);
@@ -1324,11 +1315,10 @@ st.markdown("""
     }
     /* Khung "panel" — dùng khi bọc st.container(border=True) */
     div[data-testid="stVerticalBlockBorderWrapper"] {
-        background: rgba(22,27,34,0.82); border: 1px solid #262b33 !important;
-        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        background: #161b22; border: 1px solid #262b33 !important;
         border-radius: var(--r-lg); transform: perspective(900px) rotateX(0deg);
-        transition: border-color 0.2s var(--ease), transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
-        animation: fadeInUp 0.35s var(--ease) both;
+        will-change: transform;
+        transition: border-color 0.12s var(--ease), transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
     }
     div[data-testid="stVerticalBlockBorderWrapper"]:hover {
         border-color: #3a4048 !important;
@@ -1336,10 +1326,10 @@ st.markdown("""
         box-shadow: 0 10px 22px rgba(0,0,0,0.28);
     }
     .stButton button, .stDownloadButton button {
-        border-radius: var(--r-pill); font-weight: 550;
+        border-radius: var(--r-pill); font-weight: 550; will-change: transform;
         transform: perspective(500px) rotateX(0deg) translateY(0);
-        transition: transform 0.18s var(--ease), background 0.16s var(--ease),
-                    border-color 0.16s var(--ease), box-shadow 0.18s var(--ease);
+        transition: transform 0.12s var(--ease), background 0.12s var(--ease),
+                    border-color 0.12s var(--ease), box-shadow 0.12s var(--ease);
     }
     .stButton button:hover, .stDownloadButton button:hover {
         transform: perspective(500px) rotateX(4deg) translateY(-1px);
@@ -1370,7 +1360,7 @@ st.markdown("""
 
     /* ── Input / checkbox: viền sáng dần khi hover / focus ── */
     .stTextInput input, .stNumberInput input, .stTextArea textarea {
-        transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+        transition: border-color 0.1s var(--ease), box-shadow 0.1s var(--ease);
     }
     .stTextInput input:hover, .stNumberInput input:hover, .stTextArea textarea:hover {
         border-color: #3a4048 !important;
@@ -1383,12 +1373,11 @@ st.markdown("""
 
     /* ── Metric: thẻ có viền + dải màu trên cùng, xoay vòng theo vị trí cột ── */
     div[data-testid="stMetric"] {
-        background: rgba(22,27,34,0.85); border: 1px solid #262b33; border-radius: var(--r-lg);
-        backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        background: #161b22; border: 1px solid #262b33; border-radius: var(--r-lg);
         padding: 0.9rem 0.75rem 0.75rem; position: relative; overflow: hidden;
+        will-change: transform;
         transform: perspective(700px) rotateX(0deg) translateY(0) translateZ(0);
-        transition: transform 0.25s var(--ease), border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
-        animation: fadeInUp 0.4s var(--ease) both;
+        transition: transform 0.15s var(--ease), border-color 0.12s var(--ease), box-shadow 0.15s var(--ease);
     }
     div[data-testid="stMetric"]:hover {
         transform: perspective(700px) rotateX(6deg) translateY(-4px) translateZ(6px);
@@ -1416,15 +1405,11 @@ st.markdown("""
 
     /* ── Alert (success/info/warning/error): xuất hiện mượt ── */
     div[data-testid="stAlert"] {
-        animation: fadeInUp 0.3s var(--ease) both;
-        transition: transform 0.15s var(--ease);
+        transition: transform 0.1s var(--ease);
     }
     div[data-testid="stAlert"]:hover {transform: translateY(-1px);}
 
-    /* ── Toàn bộ nội dung màn hình: mờ dần vào khi chuyển trang ── */
-    div[data-testid="stMainBlockContainer"] {
-        animation: fadeInUp 0.28s var(--ease) both;
-    }
+    /* Đã bỏ animation mờ dần toàn màn hình để chuyển tab/tương tác nhanh nhất có thể */
 </style>
 """, unsafe_allow_html=True)
 
