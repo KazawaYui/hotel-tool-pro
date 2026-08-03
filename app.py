@@ -2233,4 +2233,86 @@ def reconcile_rooms(smile_bytes, room_bytes, today):
         detail = pd.DataFrame(columns=['Số phòng', 'Họ tên', 'Quốc tịch', 'Ngày đến'])
 
     return {
-        'smile_total': smile_total
+        'smile_total': smile_total, 'smile_filtered': len(smile_f),
+        'sys_total': len(rooms_sys), 'sys_unique': len(sys_rooms),
+        'smile_rooms': len(smile_rooms),
+        'room_chua': room_chua, 'room_thua': room_thua, 'sys_dup': sys_dup,
+        'room_match': len(smile_rooms & sys_rooms),
+        'detail_chua': detail,
+    }
+
+
+if st.session_state.menu == "recon_room":
+    st.write("")
+    st.markdown('<div class="section-label">🚪 Kiểm tra hệ thống quản lý lưu trú phòng</div>', unsafe_allow_html=True)
+    st.caption("So khớp số phòng inhouse từ file khách lưu trú Smile với file danh sách số phòng — tìm phòng chưa đăng ký / thừa / trùng.")
+
+    rr1, rr2 = st.columns(2)
+    with rr1:
+        smile_file_r = st.file_uploader("File khách lưu trú Smile (.xlsx)", type=['xlsx'], key="reconr_smile")
+    with rr2:
+        room_file = st.file_uploader("File số phòng (.xlsx — chỉ chứa danh sách số phòng)", type=['xlsx'], key="reconr_room")
+
+    today_str_r = st.text_input("📅 Ngày xuất file (hôm nay)", value=datetime.date.today().strftime('%d/%m/%Y'),
+                                key="reconr_today",
+                                help="Khách có Arrival = ngày này trên Smile sẽ được loại bỏ khỏi đối chiếu")
+
+    st.write("")
+
+    if st.button("🔍 Bắt đầu kiểm tra", type="primary", key="reconr_run",
+                 disabled=(smile_file_r is None or room_file is None), use_container_width=True):
+        with st.spinner("Đang đối chiếu phòng..."):
+            try:
+                today_r = pd.to_datetime(today_str_r, format='%d/%m/%Y')
+                st.session_state['reconr_results'] = reconcile_rooms(smile_file_r.read(), room_file.read(), today_r)
+            except Exception as e:
+                st.session_state.pop('reconr_results', None)
+                st.error(f"❌ Lỗi: {e}")
+                st.exception(e)
+
+    rr = st.session_state.get('reconr_results')
+    if rr:
+        st.success("✅ Kiểm tra hoàn tất!")
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Phòng inhouse (Smile)", rr['smile_rooms'],
+                  f"{rr['smile_filtered']} khách (từ {rr['smile_total']}, đã trừ arrival hôm nay)")
+        c2.metric("Phòng trong file", rr['sys_unique'],
+                  (f"{rr['sys_total']} dòng" if rr['sys_total'] != rr['sys_unique'] else None))
+        c3.metric("🟢 Phòng khớp", rr['room_match'])
+
+        st.divider()
+        st.markdown("### 🚪 Kết quả đối chiếu phòng")
+
+        n_chua = len(rr['room_chua']); n_thua = len(rr['room_thua']); n_dup = len(rr['sys_dup'])
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("🔴 Chưa đăng ký", n_chua)
+        m2.metric("🟡 Thừa trong file", n_thua)
+        m3.metric("🟠 Trùng trong file", n_dup)
+
+        if n_chua == 0 and n_thua == 0 and n_dup == 0:
+            st.success("✅ Khớp hoàn toàn! Không có phòng thiếu/thừa/trùng.")
+            st.balloons()
+
+        if n_chua > 0:
+            st.error(f"🔴 {n_chua} phòng có khách inhouse nhưng CHƯA có trong file số phòng: "
+                     + ", ".join(rr['room_chua']))
+            st.markdown("**Chi tiết khách trong các phòng chưa đăng ký:**")
+            st.dataframe(rr['detail_chua'], use_container_width=True, hide_index=True)
+            _csv_r = rr['detail_chua'].to_csv(index=False).encode('utf-8-sig')
+            st.download_button("⬇️ Tải danh sách phòng chưa đăng ký (CSV)", _csv_r,
+                               file_name="phong_chua_dang_ky.csv", mime="text/csv")
+        else:
+            st.success("✅ Tất cả phòng inhouse đều đã có trong file số phòng.")
+
+        if n_thua > 0:
+            st.warning(f"🟡 {n_thua} phòng có trong file nhưng KHÔNG còn khách inhouse "
+                       f"(có thể đã checkout nhưng chưa gỡ): "
+                       + ", ".join(rr['room_thua']))
+
+        if n_dup > 0:
+            st.warning(f"🟠 {n_dup} phòng bị TRÙNG (xuất hiện nhiều lần) trong file số phòng: "
+                       + ", ".join(rr['sys_dup']))
+
+
