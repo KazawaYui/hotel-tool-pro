@@ -615,9 +615,11 @@ def parse_visa_file(visa_bytes):
     return {"by_pp": by_pp, "by_name": by_name, "skipped_vn": n_skipped_vn}
 
 def build_kbtt(df_intl, visa_map=None):
-    """Điền mẫu KBTT. Nếu có visa_map thì điền cột L 'THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ
-    TẠI VIỆT NAM' — khớp theo SỐ HỘ CHIẾU trước (chính xác nhất), tên là dự phòng;
-    nếu không khớp thì để trống cột đó. Trả về (wb, danh_sách_tên_không_khớp)."""
+    """Điền mẫu KBTT. Dòng 3 là dòng "[TEST] SAMPLE" BẮT BUỘC giữ nguyên (không
+    bị ghi đè) — dữ liệu khách thật được điền bắt đầu từ dòng 4 trở xuống.
+    Nếu có visa_map thì điền cột L 'THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM' —
+    khớp theo SỐ HỘ CHIẾU trước (chính xác nhất), tên là dự phòng; nếu không
+    khớp thì để trống cột đó. Trả về (wb, danh_sách_tên_không_khớp)."""
     visa_map = visa_map or {}
     # Tương thích ngược: nếu visa_map là dict phẳng {tên: ngày} kiểu cũ, coi như by_name
     if isinstance(visa_map, dict) and ("by_pp" in visa_map or "by_name" in visa_map):
@@ -630,15 +632,15 @@ def build_kbtt(df_intl, visa_map=None):
     wb = load_workbook(io.BytesIO(load_template('kbtt')))
     ws = wb['KBTT']
     # Cấu trúc mẫu: dòng 1 = ô merge A1:L1 (tiêu đề + chú ý đỏ), dòng 2 = header,
-    # dữ liệu từ dòng 3. GIỮ NGUYÊN dòng 1, 2 và merge/chiều cao — chỉ ghi dữ liệu.
-    ref = [ws.cell(3,c) for c in range(1,13)]   # style mẫu dòng 3 (12 cột, định dạng bảng)
+    # dòng 3 = "[TEST] SAMPLE" BẮT BUỘC giữ nguyên, dữ liệu khách thật từ dòng 4.
+    ref = [ws.cell(3,c) for c in range(1,13)]   # dùng style dòng 3 làm mẫu định dạng cho các dòng khách
     n = len(df_intl)
-    # Xóa dòng dữ liệu thừa (nếu có), luôn giữ tối thiểu tới dòng 3
-    last_data_row = 2 + max(n, 1)
+    # Xóa dòng dữ liệu thừa (nếu có), luôn giữ tối thiểu tới dòng 3 (dòng TEST)
+    last_data_row = 3 + n
     if ws.max_row > last_data_row:
         ws.delete_rows(last_data_row + 1, ws.max_row - last_data_row)
     for i,(_,row) in enumerate(df_intl.iterrows(),1):
-        er=i+2   # dữ liệu bắt đầu dòng 3
+        er=i+3   # dữ liệu khách thật bắt đầu dòng 4 (dòng 3 là TEST, giữ nguyên)
         ht=str(row.get('HỌ TÊN ',row.get('HỌ TÊN',''))).strip()
         ns=fmt(row['NGÀY SINH']); nd=fmt(row['NGÀY ĐẾN']); ni=fmt(row.get('NGÀY ÐI',row.get('NGÀY ĐI','')))
         gt='M - Nam' if str(row.get('GIỚI TÍNH','')).strip()=='Nam' else 'F - Nữ'
@@ -656,8 +658,6 @@ def build_kbtt(df_intl, visa_map=None):
         for ci,val in enumerate(vals,1):
             cell=ws.cell(er,ci); cell.value=val if isinstance(val,int) else str(val)
             cp(ref[ci-1],cell)
-    if n == 0:
-        for c in range(1,13): ws.cell(3,c).value = None
     # Bảo toàn ô merge tiêu đề + chiều cao dòng 1 (phòng khi delete_rows làm xê dịch)
     if 'A1:L1' not in [str(m) for m in ws.merged_cells.ranges]:
         try: ws.merge_cells('A1:L1')
@@ -679,9 +679,9 @@ def build_kbtt(df_intl, visa_map=None):
         a1.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
     except Exception:
         pass
-    # Cập nhật vùng Table1 cho khớp số dòng thực (giữ định dạng bảng, header, filter)
+    # Cập nhật vùng Table1 cho khớp số dòng thực (header + dòng TEST + dữ liệu khách)
     if 'Table1' in ws.tables:
-        ws.tables['Table1'].ref = f"A2:L{2 + max(n,1)}"
+        ws.tables['Table1'].ref = f"A2:L{3 + n}"
     return wb, unmatched
 
 def build_vnm(df_vn):
