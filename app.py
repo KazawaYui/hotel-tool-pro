@@ -9,7 +9,7 @@ from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.lib.colors import white, black
 
-# Load Mt Fuji icon for page/PWA icon
+# Load app icon (favicon) từ icon.b64
 @st.cache_resource
 def _load_app_icon():
     try:
@@ -932,7 +932,6 @@ def _fix_date(v):
             return pd.Timestamp(year=v.year, month=v.day, day=v.month)
         except Exception:
             return pd.Timestamp(v)   # day>12: không đảo được, giữ nguyên
-    # chuỗi
     s = str(v).strip()
     if '/' in s:
         p = s.split('/')
@@ -1497,11 +1496,6 @@ if not st.session_state.get("_clock_js_injected"):
 </script>
 """, height=0)
 
-# ── Hiệu ứng khởi động kiểu điện thoại: "Welcome, Tân" rồi mờ dần vào app ──
-# QUAN TRỌNG: chỉ gọi components.html() đúng 1 lần trong session (guard bằng
-# session_state phía Python) — nếu không, Streamlit sẽ tạo lại iframe này ở
-# MỌI lần rerun (mọi cú click), dù JS bên trong có tự bỏ qua, việc tạo lại
-# iframe + gửi lại toàn bộ HTML/JS qua lại vẫn tốn thời gian và gây khựng.
 # ── Hoa anh đào rơi nhẹ nhàng ở nền toàn bộ web (liên tục, không chỉ lúc khởi động) ──
 # Chỉ tiêm 1 lần duy nhất trong session — các cánh hoa tự rơi vô hạn bằng CSS
 # animation thuần transform/opacity (chạy trên compositor, không tốn hiệu năng
@@ -1553,6 +1547,11 @@ if not st.session_state.get("_bg_sakura_injected"):
 </script>
 """, height=0)
 
+# ── Hiệu ứng khởi động kiểu điện thoại: "Welcome, Tân" rồi mờ dần vào app ──
+# QUAN TRỌNG: chỉ gọi components.html() đúng 1 lần trong session (guard bằng
+# session_state phía Python) — nếu không, Streamlit sẽ tạo lại iframe này ở
+# MỌI lần rerun (mọi cú click), dù JS bên trong có tự bỏ qua, việc tạo lại
+# iframe + gửi lại toàn bộ HTML/JS qua lại vẫn tốn thời gian và gây khựng.
 if not st.session_state.get("_boot_splash_done"):
     st.session_state["_boot_splash_done"] = True
     components.html("""
@@ -1761,8 +1760,6 @@ st.markdown('''
     </div>
 </div>
 ''', unsafe_allow_html=True)
-
-# ── Menu landing screen ───────────────────────────────────────────────────
 
 # ── Tạo file ARR từ file Arrival (Book) Smile ──────────────────────────────
 def build_arr(book_bytes):
