@@ -1294,12 +1294,9 @@ if not st.session_state.get("_main_css_injected"):
     }
     .sb-brand {padding: 0.2rem 0.4rem 1rem;}
     .sb-brand-title {color:#e6e8eb; font-weight:600; font-size:0.95rem; letter-spacing:-0.01em;}
-    .sb-mascot {display:inline-block; width:18px; height:18px; vertical-align:-4px; margin-right:2px;}
+    .sb-mascot {display:inline-block; width:18px; height:18px; vertical-align:-4px; margin-right:2px;
+        animation: flowerSway 3.4s ease-in-out infinite;}
     .sb-mascot svg {width:100%; height:100%;}
-    .sb-mascot .mascot-eye {
-        transform-box: fill-box; transform-origin: center;
-        animation: mascotBlink 5.5s ease-in-out infinite;
-    }
     .sb-brand-sub {color:#4d5561; font-size:0.72rem;}
     .sb-section {color:#4d5561; font-size:0.68rem; font-weight:600;
         text-transform:uppercase; letter-spacing:0.06em; padding:0.7rem 0.4rem 0.2rem;}
@@ -1335,19 +1332,11 @@ if not st.session_state.get("_main_css_injected"):
         border-bottom: 1px solid rgba(45,212,191,0.25);
         transform: rotate(-45deg); border-radius: 0 0 0 3px;
     }
-    .welcome-emoji {width: 40px; height: 40px; flex-shrink: 0; animation: bsBob 2.6s ease-in-out infinite;}
+    .welcome-emoji {width: 40px; height: 40px; flex-shrink: 0; animation: flowerSway 3.4s ease-in-out infinite;}
     .welcome-emoji svg {width: 100%; height: 100%;}
-    .welcome-emoji .mascot-eye {
-        transform-box: fill-box; transform-origin: center;
-        animation: mascotBlink 4.5s ease-in-out infinite;
-    }
-    @keyframes mascotBlink {
-        0%, 92%, 100% {transform: scaleY(1);}
-        95%           {transform: scaleY(0.1);}
-    }
-    @keyframes bsBob {
-        0%, 100% {transform: translateY(0) rotate(0deg);}
-        50%      {transform: translateY(-4px) rotate(-3deg);}
+    @keyframes flowerSway {
+        0%, 100% {transform: rotate(-8deg);}
+        50%      {transform: rotate(8deg);}
     }
     .welcome-title {
         font-weight: 600; font-size: 1.1rem; letter-spacing: -0.01em;
@@ -1513,6 +1502,57 @@ if not st.session_state.get("_clock_js_injected"):
 # session_state phía Python) — nếu không, Streamlit sẽ tạo lại iframe này ở
 # MỌI lần rerun (mọi cú click), dù JS bên trong có tự bỏ qua, việc tạo lại
 # iframe + gửi lại toàn bộ HTML/JS qua lại vẫn tốn thời gian và gây khựng.
+# ── Hoa anh đào rơi nhẹ nhàng ở nền toàn bộ web (liên tục, không chỉ lúc khởi động) ──
+# Chỉ tiêm 1 lần duy nhất trong session — các cánh hoa tự rơi vô hạn bằng CSS
+# animation thuần transform/opacity (chạy trên compositor, không tốn hiệu năng
+# dù chạy mãi mãi, đúng nguyên tắc đã tối ưu ở các phần khác của app).
+if not st.session_state.get("_bg_sakura_injected"):
+    st.session_state["_bg_sakura_injected"] = True
+    components.html("""
+<script>
+(function(){
+    var doc = window.parent.document;
+    if (doc.getElementById('bg-sakura-layer')) return;
+
+    var css = doc.createElement('style');
+    css.id = 'bg-sakura-style';
+    css.textContent = `
+      #bg-sakura-layer { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+      #bg-sakura-layer .petal {
+          position: absolute; top: -20px; opacity: 0.5; will-change: transform;
+          animation-name: bgSakuraFall; animation-timing-function: linear; animation-iteration-count: infinite;
+      }
+      @keyframes bgSakuraFall {
+          0%   { transform: translate(0,0) rotate(0deg); }
+          100% { transform: translate(var(--drift), 112vh) rotate(360deg); }
+      }
+    `;
+    doc.head.appendChild(css);
+
+    var layer = doc.createElement('div');
+    layer.id = 'bg-sakura-layer';
+    var colors = ['#ffd6e8', '#ffc2dd', '#ffe3ef'];
+    for (var i = 0; i < 10; i++) {
+        var p = doc.createElement('div');
+        p.className = 'petal';
+        var size = 8 + Math.random()*6;
+        var dur = 11 + Math.random()*8;
+        p.style.left = (Math.random()*100) + 'vw';
+        p.style.width = size + 'px';
+        p.style.height = size + 'px';
+        p.style.borderRadius = '0 60% 0 60%';
+        p.style.background = 'radial-gradient(circle at 30% 30%, #fff, ' + colors[i % 3] + ' 70%)';
+        p.style.setProperty('--drift', (Math.random()*160 - 80) + 'px');
+        p.style.animationDuration = dur + 's';
+        // delay âm: cánh hoa bắt đầu ở giữa chừng vòng rơi, tránh cảm giác tất cả rơi đồng loạt lúc mới tải trang
+        p.style.animationDelay = (-Math.random()*dur) + 's';
+        layer.appendChild(p);
+    }
+    doc.body.insertBefore(layer, doc.body.firstChild);
+})();
+</script>
+""", height=0)
+
 if not st.session_state.get("_boot_splash_done"):
     st.session_state["_boot_splash_done"] = True
     components.html("""
@@ -1567,13 +1607,14 @@ if not st.session_state.get("_boot_splash_done"):
       }
       @keyframes bsLogoIn { to {opacity: 1; transform: scale(1);} }
       @keyframes bsTextIn { to {opacity: 1; transform: translateY(0) rotate(-2deg);} }
-      #boot-splash .mascot-eye {
-        transform-box: fill-box; transform-origin: center;
-        animation: mascotBlink 4.5s ease-in-out infinite;
+      #boot-splash .sakura {
+        position: absolute; top: -24px; will-change: transform, opacity;
+        animation-name: sakuraFall; animation-timing-function: linear; animation-fill-mode: forwards;
       }
-      @keyframes mascotBlink {
-        0%, 92%, 100% {transform: scaleY(1);}
-        95%           {transform: scaleY(0.1);}
+      @keyframes sakuraFall {
+        0%   {transform: translate(0,0) rotate(0deg);   opacity: 0.95;}
+        85%  {opacity: 0.9;}
+        100% {transform: translate(var(--drift), 100vh) rotate(360deg); opacity: 0;}
       }
     `;
     doc.head.appendChild(css);
@@ -1586,19 +1627,44 @@ if not st.session_state.get("_boot_splash_done"):
           '<span class="bs-sparkle s2">&#10022;</span>' +
           '<span class="bs-sparkle s3">&#10022;</span>' +
           '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
-            '<polygon points="50,8 88,42 50,92 12,42" fill="#2dd4bf"/>' +
-            '<polygon points="50,8 50,92 12,42" fill="#1fa08f"/>' +
-            '<polygon points="50,8 88,42 50,92" fill="#5de0cd"/>' +
-            '<path class="mascot-eye" d="M32 46 Q38 40 44 46" stroke="#0b2b26" stroke-width="3.2" fill="none" stroke-linecap="round"/>' +
-            '<path class="mascot-eye" d="M56 46 Q62 40 68 46" stroke="#0b2b26" stroke-width="3.2" fill="none" stroke-linecap="round"/>' +
-            '<ellipse cx="30" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>' +
-            '<ellipse cx="70" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>' +
-            '<path d="M44 59 Q50 65 56 59" stroke="#0b2b26" stroke-width="2.6" fill="none" stroke-linecap="round"/>' +
+            '<g>' +
+              '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd"/>' +
+              '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffb3d1" transform="rotate(72 50 50)"/>' +
+              '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd" transform="rotate(144 50 50)"/>' +
+              '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffb3d1" transform="rotate(216 50 50)"/>' +
+              '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd" transform="rotate(288 50 50)"/>' +
+              '<circle cx="50" cy="50" r="7" fill="#fff6ee"/>' +
+              '<circle cx="47" cy="47" r="1.3" fill="#ffcf6b"/>' +
+              '<circle cx="53" cy="47" r="1.3" fill="#ffcf6b"/>' +
+              '<circle cx="50" cy="52.5" r="1.3" fill="#ffcf6b"/>' +
+            '</g>' +
           '</svg>' +
         '</div>' +
         '<div class="bs-text">Welcome, Tân</div>' +
         '<div class="bs-sub">Tân Hotel &middot; Front Office toolkit</div>';
     doc.body.appendChild(el);
+
+    // ── Hoa anh đào rơi nhẹ nhàng khắp màn hình khởi động ──
+    var petalColors = ['#ffd6e8','#ffc2dd','#ffe3ef'];
+    for (var i = 0; i < 18; i++) {
+        var p = doc.createElement('div');
+        p.className = 'sakura';
+        var size = 9 + Math.random()*8;
+        var left = Math.random()*100;
+        var dur = 4 + Math.random()*3.5;
+        var delay = Math.random()*2.5;
+        var drift = (Math.random()*140 - 70) + 'px';
+        var color = petalColors[i % petalColors.length];
+        p.style.left = left + 'vw';
+        p.style.width = size + 'px';
+        p.style.height = size + 'px';
+        p.style.background = 'radial-gradient(circle at 30% 30%, #fff, ' + color + ' 70%)';
+        p.style.borderRadius = '0 60% 0 60%';
+        p.style.setProperty('--drift', drift);
+        p.style.animationDuration = dur + 's';
+        p.style.animationDelay = delay + 's';
+        el.appendChild(p);
+    }
 
     setTimeout(function(){
         el.classList.add('bs-hide');
@@ -1623,14 +1689,17 @@ with st.sidebar:
     <div class="sb-brand">
         <div class="sb-brand-title"><span class="sb-mascot">
             <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                <polygon points="50,8 88,42 50,92 12,42" fill="#2dd4bf"/>
-                <polygon points="50,8 50,92 12,42" fill="#1fa08f"/>
-                <polygon points="50,8 88,42 50,92" fill="#5de0cd"/>
-                <path class="mascot-eye" d="M32 46 Q38 40 44 46" stroke="#0b2b26" stroke-width="5" fill="none" stroke-linecap="round"/>
-                <path class="mascot-eye" d="M56 46 Q62 40 68 46" stroke="#0b2b26" stroke-width="5" fill="none" stroke-linecap="round"/>
-                <ellipse cx="30" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>
-                <ellipse cx="70" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>
-                <path d="M44 59 Q50 65 56 59" stroke="#0b2b26" stroke-width="4" fill="none" stroke-linecap="round"/>
+                <g>
+                    <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd"/>
+                    <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffb3d1" transform="rotate(72 50 50)"/>
+                    <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd" transform="rotate(144 50 50)"/>
+                    <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffb3d1" transform="rotate(216 50 50)"/>
+                    <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd" transform="rotate(288 50 50)"/>
+                    <circle cx="50" cy="50" r="7" fill="#fff6ee"/>
+                    <circle cx="47" cy="47" r="1.3" fill="#ffcf6b"/>
+                    <circle cx="53" cy="47" r="1.3" fill="#ffcf6b"/>
+                    <circle cx="50" cy="52.5" r="1.3" fill="#ffcf6b"/>
+                </g>
             </svg>
         </span> Tân Hotel</div>
         <div class="sb-brand-sub">Front Office toolkit</div>
@@ -1669,14 +1738,17 @@ st.markdown('''
 <div class="welcome-banner">
     <div class="welcome-emoji">
         <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            <polygon points="50,8 88,42 50,92 12,42" fill="#2dd4bf"/>
-            <polygon points="50,8 50,92 12,42" fill="#1fa08f"/>
-            <polygon points="50,8 88,42 50,92" fill="#5de0cd"/>
-            <path class="mascot-eye" d="M32 46 Q38 40 44 46" stroke="#0b2b26" stroke-width="4" fill="none" stroke-linecap="round"/>
-            <path class="mascot-eye" d="M56 46 Q62 40 68 46" stroke="#0b2b26" stroke-width="4" fill="none" stroke-linecap="round"/>
-            <ellipse cx="30" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>
-            <ellipse cx="70" cy="57" rx="5.5" ry="3.2" fill="#ffb3d1" opacity="0.85"/>
-            <path d="M44 59 Q50 65 56 59" stroke="#0b2b26" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+            <g>
+                <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd"/>
+                <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffb3d1" transform="rotate(72 50 50)"/>
+                <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd" transform="rotate(144 50 50)"/>
+                <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffb3d1" transform="rotate(216 50 50)"/>
+                <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd" transform="rotate(288 50 50)"/>
+                <circle cx="50" cy="50" r="7" fill="#fff6ee"/>
+                <circle cx="47" cy="47" r="1.3" fill="#ffcf6b"/>
+                <circle cx="53" cy="47" r="1.3" fill="#ffcf6b"/>
+                <circle cx="50" cy="52.5" r="1.3" fill="#ffcf6b"/>
+            </g>
         </svg>
     </div>
     <div>
