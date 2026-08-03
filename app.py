@@ -529,29 +529,50 @@ def _norm_name(s):
     return _re.sub(r'\s+', ' ', _re.sub(r'[^a-z0-9 ]', '', s)).strip()
 
 def parse_visa_file(visa_bytes):
-    """Đọc file thô visa (có Last Name, First Name, Visa date) → dict
-    {tên_chuẩn_hóa: 'dd/mm/yyyy'}. Khớp cả 'Last First' lẫn 'First Last'
-    để chắc ăn dù thứ tự tên trong file NNN khác."""
+    """Đọc file thô visa/quản lý người nước ngoài → dict {"by_pp": {...}, "by_name": {...}}.
+    Hỗ trợ 2 định dạng cột:
+    1) File "Trang quản lý người nước ngoài" thật: 'HỌ TÊN' (tên đầy đủ 1 cột),
+       'SỐ HỘ CHIẾU', và 'THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM'.
+    2) File cũ dạng Last Name / First Name / Visa date.
+    Khớp theo SỐ HỘ CHIẾU trước (chính xác nhất, không sợ trùng tên/sai thứ tự),
+    tên đã chuẩn hóa dùng làm dự phòng khi không có/không khớp số hộ chiếu.
+    Tự động BỎ QUA khách Việt Nam (nếu file có cột quốc tịch) — công dân VN
+    không có "thời hạn tạm trú tại Việt Nam" nên không cần đưa vào visa_map."""
     df = pd.read_excel(io.BytesIO(visa_bytes))
-    # Dò tên cột linh hoạt
     def _find(*names):
         for n in names:
             for c in df.columns:
                 if _norm_nat(c) == _norm_nat(n):
                     return c
         return None
-    c_last = _find('Last Name', 'LastName', 'Họ')
+    c_full  = _find('HỌ TÊN', 'HO TEN', 'Họ và tên', 'Full Name', 'FullName')
+    c_last  = _find('Last Name', 'LastName', 'Họ')
     c_first = _find('First Name', 'FirstName', 'Tên')
-    c_date = _find('Visa date', 'Visadate', 'Thời hạn tạm trú', 'Tam tru den')
+    c_pp    = _find('SỐ HỘ CHIẾU', 'So Ho Chieu', 'Passport', 'Passport Number', 'PassportNo')
+    c_nat   = _find('QUỐC TỊCH', 'MÃ QUỐC TỊCH', 'Nationality', 'LOẠI KHÁCH')
+    c_date  = _find('Visa date', 'Visadate', 'Thời hạn tạm trú',
+                     'THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM',
+                     'Thoi han duoc phep tam tru tai Viet Nam', 'Tam tru den')
     if c_date is None:
-        raise ValueError("File visa không có cột 'Visa date'. Vui lòng kiểm tra lại file.")
+        raise ValueError("File visa không có cột ngày visa/thời hạn tạm trú. Vui lòng kiểm tra lại file.")
 
-    vmap = {}
+    def _is_vn(val):
+        """Nhận diện khách Việt Nam qua cột quốc tịch/loại khách (nếu có)."""
+        s = _norm_nat(val)
+        return s in ('vnm', 'viet nam', 'vietnam') or s.startswith('vnm') or s == 'viet nam'
+
+    by_pp = {}
+    by_name = {}
+    n_skipped_vn = 0
     for _, r in df.iterrows():
+        # Bỏ qua khách Việt Nam nếu nhận diện được qua cột quốc tịch/loại khách
+        if c_nat and pd.notna(r[c_nat]) and _is_vn(r[c_nat]):
+            n_skipped_vn += 1
+            continue
         d = r[c_date]
         if pd.isna(d):
             continue
-        # Cột Visa date đọc THẲNG (month=tháng thật, day=ngày thật) — KHÔNG đảo như
+        # Cột ngày đọc THẲNG (month=tháng thật, day=ngày thật) — KHÔNG đảo như
         # cột Departure. Đã kiểm chứng: có ngày 25/26/31 nên day chính là ngày thật.
         if hasattr(d, 'year') and not isinstance(d, str):
             dstr = f"{d.day:02d}/{d.month:02d}/{d.year}"
@@ -571,20 +592,40 @@ def parse_visa_file(visa_bytes):
                     dstr = f"{t.day:02d}/{t.month:02d}/{t.year}"
                 except Exception:
                     continue
-        ln = str(r[c_last]).strip() if c_last and pd.notna(r[c_last]) else ''
-        fn = str(r[c_first]).strip() if c_first and pd.notna(r[c_first]) else ''
-        # Lưu cả 2 thứ tự để khớp linh hoạt
-        for combo in ((ln + ' ' + fn), (fn + ' ' + ln)):
-            key = _norm_name(combo)
+
+        # Khớp theo số hộ chiếu — ưu tiên, chính xác nhất
+        if c_pp and pd.notna(r[c_pp]):
+            pp_key = _norm_pp(r[c_pp])
+            if pp_key:
+                by_pp.setdefault(pp_key, dstr)
+
+        # Khớp theo tên — dự phòng khi không có/không khớp số hộ chiếu
+        if c_full and pd.notna(r[c_full]):
+            key = _norm_name(str(r[c_full]))
             if key:
-                vmap.setdefault(key, dstr)
-    return vmap
+                by_name.setdefault(key, dstr)
+        else:
+            ln = str(r[c_last]).strip() if c_last and pd.notna(r[c_last]) else ''
+            fn = str(r[c_first]).strip() if c_first and pd.notna(r[c_first]) else ''
+            # Lưu cả 2 thứ tự để khớp linh hoạt dù file NNN đảo Họ/Tên
+            for combo in ((ln + ' ' + fn), (fn + ' ' + ln)):
+                key = _norm_name(combo)
+                if key:
+                    by_name.setdefault(key, dstr)
+    return {"by_pp": by_pp, "by_name": by_name, "skipped_vn": n_skipped_vn}
 
 def build_kbtt(df_intl, visa_map=None):
-    """Điền mẫu KBTT. Nếu có visa_map {tên_chuẩn_hóa: 'dd/mm/yyyy'} thì điền
-    cột L 'THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM' theo tên khớp; nếu không
-    khớp thì để trống cột đó. Trả về (wb, danh_sách_tên_không_khớp)."""
+    """Điền mẫu KBTT. Nếu có visa_map thì điền cột L 'THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ
+    TẠI VIỆT NAM' — khớp theo SỐ HỘ CHIẾU trước (chính xác nhất), tên là dự phòng;
+    nếu không khớp thì để trống cột đó. Trả về (wb, danh_sách_tên_không_khớp)."""
     visa_map = visa_map or {}
+    # Tương thích ngược: nếu visa_map là dict phẳng {tên: ngày} kiểu cũ, coi như by_name
+    if isinstance(visa_map, dict) and ("by_pp" in visa_map or "by_name" in visa_map):
+        by_pp = visa_map.get("by_pp", {})
+        by_name = visa_map.get("by_name", {})
+    else:
+        by_pp = {}
+        by_name = visa_map
     unmatched = []
     wb = load_workbook(io.BytesIO(load_template('kbtt')))
     ws = wb['KBTT']
@@ -603,9 +644,10 @@ def build_kbtt(df_intl, visa_map=None):
         gt='M - Nam' if str(row.get('GIỚI TÍNH','')).strip()=='Nam' else 'F - Nữ'
         qt=lookup_nat_kbtt(row.get('QUỐC TỊCH',''))
         sh=str(row.get('SỐ GIẤY TỜ','')).strip(); sp=str(row.get('SỐ PHÒNG','')).strip()
-        # Cột L (12) — THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM: date visa khớp theo tên
-        if visa_map:
-            vd = visa_map.get(_norm_name(ht), '')
+        # Cột L (12) — THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM:
+        # khớp theo SỐ HỘ CHIẾU trước (chính xác nhất), tên là dự phòng
+        if by_pp or by_name:
+            vd = by_pp.get(_norm_pp(sh), '') or by_name.get(_norm_name(ht), '')
             if not vd:
                 unmatched.append(ht)
         else:
@@ -1898,7 +1940,8 @@ if st.session_state.menu == "daily":
                                    'unknown_nats': unknown_nats,
                                    'visa_used': bool(visa_map),
                                    'visa_matched': len(df_intl) - len(visa_unmatched) if visa_map else 0,
-                                   'visa_unmatched': visa_unmatched})
+                                   'visa_unmatched': visa_unmatched,
+                                   'visa_skipped_vn': visa_map.get('skipped_vn', 0) if isinstance(visa_map, dict) else 0})
                 st.session_state['daily_results'] = _daily
             except Exception as e:
                 st.session_state.pop('daily_results', None)
@@ -1919,6 +1962,8 @@ if st.session_state.menu == "daily":
                 st.warning("⚠️ Quốc tịch chưa có mã (giữ nguyên tên, cần kiểm tra): " + ", ".join(_dr['unknown_nats']))
             if _dr.get('visa_used'):
                 st.info(f"🛂 Đã điền date visa cho **{_dr['visa_matched']}/{_dr['intl']}** khách quốc tế (khớp theo tên).")
+                if _dr.get('visa_skipped_vn'):
+                    st.caption(f"ℹ️ Đã tự động bỏ qua {_dr['visa_skipped_vn']} khách Việt Nam trong file visa (không cần thời hạn tạm trú).")
                 if _dr.get('visa_unmatched'):
                     st.warning("⚠️ Không tìm thấy date visa cho (cột tạm trú để trống): "
                                + ", ".join(_dr['visa_unmatched']))
@@ -2188,84 +2233,4 @@ def reconcile_rooms(smile_bytes, room_bytes, today):
         detail = pd.DataFrame(columns=['Số phòng', 'Họ tên', 'Quốc tịch', 'Ngày đến'])
 
     return {
-        'smile_total': smile_total, 'smile_filtered': len(smile_f),
-        'sys_total': len(rooms_sys), 'sys_unique': len(sys_rooms),
-        'smile_rooms': len(smile_rooms),
-        'room_chua': room_chua, 'room_thua': room_thua, 'sys_dup': sys_dup,
-        'room_match': len(smile_rooms & sys_rooms),
-        'detail_chua': detail,
-    }
-
-
-if st.session_state.menu == "recon_room":
-    st.write("")
-    st.markdown('<div class="section-label">🚪 Kiểm tra hệ thống quản lý lưu trú phòng</div>', unsafe_allow_html=True)
-    st.caption("So khớp số phòng inhouse từ file khách lưu trú Smile với file danh sách số phòng — tìm phòng chưa đăng ký / thừa / trùng.")
-
-    rr1, rr2 = st.columns(2)
-    with rr1:
-        smile_file_r = st.file_uploader("File khách lưu trú Smile (.xlsx)", type=['xlsx'], key="reconr_smile")
-    with rr2:
-        room_file = st.file_uploader("File số phòng (.xlsx — chỉ chứa danh sách số phòng)", type=['xlsx'], key="reconr_room")
-
-    today_str_r = st.text_input("📅 Ngày xuất file (hôm nay)", value=datetime.date.today().strftime('%d/%m/%Y'),
-                                key="reconr_today",
-                                help="Khách có Arrival = ngày này trên Smile sẽ được loại bỏ khỏi đối chiếu")
-
-    st.write("")
-
-    if st.button("🔍 Bắt đầu kiểm tra", type="primary", key="reconr_run",
-                 disabled=(smile_file_r is None or room_file is None), use_container_width=True):
-        with st.spinner("Đang đối chiếu phòng..."):
-            try:
-                today_r = pd.to_datetime(today_str_r, format='%d/%m/%Y')
-                st.session_state['reconr_results'] = reconcile_rooms(smile_file_r.read(), room_file.read(), today_r)
-            except Exception as e:
-                st.session_state.pop('reconr_results', None)
-                st.error(f"❌ Lỗi: {e}")
-                st.exception(e)
-
-    rr = st.session_state.get('reconr_results')
-    if rr:
-        st.success("✅ Kiểm tra hoàn tất!")
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Phòng inhouse (Smile)", rr['smile_rooms'],
-                  f"{rr['smile_filtered']} khách (từ {rr['smile_total']}, đã trừ arrival hôm nay)")
-        c2.metric("Phòng trong file", rr['sys_unique'],
-                  (f"{rr['sys_total']} dòng" if rr['sys_total'] != rr['sys_unique'] else None))
-        c3.metric("🟢 Phòng khớp", rr['room_match'])
-
-        st.divider()
-        st.markdown("### 🚪 Kết quả đối chiếu phòng")
-
-        n_chua = len(rr['room_chua']); n_thua = len(rr['room_thua']); n_dup = len(rr['sys_dup'])
-
-        m1, m2, m3 = st.columns(3)
-        m1.metric("🔴 Chưa đăng ký", n_chua)
-        m2.metric("🟡 Thừa trong file", n_thua)
-        m3.metric("🟠 Trùng trong file", n_dup)
-
-        if n_chua == 0 and n_thua == 0 and n_dup == 0:
-            st.success("✅ Khớp hoàn toàn! Không có phòng thiếu/thừa/trùng.")
-            st.balloons()
-
-        if n_chua > 0:
-            st.error(f"🔴 {n_chua} phòng có khách inhouse nhưng CHƯA có trong file số phòng: "
-                     + ", ".join(rr['room_chua']))
-            st.markdown("**Chi tiết khách trong các phòng chưa đăng ký:**")
-            st.dataframe(rr['detail_chua'], use_container_width=True, hide_index=True)
-            _csv_r = rr['detail_chua'].to_csv(index=False).encode('utf-8-sig')
-            st.download_button("⬇️ Tải danh sách phòng chưa đăng ký (CSV)", _csv_r,
-                               file_name="phong_chua_dang_ky.csv", mime="text/csv")
-        else:
-            st.success("✅ Tất cả phòng inhouse đều đã có trong file số phòng.")
-
-        if n_thua > 0:
-            st.warning(f"🟡 {n_thua} phòng có trong file nhưng KHÔNG còn khách inhouse "
-                       f"(có thể đã checkout nhưng chưa gỡ): "
-                       + ", ".join(rr['room_thua']))
-
-        if n_dup > 0:
-            st.warning(f"🟠 {n_dup} phòng bị TRÙNG (xuất hiện nhiều lần) trong file số phòng: "
-                       + ", ".join(rr['sys_dup']))
+        'smile_total': smile_total
