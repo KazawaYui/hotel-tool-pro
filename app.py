@@ -1533,9 +1533,14 @@ if not st.session_state.get("_welcome_reveal_done"):
 <script>
 (function(){
     var doc = window.parent.document;
+    // Streamlit thường render lại 2-3 lần liên tiếp rất nhanh lúc mới mở web
+    // (khởi tạo session/widget) — mỗi lần render lại sẽ tạo banner MỚI (chưa
+    // chạy hiệu ứng), thay thế banner cũ. Nên trong 3 giây đầu, hễ thấy banner
+    // MỚI (chưa có cờ 'revealed') là áp hiệu ứng lại, đảm bảo bắt đúng bản
+    // banner CUỐI CÙNG thực sự hiển thị cho người dùng.
     function reveal(){
         var el = doc.querySelector('.welcome-title');
-        if (!el || el.dataset.revealed) return false;
+        if (!el || el.dataset.revealed) return;
         el.dataset.revealed = '1';
         var text = el.textContent;
         el.textContent = '';
@@ -1549,13 +1554,12 @@ if not st.session_state.get("_welcome_reveal_done"):
             frag.appendChild(span);
         });
         el.appendChild(frag);
-        return true;
     }
-    var tries = 0;
+    var settleUntil = Date.now() + 3000;
     var iv = window.parent.setInterval(function(){
-        tries++;
-        if (reveal() || tries > 40) window.parent.clearInterval(iv);
-    }, 100);
+        reveal();
+        if (Date.now() > settleUntil) window.parent.clearInterval(iv);
+    }, 150);
 })();
 </script>
 """, height=0)
