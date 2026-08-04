@@ -18,7 +18,7 @@ def _load_app_icon():
         with open(p, 'r') as f:
             return Image.open(io.BytesIO(base64.b64decode(f.read())))
     except Exception:
-        return "🗻"
+        return "🌸"
 
 st.set_page_config(page_title="Tân Hotel", page_icon=_load_app_icon(), layout="wide")
 
@@ -1338,14 +1338,28 @@ if not st.session_state.get("_main_css_injected"):
         50%      {transform: rotate(8deg);}
     }
     .welcome-title {
+        position: relative; overflow: hidden;
         font-weight: 600; font-size: 1.1rem; letter-spacing: -0.01em;
         background: linear-gradient(90deg, #5eead4, #7dd3fc 55%, #f9a8d4);
         -webkit-background-clip: text; background-clip: text; color: transparent;
     }
     .welcome-title span {display: inline-block; color: #f5f7fa; will-change: transform, opacity;}
     @keyframes wtLetterIn {
-        from {opacity: 0; transform: translateY(10px) scale(0.7);}
-        to   {opacity: 1; transform: translateY(0) scale(1);}
+        from {opacity: 0; transform: scale(0.9);}
+        to   {opacity: 1; transform: scale(1);}
+    }
+    .welcome-title::after {
+        content: ""; position: absolute; top: 0; left: -30%; width: 24%; height: 100%;
+        background: linear-gradient(100deg, transparent, rgba(255,255,255,0.55), transparent);
+        transform: skewX(-20deg); opacity: 0; pointer-events: none;
+    }
+    .welcome-title.wt-shimmer::after {
+        animation: wtShimmer 1.1s ease-out forwards;
+    }
+    @keyframes wtShimmer {
+        0%   {left: -30%; opacity: 0;}
+        12%  {opacity: 1;}
+        100% {left: 130%; opacity: 0;}
     }
     .welcome-sub {color: #9ea7b3; font-size: 0.82rem; margin-top: 2px;}
 
@@ -1523,7 +1537,7 @@ if not st.session_state.get("_bg_sakura_injected"):
 # session_state phía Python) — nếu không, Streamlit sẽ tạo lại iframe này ở
 # MỌI lần rerun (mọi cú click), dù JS bên trong có tự bỏ qua, việc tạo lại
 # iframe + gửi lại toàn bộ HTML/JS qua lại vẫn tốn thời gian và gây khựng.
-# ── Hiệu ứng chữ "Welcome, Tân" nảy lên từng ký tự kiểu logo boot Samsung ──
+# ── Hiệu ứng chữ "Welcome, Tân" mờ dần mượt + vệt sáng lướt kiểu logo boot Samsung ──
 # Chỉ chạy 1 lần khi mở web (không lặp lại mỗi lần chuyển tab — tránh lặp lại
 # lỗi khựng đã tối ưu trước đó). Tự dò tìm phần tử vài lần vì banner có thể
 # chưa kịp render ngay lúc script này chạy.
@@ -1545,15 +1559,19 @@ if not st.session_state.get("_welcome_reveal_done"):
         var text = el.textContent;
         el.textContent = '';
         var frag = doc.createDocumentFragment();
+        var n = text.length;
         text.split('').forEach(function(ch, i){
             var span = doc.createElement('span');
             span.textContent = (ch === ' ') ? '\\u00A0' : ch;
             span.style.opacity = '0';
-            span.style.animation = 'wtLetterIn 0.55s cubic-bezier(0.34,1.56,0.64,1) forwards';
-            span.style.animationDelay = (i * 0.06) + 's';
+            span.style.animation = 'wtLetterIn 0.7s ease-out forwards';
+            span.style.animationDelay = (i * 0.08) + 's';
             frag.appendChild(span);
         });
         el.appendChild(frag);
+        // Sau khi chữ cuối cùng hiện xong mới cho vệt sáng lướt qua (giống logo boot thật)
+        var totalMs = (n * 80) + 700 + 150;
+        window.parent.setTimeout(function(){ el.classList.add('wt-shimmer'); }, totalMs);
     }
     var settleUntil = Date.now() + 3000;
     var iv = window.parent.setInterval(function(){
