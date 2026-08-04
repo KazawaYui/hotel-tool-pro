@@ -1266,9 +1266,10 @@ if not st.session_state.get("_main_css_injected"):
 
     .stApp {--ease: cubic-bezier(0.4, 0, 0.2, 1); --r-lg: 20px; --r-pill: 999px;}
 
-    /* ── Sidebar (kiểu One UI: nav dạng pill nổi) ── */
+    /* ── Sidebar (kiểu One UI: nav dạng pill nổi, Ambient Design — hòa vào nền) ── */
     section[data-testid="stSidebar"] {
-        background: #0e1116; border-right: 1px solid #1c2128;
+        background: linear-gradient(180deg, #0d1015, #0b0d12);
+        border-right: 1px solid rgba(255,255,255,0.045);
     }
     section[data-testid="stSidebar"] .stButton button {
         background: transparent; border: 1px solid transparent;
@@ -1285,11 +1286,13 @@ if not st.session_state.get("_main_css_injected"):
         transform: translateX(4px);
     }
     section[data-testid="stSidebar"] .stButton button[kind="primary"] {
-        background: rgba(45,212,191,0.16) !important; color: #2dd4bf !important;
+        background: linear-gradient(135deg, rgba(45,212,191,0.22), rgba(45,212,191,0.1)) !important;
+        color: #2dd4bf !important;
         border-color: transparent !important; font-weight: 600;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
     }
     section[data-testid="stSidebar"] .stButton button[kind="primary"]:hover {
-        background: rgba(45,212,191,0.24) !important;
+        background: linear-gradient(135deg, rgba(45,212,191,0.3), rgba(45,212,191,0.15)) !important;
     }
     .sb-brand {padding: 0.2rem 0.4rem 1rem;}
     .sb-brand-title {color:#e6e8eb; font-weight:600; font-size:0.95rem; letter-spacing:-0.01em;}
@@ -1323,6 +1326,7 @@ if not st.session_state.get("_main_css_injected"):
         background: linear-gradient(135deg, #16232a, #131a22);
         border: 1px solid rgba(45,212,191,0.25);
         border-radius: var(--r-lg); padding: 1rem 1.3rem; margin-bottom: 1.4rem;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
     }
     .welcome-banner::after {
         content: ""; position: absolute; bottom: -7px; left: 42px;
@@ -1377,17 +1381,20 @@ if not st.session_state.get("_main_css_injected"):
         border-color: #2dd4bf; background: rgba(45,212,191,0.05);
         transform: translateY(-2px);
     }
-    /* Khung "panel" — dùng khi bọc st.container(border=True) */
+    /* Khung "panel" — dùng khi bọc st.container(border=True). Gradient nhẹ +
+       inner glow mép trên kiểu "miếng kính" của One UI 8.5. */
     div[data-testid="stVerticalBlockBorderWrapper"] {
-        background: #161b22; border: 1px solid #262b33 !important;
+        background: linear-gradient(160deg, #191f28, #12151b 55%);
+        border: 1px solid #262b33 !important;
         border-radius: var(--r-lg); transform: translateY(0);
         will-change: transform;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
         transition: border-color 0.12s var(--ease), transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
     }
     div[data-testid="stVerticalBlockBorderWrapper"]:hover {
         border-color: #3a4048 !important;
         transform: translateY(-2px);
-        box-shadow: 0 10px 22px rgba(0,0,0,0.28);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.09), 0 10px 22px rgba(0,0,0,0.28);
     }
     .stButton button, .stDownloadButton button {
         border-radius: var(--r-pill); font-weight: 550; will-change: transform;
@@ -1404,11 +1411,13 @@ if not st.session_state.get("_main_css_injected"):
         box-shadow: none;
     }
     div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"], .stDownloadButton button {
-        background: #2dd4bf; border-color: #2dd4bf; color: #04342c;
+        background: linear-gradient(135deg, #34e0c9, #2dd4bf 60%, #22b8a3);
+        border-color: #2dd4bf; color: #04342c;
         position: relative; overflow: hidden;
     }
     div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"]:hover, .stDownloadButton button:hover {
-        background: #26b8a5; border-color: #26b8a5;
+        background: linear-gradient(135deg, #3ce8d1, #26b8a5 60%, #1ea590);
+        border-color: #26b8a5;
         box-shadow: 0 8px 18px rgba(45,212,191,0.35);
     }
     div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"]::after, .stDownloadButton button::after {
@@ -1435,18 +1444,21 @@ if not st.session_state.get("_main_css_injected"):
     .stCheckbox {transition: opacity 0.15s var(--ease);}
     .stCheckbox:hover {opacity: 0.85;}
 
-    /* ── Metric: thẻ có viền + dải màu trên cùng, xoay vòng theo vị trí cột ── */
+    /* ── Metric: thẻ có viền + dải màu trên cùng, xoay vòng theo vị trí cột.
+       Gradient nhẹ + inner glow mép trên kiểu "miếng kính" của One UI 8.5. ── */
     div[data-testid="stMetric"] {
-        background: #161b22; border: 1px solid #262b33; border-radius: var(--r-lg);
+        background: linear-gradient(160deg, #1a2029, #161b22 60%);
+        border: 1px solid #262b33; border-radius: var(--r-lg);
         padding: 0.9rem 0.75rem 0.75rem; position: relative; overflow: hidden;
         will-change: transform;
         transform: translateY(0) translateZ(0);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
         transition: transform 0.15s var(--ease), border-color 0.12s var(--ease), box-shadow 0.15s var(--ease);
     }
     div[data-testid="stMetric"]:hover {
         transform: translateY(-4px) translateZ(6px);
         border-color: #3a4048;
-        box-shadow: 0 14px 26px rgba(0,0,0,0.38), 0 0 22px rgba(45,212,191,0.12);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 14px 26px rgba(0,0,0,0.38), 0 0 22px rgba(45,212,191,0.12);
     }
     div[data-testid="stMetric"]::before {
         content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px;
