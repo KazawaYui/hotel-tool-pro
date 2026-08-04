@@ -1490,7 +1490,11 @@ if not st.session_state.get("_clock_js_injected"):
         if (t) t.textContent = pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
         if (s) s.textContent = WD[d.getDay()]+', '+pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear();
     }
-    setInterval(tick, 1000);
+    // Đăng ký setInterval trên window.parent (trang chính, luôn tồn tại suốt phiên)
+    // thay vì setInterval trần (chạy trên window của iframe tạm thời) — nếu
+    // Streamlit dọn/tái tạo iframe này (hay xảy ra khi bố cục màn hình đổi nhiều,
+    // như lúc chuyển sang Regcard), timer đăng ký kiểu cũ sẽ bị hủy theo iframe.
+    window.parent._tanHotelClockInterval = window.parent.setInterval(tick, 1000);
     tick();
 })();
 </script>
