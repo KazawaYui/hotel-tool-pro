@@ -1342,6 +1342,11 @@ if not st.session_state.get("_main_css_injected"):
         background: linear-gradient(90deg, #5eead4, #7dd3fc 55%, #f9a8d4);
         -webkit-background-clip: text; background-clip: text; color: transparent;
     }
+    .welcome-title span {display: inline-block; color: #f5f7fa; will-change: transform, opacity;}
+    @keyframes wtLetterIn {
+        from {opacity: 0; transform: translateY(10px) scale(0.7);}
+        to   {opacity: 1; transform: translateY(0) scale(1);}
+    }
     .welcome-sub {color: #9ea7b3; font-size: 0.82rem; margin-top: 2px;}
 
     /* ── Nội dung chính ── */
@@ -1518,6 +1523,43 @@ if not st.session_state.get("_bg_sakura_injected"):
 # session_state phía Python) — nếu không, Streamlit sẽ tạo lại iframe này ở
 # MỌI lần rerun (mọi cú click), dù JS bên trong có tự bỏ qua, việc tạo lại
 # iframe + gửi lại toàn bộ HTML/JS qua lại vẫn tốn thời gian và gây khựng.
+# ── Hiệu ứng chữ "Welcome, Tân" nảy lên từng ký tự kiểu logo boot Samsung ──
+# Chỉ chạy 1 lần khi mở web (không lặp lại mỗi lần chuyển tab — tránh lặp lại
+# lỗi khựng đã tối ưu trước đó). Tự dò tìm phần tử vài lần vì banner có thể
+# chưa kịp render ngay lúc script này chạy.
+if not st.session_state.get("_welcome_reveal_done"):
+    st.session_state["_welcome_reveal_done"] = True
+    components.html("""
+<script>
+(function(){
+    var doc = window.parent.document;
+    function reveal(){
+        var el = doc.querySelector('.welcome-title');
+        if (!el || el.dataset.revealed) return false;
+        el.dataset.revealed = '1';
+        var text = el.textContent;
+        el.textContent = '';
+        var frag = doc.createDocumentFragment();
+        text.split('').forEach(function(ch, i){
+            var span = doc.createElement('span');
+            span.textContent = (ch === ' ') ? '\\u00A0' : ch;
+            span.style.opacity = '0';
+            span.style.animation = 'wtLetterIn 0.55s cubic-bezier(0.34,1.56,0.64,1) forwards';
+            span.style.animationDelay = (i * 0.06) + 's';
+            frag.appendChild(span);
+        });
+        el.appendChild(frag);
+        return true;
+    }
+    var tries = 0;
+    var iv = window.parent.setInterval(function(){
+        tries++;
+        if (reveal() || tries > 40) window.parent.clearInterval(iv);
+    }, 100);
+})();
+</script>
+""", height=0)
+
 if not st.session_state.get("_boot_splash_done"):
     st.session_state["_boot_splash_done"] = True
     components.html("""
