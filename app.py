@@ -1343,12 +1343,6 @@ if not st.session_state.get("_main_css_injected"):
         -webkit-background-clip: text; background-clip: text; color: transparent;
     }
     .welcome-sub {color: #9ea7b3; font-size: 0.82rem; margin-top: 2px;}
-    .welcome-clock {margin-left: auto; text-align: right; padding-left: 12px;}
-    .wc-time {
-        font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-        font-size: 1.35rem; font-weight: 600; color: #2dd4bf; letter-spacing: 0.02em;
-    }
-    .wc-date {color: #6b7480; font-size: 0.72rem; margin-top: 2px;}
 
     /* ── Nội dung chính ── */
     .section-label {
@@ -1464,38 +1458,6 @@ if not st.session_state.get("_main_css_injected"):
     /* Đã bỏ animation mờ dần toàn màn hình để chuyển tab/tương tác nhanh nhất có thể */
 `;
     doc.head.appendChild(css);
-})();
-</script>
-""", height=0)
-
-# ── Đồng hồ thời gian thực trên banner chào mừng ──────────────────────────
-# Chỉ tiêm script 1 lần duy nhất (đúng bài học đã rút ra ở trên) — setInterval
-# chạy hoàn toàn độc lập trên trình duyệt, KHÔNG cần Streamlit rerun để cập
-# nhật giờ, nên không ảnh hưởng gì tới tốc độ/hiệu năng dù chạy vĩnh viễn.
-if not st.session_state.get("_clock_js_injected"):
-    st.session_state["_clock_js_injected"] = True
-    components.html("""
-<script>
-(function(){
-    var doc = window.parent.document;
-    if (window.parent._tanHotelClockRunning) return;
-    window.parent._tanHotelClockRunning = true;
-
-    var WD = ["CN","Thứ 2","Thứ 3","Thứ 4","Thứ 5","Thứ 6","Thứ 7"];
-    function pad(n){ return String(n).padStart(2, '0'); }
-    function tick(){
-        var d = new Date();
-        var t = doc.getElementById('live-clock-el');
-        var s = doc.getElementById('live-date-el');
-        if (t) t.textContent = pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
-        if (s) s.textContent = WD[d.getDay()]+', '+pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear();
-    }
-    // Đăng ký setInterval trên window.parent (trang chính, luôn tồn tại suốt phiên)
-    // thay vì setInterval trần (chạy trên window của iframe tạm thời) — nếu
-    // Streamlit dọn/tái tạo iframe này (hay xảy ra khi bố cục màn hình đổi nhiều,
-    // như lúc chuyển sang Regcard), timer đăng ký kiểu cũ sẽ bị hủy theo iframe.
-    window.parent._tanHotelClockInterval = window.parent.setInterval(tick, 1000);
-    tick();
 })();
 </script>
 """, height=0)
@@ -1757,10 +1719,6 @@ st.markdown('''
     <div>
         <div class="welcome-title">Welcome, Tân</div>
         <div class="welcome-sub">Front Office toolkit · Tân Hotel</div>
-    </div>
-    <div class="welcome-clock">
-        <div class="wc-time" id="live-clock-el">--:--:--</div>
-        <div class="wc-date" id="live-date-el">-- --- ----</div>
     </div>
 </div>
 ''', unsafe_allow_html=True)
