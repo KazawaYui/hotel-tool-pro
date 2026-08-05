@@ -1,4 +1,5 @@
 streamlit
+starlette<1.4.0
 openpyxl
 xlrd==2.0.1
 pandas
