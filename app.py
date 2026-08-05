@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
@@ -16,7 +15,11 @@ def _load_app_icon():
         from PIL import Image
         p = os.path.join(os.path.dirname(__file__), 'icon.b64')
         with open(p, 'r') as f:
-            return Image.open(io.BytesIO(base64.b64decode(f.read())))
+            raw = base64.b64decode(f.read())
+        img = Image.open(io.BytesIO(raw))
+        img.load()  # ép tải đầy đủ ảnh ngay tại đây — tránh lỗi lazy-load khi
+                    # st.cache_resource dùng lại ảnh này ở ngữ cảnh/luồng khác
+        return img
     except Exception:
         return "🌸"
 
@@ -1253,10 +1256,10 @@ def reconcile(smile_bytes, luutru_bytes, today):
 if not st.session_state.get("_app_scripts_injected"):
     st.session_state["_app_scripts_injected"] = True
     # Gộp 4 script (CSS + hoa anh đào nền + hiệu ứng chữ + màn khởi động)
-    # thành 1 lệnh components.html duy nhất — giảm số iframe Streamlit tạo ra
+    # thành 1 lệnh st.iframe duy nhất — giảm số iframe Streamlit tạo ra
     # từ 4 xuống 1, giảm tương ứng số lần lặp lại cảnh báo console mặc định
     # của Streamlit (Unrecognized feature: ...) khi tạo iframe.
-    components.html("""
+    st.iframe("""
 <script>
 (function(){
     var doc = window.parent.document;
@@ -1689,7 +1692,7 @@ if not st.session_state.get("_app_scripts_injected"):
     }, 1900);
 })();
 </script>
-""", height=0)
+""", height=1)
 
 
 
