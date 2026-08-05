@@ -1250,8 +1250,12 @@ def reconcile(smile_bytes, luutru_bytes, today):
 # ── UI ────────────────────────────────────────────────────────────────────
 
 # Custom CSS — Dark dev-tool style (sidebar + monospace số liệu)
-if not st.session_state.get("_main_css_injected"):
-    st.session_state["_main_css_injected"] = True
+if not st.session_state.get("_app_scripts_injected"):
+    st.session_state["_app_scripts_injected"] = True
+    # Gộp 4 script (CSS + hoa anh đào nền + hiệu ứng chữ + màn khởi động)
+    # thành 1 lệnh components.html duy nhất — giảm số iframe Streamlit tạo ra
+    # từ 4 xuống 1, giảm tương ứng số lần lặp lại cảnh báo console mặc định
+    # của Streamlit (Unrecognized feature: ...) khi tạo iframe.
     components.html("""
 <script>
 (function(){
@@ -1491,15 +1495,6 @@ if not st.session_state.get("_main_css_injected"):
     doc.head.appendChild(css);
 })();
 </script>
-""", height=0)
-
-# ── Hoa anh đào rơi nhẹ nhàng ở nền toàn bộ web (liên tục, không chỉ lúc khởi động) ──
-# Chỉ tiêm 1 lần duy nhất trong session — các cánh hoa tự rơi vô hạn bằng CSS
-# animation thuần transform/opacity (chạy trên compositor, không tốn hiệu năng
-# dù chạy mãi mãi, đúng nguyên tắc đã tối ưu ở các phần khác của app).
-if not st.session_state.get("_bg_sakura_injected"):
-    st.session_state["_bg_sakura_injected"] = True
-    components.html("""
 <script>
 (function(){
     var doc = window.parent.document;
@@ -1542,20 +1537,6 @@ if not st.session_state.get("_bg_sakura_injected"):
     doc.body.insertBefore(layer, doc.body.firstChild);
 })();
 </script>
-""", height=0)
-
-# ── Hiệu ứng khởi động kiểu điện thoại: "Welcome, Tân" rồi mờ dần vào app ──
-# QUAN TRỌNG: chỉ gọi components.html() đúng 1 lần trong session (guard bằng
-# session_state phía Python) — nếu không, Streamlit sẽ tạo lại iframe này ở
-# MỌI lần rerun (mọi cú click), dù JS bên trong có tự bỏ qua, việc tạo lại
-# iframe + gửi lại toàn bộ HTML/JS qua lại vẫn tốn thời gian và gây khựng.
-# ── Hiệu ứng chữ "Welcome, Tân" mờ dần mượt + vệt sáng lướt kiểu logo boot Samsung ──
-# Chỉ chạy 1 lần khi mở web (không lặp lại mỗi lần chuyển tab — tránh lặp lại
-# lỗi khựng đã tối ưu trước đó). Tự dò tìm phần tử vài lần vì banner có thể
-# chưa kịp render ngay lúc script này chạy.
-if not st.session_state.get("_welcome_reveal_done"):
-    st.session_state["_welcome_reveal_done"] = True
-    components.html("""
 <script>
 (function(){
     var doc = window.parent.document;
@@ -1592,11 +1573,6 @@ if not st.session_state.get("_welcome_reveal_done"):
     }, 150);
 })();
 </script>
-""", height=0)
-
-if not st.session_state.get("_boot_splash_done"):
-    st.session_state["_boot_splash_done"] = True
-    components.html("""
 <script>
 (function(){
     var doc = window.parent.document;
