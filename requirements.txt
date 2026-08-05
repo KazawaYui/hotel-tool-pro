@@ -1,7 +1,7 @@
-streamlit>=1.38
-pandas
+streamlit
 openpyxl
-xlrd
+xlrd==2.0.1
+pandas
 pypdf
 reportlab
 Pillow
