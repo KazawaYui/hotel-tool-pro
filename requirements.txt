@@ -1,8 +1,7 @@
-streamlit
-starlette<1.4.0
-openpyxl
-xlrd==2.0.1
+streamlit>=1.38
 pandas
+openpyxl
+xlrd
 pypdf
 reportlab
 Pillow
