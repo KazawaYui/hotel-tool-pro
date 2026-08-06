@@ -620,9 +620,12 @@ def parse_visa_file(visa_bytes):
 def build_kbtt(df_intl, visa_map=None):
     """Điền mẫu KBTT. Dòng 3 là dòng "[TEST] SAMPLE" BẮT BUỘC giữ nguyên (không
     bị ghi đè) — dữ liệu khách thật được điền bắt đầu từ dòng 4 trở xuống.
-    Nếu có visa_map thì điền cột L 'THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM' —
-    khớp theo SỐ HỘ CHIẾU trước (chính xác nhất), tên là dự phòng; nếu không
-    khớp thì để trống cột đó. Trả về (wb, danh_sách_tên_không_khớp)."""
+    Cột L 'THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM' ưu tiên lấy TRỰC TIẾP từ
+    cột "TẠM TRÚ" có sẵn trong chính file dữ liệu khách (df_intl) — vì cùng 1
+    dòng = cùng 1 khách nên không cần khớp tên/hộ chiếu với file rời nữa.
+    Nếu file dữ liệu khách không có cột đó, mới dùng visa_map (file visa rời,
+    giữ lại để tương thích ngược) khớp theo SỐ HỘ CHIẾU trước, tên là dự phòng.
+    Trả về (wb, danh_sách_tên_không_khớp, nguồn_visa)."""
     visa_map = visa_map or {}
     # Tương thích ngược: nếu visa_map là dict phẳng {tên: ngày} kiểu cũ, coi như by_name
     if isinstance(visa_map, dict) and ("by_pp" in visa_map or "by_name" in visa_map):
@@ -631,6 +634,14 @@ def build_kbtt(df_intl, visa_map=None):
     else:
         by_pp = {}
         by_name = visa_map
+    # Tìm cột "TẠM TRÚ" (hoặc tên tương đương) NGAY TRONG file dữ liệu khách — ưu tiên cao nhất
+    visa_col = None
+    for cand in ['TẠM TRÚ', 'THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM', 'TẠM TRÚ ĐẾN NGÀY',
+                 'Visa date', 'Visadate', 'Thời hạn tạm trú', 'NGÀY VISA', 'Visa Date']:
+        for c in df_intl.columns:
+            if _norm_nat(c) == _norm_nat(cand):
+                visa_col = c; break
+        if visa_col: break
     unmatched = []
     wb = load_workbook(io.BytesIO(load_template('kbtt')))
     ws = wb['KBTT']
@@ -649,14 +660,19 @@ def build_kbtt(df_intl, visa_map=None):
         gt='M - Nam' if str(row.get('GIỚI TÍNH','')).strip()=='Nam' else 'F - Nữ'
         qt=lookup_nat_kbtt(row.get('QUỐC TỊCH',''))
         sh=str(row.get('SỐ GIẤY TỜ','')).strip(); sp=str(row.get('SỐ PHÒNG','')).strip()
-        # Cột L (12) — THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM:
-        # khớp theo SỐ HỘ CHIẾU trước (chính xác nhất), tên là dự phòng
-        if by_pp or by_name:
+        # Cột L (12) — THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM
+        vd = ''
+        if visa_col is not None:
+            raw = row.get(visa_col)
+            if pd.notna(raw) and str(raw).strip():
+                vd = fmt(raw)
+            if not vd:
+                unmatched.append(ht)
+        elif by_pp or by_name:
+            # Dự phòng: file visa rời (tương thích ngược) — khớp theo SỐ HỘ CHIẾU trước, tên là dự phòng
             vd = by_pp.get(_norm_pp(sh), '') or by_name.get(_norm_name(ht), '')
             if not vd:
                 unmatched.append(ht)
-        else:
-            vd = ''   # không có file visa → cột L để trống
         vals=[i,ht,ns,'D - Ngày',gt,qt,sh,sp,nd,ni,ni,vd]
         for ci,val in enumerate(vals,1):
             cell=ws.cell(er,ci); cell.value=val if isinstance(val,int) else str(val)
@@ -685,7 +701,7 @@ def build_kbtt(df_intl, visa_map=None):
     # Cập nhật vùng Table1 cho khớp số dòng thực (header + dòng TEST + dữ liệu khách)
     if 'Table1' in ws.tables:
         ws.tables['Table1'].ref = f"A2:L{3 + n}"
-    return wb, unmatched
+    return wb, unmatched, ('column' if visa_col is not None else ('file' if (by_pp or by_name) else None))
 
 def build_vnm(df_vn):
     wb = load_workbook(io.BytesIO(load_template('vnm')))
@@ -1252,13 +1268,13 @@ def reconcile(smile_bytes, luutru_bytes, today):
 
 # ── UI ────────────────────────────────────────────────────────────────────
 
-# Custom CSS — Dark dev-tool style (sidebar + monospace số liệu)
+# Giao diện Neumorphism/soft UI — đơn sắc sáng, đổ bóng nổi-chìm
 if not st.session_state.get("_app_scripts_injected"):
     st.session_state["_app_scripts_injected"] = True
-    # Gộp 4 script (CSS + hoa anh đào nền + hiệu ứng chữ + màn khởi động)
-    # thành 1 lệnh st.iframe duy nhất — giảm số iframe Streamlit tạo ra
-    # từ 4 xuống 1, giảm tương ứng số lần lặp lại cảnh báo console mặc định
-    # của Streamlit (Unrecognized feature: ...) khi tạo iframe.
+    # Toàn bộ lớp giao diện Neumorphism (CSS + hoa anh đào nền + hiệu ứng chữ
+    # + màn khởi động) gộp trong 1 lệnh st.iframe duy nhất, tiêm đúng 1 lần
+    # mỗi phiên — mọi animation chỉ dùng transform/opacity (chạy trên GPU
+    # compositor), không backdrop-filter, không chạy lại khi rerun.
     st.iframe("""
 <script>
 (function(){
@@ -1271,165 +1287,168 @@ if not st.session_state.get("_app_scripts_injected"):
     footer {visibility: hidden;}
     header[data-testid="stHeader"] {background: transparent;}
 
-    .stApp {--ease: cubic-bezier(0.4, 0, 0.2, 1); --r-lg: 20px; --r-pill: 999px;}
+    .stApp {
+        --ease: cubic-bezier(0.4, 0, 0.2, 1);
+        --neu-bg: #e6e9ef; --neu-text: #3d4451; --neu-text2: #8b93a3;
+        --neu-muted: #a6adba; --neu-accent: #6c7ce0;
+        --neu-sl: rgba(255,255,255,0.85); --neu-sd: rgba(163,177,198,0.55);
+        --r-lg: 22px; --r-md: 16px; --r-pill: 999px;
+        background: var(--neu-bg);
+    }
 
-    /* ── Sidebar (kiểu One UI: nav dạng pill nổi, Ambient Design — hòa vào nền) ── */
+    /* ── Sidebar: hòa cùng nền, nav dạng pill lõm khi active ── */
     section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0d1015, #0b0d12);
-        border-right: 1px solid rgba(255,255,255,0.045);
+        background: var(--neu-bg); border-right: none;
+        box-shadow: 6px 0 14px rgba(163,177,198,0.22);
     }
     section[data-testid="stSidebar"] .stButton button {
-        background: transparent; border: 1px solid transparent;
+        background: var(--neu-bg); border: none;
         border-radius: var(--r-pill);
-        color: #9ea7b3; font-weight: 500; text-align: left;
-        justify-content: flex-start; padding: 0.55rem 0.9rem;
-        box-shadow: none; will-change: transform, background;
+        color: var(--neu-text2); font-weight: 600; text-align: left;
+        justify-content: flex-start; padding: 0.65rem 1rem;
+        box-shadow: none; will-change: transform;
         transform: translateX(0);
-        transition: background 0.1s var(--ease), color 0.1s var(--ease),
-                    border-color 0.1s var(--ease), transform 0.1s var(--ease);
+        transition: color 0.1s var(--ease), transform 0.1s var(--ease), box-shadow 0.12s var(--ease);
     }
     section[data-testid="stSidebar"] .stButton button:hover {
-        background: #161b22; color: #e6e8eb; border-color: #1c2128;
-        transform: translateX(4px);
+        color: var(--neu-text); transform: translateX(3px);
     }
     section[data-testid="stSidebar"] .stButton button[kind="primary"] {
-        background: linear-gradient(135deg, rgba(45,212,191,0.22), rgba(45,212,191,0.1)) !important;
-        color: #2dd4bf !important;
-        border-color: transparent !important; font-weight: 600;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+        background: var(--neu-bg) !important; color: var(--neu-accent) !important;
+        font-weight: 700;
+        box-shadow: inset -4px -4px 8px var(--neu-sl), inset 4px 4px 8px var(--neu-sd) !important;
     }
     section[data-testid="stSidebar"] .stButton button[kind="primary"]:hover {
-        background: linear-gradient(135deg, rgba(45,212,191,0.3), rgba(45,212,191,0.15)) !important;
+        transform: translateX(0);
     }
     .sb-brand {padding: 0.2rem 0.4rem 1rem;}
-    .sb-brand-title {color:#e6e8eb; font-weight:600; font-size:0.95rem; letter-spacing:-0.01em;}
-    .sb-mascot {display:inline-block; width:18px; height:18px; vertical-align:-4px; margin-right:2px;
+    .sb-brand-title {color: var(--neu-text); font-weight:700; font-size:0.95rem; letter-spacing:-0.01em;}
+    .sb-mascot {display:inline-block; width:20px; height:20px; vertical-align:-5px; margin-right:3px;
         animation: flowerSway 3.4s ease-in-out infinite;}
     .sb-mascot svg {width:100%; height:100%;}
-    .sb-brand-sub {color:#4d5561; font-size:0.72rem;}
-    .sb-section {color:#4d5561; font-size:0.68rem; font-weight:600;
-        text-transform:uppercase; letter-spacing:0.06em; padding:0.7rem 0.4rem 0.2rem;}
-    .sb-status {display:flex; align-items:center; gap:6px; color:#4d5561;
-        font-size:0.72rem; padding-top:0.7rem; margin-top:0.5rem; border-top:1px solid #1c2128;}
-    .sb-dot {
-        position: relative; width:6px; height:6px; border-radius:50%;
-        background:#3fb950; flex-shrink:0;
-    }
-    .sb-dot::after {
-        content: ""; position: absolute; inset: 0; border-radius: 50%;
-        background: #3fb950;
-        animation: pulse 2.2s var(--ease) infinite;
-    }
+    .sb-brand-sub {color: var(--neu-muted); font-size:0.72rem;}
+    .sb-section {color: var(--neu-muted); font-size:0.68rem; font-weight:700;
+        text-transform:uppercase; letter-spacing:0.08em; padding:0.8rem 0.5rem 0.25rem;}
+    .sb-status {display:flex; align-items:center; gap:8px; color: var(--neu-muted);
+        font-size:0.72rem; padding-top:0.8rem; margin-top:0.5rem;}
+    .sb-dot {position:relative; width:7px; height:7px; border-radius:50%; background:#7fd4a8; flex-shrink:0;}
+    .sb-dot::after {content:""; position:absolute; inset:0; border-radius:50%; background:#7fd4a8;
+        animation: pulse 2.2s var(--ease) infinite;}
     @keyframes pulse {
-        0%   {transform: scale(1);   opacity: 0.55;}
+        0%   {transform: scale(1);   opacity: 0.5;}
         70%  {transform: scale(2.6); opacity: 0;}
         100% {transform: scale(2.6); opacity: 0;}
     }
-
-    /* ── Banner chào mừng kiểu One UI: thẻ nổi, bo lớn, kính mờ, đuôi bong bóng thoại ── */
-    .welcome-banner {
-        position: relative;
-        display: flex; align-items: center; gap: 14px;
-        background: linear-gradient(135deg, #16232a, #131a22);
-        border: 1px solid rgba(45,212,191,0.25);
-        border-radius: var(--r-lg); padding: 1rem 1.3rem; margin-bottom: 1.4rem;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
-    }
-    .welcome-banner::after {
-        content: ""; position: absolute; bottom: -7px; left: 42px;
-        width: 14px; height: 14px; background: #16232a;
-        border-left: 1px solid rgba(45,212,191,0.25);
-        border-bottom: 1px solid rgba(45,212,191,0.25);
-        transform: rotate(-45deg); border-radius: 0 0 0 3px;
-    }
-    .welcome-emoji {width: 40px; height: 40px; flex-shrink: 0; animation: flowerSway 3.4s ease-in-out infinite;}
-    .welcome-emoji svg {width: 100%; height: 100%;}
     @keyframes flowerSway {
         0%, 100% {transform: rotate(-8deg);}
         50%      {transform: rotate(8deg);}
     }
+
+    /* ── Banner chào mừng: panel nổi + đuôi bong bóng thoại ── */
+    .welcome-banner {
+        position: relative;
+        display: flex; align-items: center; gap: 14px;
+        background: var(--neu-bg);
+        border: none; border-radius: var(--r-lg);
+        padding: 1.05rem 1.4rem; margin-bottom: 1.5rem;
+        box-shadow: -7px -7px 16px var(--neu-sl), 7px 7px 16px var(--neu-sd);
+    }
+    .welcome-banner::after {
+        content: ""; position: absolute; bottom: -7px; left: 44px;
+        width: 14px; height: 14px; background: var(--neu-bg);
+        transform: rotate(-45deg); border-radius: 0 0 0 4px;
+        box-shadow: -4px 4px 8px var(--neu-sd);
+    }
+    .welcome-emoji {width: 42px; height: 42px; flex-shrink: 0; animation: flowerSway 3.4s ease-in-out infinite;}
+    .welcome-emoji svg {width: 100%; height: 100%;}
     .welcome-title {
         position: relative; overflow: hidden;
-        font-weight: 600; font-size: 1.1rem; letter-spacing: -0.01em;
-        background: linear-gradient(90deg, #5eead4, #7dd3fc 55%, #f9a8d4);
-        -webkit-background-clip: text; background-clip: text; color: transparent;
+        font-weight: 700; font-size: 1.12rem; letter-spacing: -0.01em;
+        color: var(--neu-accent);
     }
-    .welcome-title span {display: inline-block; color: #f5f7fa; will-change: transform, opacity;}
+    .welcome-title span {display: inline-block; color: inherit; will-change: transform, opacity;}
     @keyframes wtLetterIn {
         from {opacity: 0; transform: scale(0.9);}
         to   {opacity: 1; transform: scale(1);}
     }
     .welcome-title::after {
         content: ""; position: absolute; top: 0; left: -30%; width: 24%; height: 100%;
-        background: linear-gradient(100deg, transparent, rgba(255,255,255,0.55), transparent);
+        background: linear-gradient(100deg, transparent, rgba(255,255,255,0.75), transparent);
         transform: skewX(-20deg); opacity: 0; pointer-events: none;
     }
-    .welcome-title.wt-shimmer::after {
-        animation: wtShimmer 1.1s ease-out forwards;
-    }
+    .welcome-title.wt-shimmer::after {animation: wtShimmer 1.1s ease-out forwards;}
     @keyframes wtShimmer {
         0%   {left: -30%; opacity: 0;}
         12%  {opacity: 1;}
         100% {left: 130%; opacity: 0;}
     }
-    .welcome-sub {color: #9ea7b3; font-size: 0.82rem; margin-top: 2px;}
+    .welcome-sub {color: var(--neu-text2); font-size: 0.82rem; margin-top: 2px;}
 
     /* ── Nội dung chính ── */
     .section-label {
-        font-size: 0.7rem; font-weight: 650; color: #7d8590;
-        text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.75rem;
+        font-size: 0.7rem; font-weight: 700; color: var(--neu-text2);
+        text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.8rem;
     }
-    div[data-testid="stFileUploader"] {
-        border: 1px dashed #2a3038; border-radius: var(--r-lg); padding: 0.4rem;
-        transform: translateY(0); will-change: transform;
-        transition: border-color 0.12s var(--ease), background 0.12s var(--ease), transform 0.15s var(--ease);
-    }
-    div[data-testid="stFileUploader"]:hover {
-        border-color: #2dd4bf; background: rgba(45,212,191,0.05);
-        transform: translateY(-2px);
-    }
-    /* Khung "panel" — dùng khi bọc st.container(border=True). Gradient nhẹ +
-       inner glow mép trên kiểu "miếng kính" của One UI 8.5. */
     div[data-testid="stVerticalBlockBorderWrapper"] {
-        background: linear-gradient(160deg, #191f28, #12151b 55%);
-        border: 1px solid #262b33 !important;
+        background: var(--neu-bg); border: none !important;
         border-radius: var(--r-lg); transform: translateY(0);
         will-change: transform;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
-        transition: border-color 0.12s var(--ease), transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
+        box-shadow: -8px -8px 18px var(--neu-sl), 8px 8px 18px var(--neu-sd);
+        transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
     }
     div[data-testid="stVerticalBlockBorderWrapper"]:hover {
-        border-color: #3a4048 !important;
         transform: translateY(-2px);
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.09), 0 10px 22px rgba(0,0,0,0.28);
+        box-shadow: -9px -9px 20px var(--neu-sl), 10px 10px 22px var(--neu-sd);
     }
-    .stButton button, .stDownloadButton button {
-        border-radius: var(--r-pill); font-weight: 550; will-change: transform;
-        transform: perspective(500px) rotateX(0deg) translateY(0);
-        transition: transform 0.12s var(--ease), background 0.12s var(--ease),
-                    border-color 0.12s var(--ease), box-shadow 0.12s var(--ease);
+    div[data-testid="stFileUploader"] {
+        background: var(--neu-bg);
+        border: none; border-radius: var(--r-md); padding: 0.55rem;
+        box-shadow: inset -5px -5px 10px var(--neu-sl), inset 5px 5px 10px var(--neu-sd);
+        transform: translateY(0); will-change: transform;
+        transition: transform 0.12s var(--ease);
     }
-    .stButton button:hover, .stDownloadButton button:hover {
-        transform: perspective(500px) rotateX(4deg) translateY(-1px);
-        box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+    div[data-testid="stFileUploader"]:hover {transform: translateY(-1px);}
+    div[data-testid="stFileUploader"] section {background: transparent; border: none;}
+    .stTextInput input, .stNumberInput input, .stTextArea textarea {
+        background: var(--neu-bg) !important; border: none !important;
+        border-radius: var(--r-md) !important; color: var(--neu-text) !important;
+        box-shadow: inset -4px -4px 9px var(--neu-sl), inset 4px 4px 9px var(--neu-sd) !important;
+        transition: box-shadow 0.1s var(--ease);
     }
-    .stButton button:active, .stDownloadButton button:active {
-        transform: perspective(500px) rotateX(-3deg) scale(0.97) translateY(0);
-        box-shadow: none;
+    .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {
+        box-shadow: inset -4px -4px 9px var(--neu-sl), inset 4px 4px 9px var(--neu-sd),
+                    0 0 0 2px rgba(108,124,224,0.35) !important;
+    }
+    div[data-testid="stNumberInput"] button {border: none; background: var(--neu-bg);}
+    .stCheckbox {transition: opacity 0.15s var(--ease);}
+    .stCheckbox:hover {opacity: 0.85;}
+
+    /* ── Nút: chính = gradient accent nổi khối; phụ = pill nổi trung tính ── */
+    div[data-testid="stMainBlockContainer"] .stButton button, .stDownloadButton button {
+        border-radius: var(--r-md); font-weight: 700; border: none;
+        will-change: transform; transform: translateY(0);
+        transition: transform 0.12s var(--ease), box-shadow 0.12s var(--ease);
+    }
+    div[data-testid="stMainBlockContainer"] .stButton button:hover, .stDownloadButton button:hover {
+        transform: translateY(-1px);
+    }
+    div[data-testid="stMainBlockContainer"] .stButton button:active, .stDownloadButton button:active {
+        transform: scale(0.98) translateY(0);
+        box-shadow: inset -4px -4px 8px rgba(255,255,255,0.25), inset 4px 4px 8px rgba(0,0,0,0.18) !important;
+    }
+    div[data-testid="stMainBlockContainer"] .stButton button[kind="secondary"] {
+        background: var(--neu-bg); color: var(--neu-text);
+        box-shadow: -5px -5px 12px var(--neu-sl), 5px 5px 12px var(--neu-sd);
     }
     div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"], .stDownloadButton button {
-        background: linear-gradient(135deg, #34e0c9, #2dd4bf 60%, #22b8a3);
-        border-color: #2dd4bf; color: #04342c;
+        background: linear-gradient(145deg, #7986e6, var(--neu-accent));
+        color: #ffffff;
+        box-shadow: -6px -6px 14px var(--neu-sl), 6px 6px 14px rgba(108,124,224,0.45);
         position: relative; overflow: hidden;
-    }
-    div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"]:hover, .stDownloadButton button:hover {
-        background: linear-gradient(135deg, #3ce8d1, #26b8a5 60%, #1ea590);
-        border-color: #26b8a5;
-        box-shadow: 0 8px 18px rgba(45,212,191,0.35);
     }
     div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"]::after, .stDownloadButton button::after {
         content: ""; position: absolute; top: 0; left: -60%; width: 35%; height: 100%;
-        background: linear-gradient(120deg, transparent, rgba(255,255,255,0.55), transparent);
+        background: linear-gradient(120deg, transparent, rgba(255,255,255,0.5), transparent);
         transform: skewX(-20deg) translateX(0);
         transition: transform 0.65s ease;
         pointer-events: none; will-change: transform;
@@ -1438,258 +1457,210 @@ if not st.session_state.get("_app_scripts_injected"):
         transform: skewX(-20deg) translateX(540%);
     }
 
-    /* ── Input / checkbox: viền sáng dần khi hover / focus ── */
-    .stTextInput input, .stNumberInput input, .stTextArea textarea {
-        transition: border-color 0.1s var(--ease), box-shadow 0.1s var(--ease);
-    }
-    .stTextInput input:hover, .stNumberInput input:hover, .stTextArea textarea:hover {
-        border-color: #3a4048 !important;
-    }
-    .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {
-        border-color: #2dd4bf !important; box-shadow: 0 0 0 1px rgba(45,212,191,0.35) !important;
-    }
-    .stCheckbox {transition: opacity 0.15s var(--ease);}
-    .stCheckbox:hover {opacity: 0.85;}
-
-    /* ── Metric: thẻ có viền + dải màu trên cùng, xoay vòng theo vị trí cột.
-       Gradient nhẹ + inner glow mép trên kiểu "miếng kính" của One UI 8.5. ── */
+    /* ── Metric: thẻ nổi đơn sắc, giá trị đậm ── */
     div[data-testid="stMetric"] {
-        background: linear-gradient(160deg, #1a2029, #161b22 60%);
-        border: 1px solid #262b33; border-radius: var(--r-lg);
-        padding: 0.9rem 0.75rem 0.75rem; position: relative; overflow: hidden;
-        will-change: transform;
-        transform: translateY(0) translateZ(0);
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
-        transition: transform 0.15s var(--ease), border-color 0.12s var(--ease), box-shadow 0.15s var(--ease);
+        background: var(--neu-bg); border: none; border-radius: var(--r-md);
+        padding: 0.95rem 1rem 0.8rem; position: relative; overflow: hidden;
+        will-change: transform; transform: translateY(0) translateZ(0);
+        box-shadow: -6px -6px 13px var(--neu-sl), 6px 6px 13px var(--neu-sd);
+        transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
     }
     div[data-testid="stMetric"]:hover {
-        transform: translateY(-4px) translateZ(6px);
-        border-color: #3a4048;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 14px 26px rgba(0,0,0,0.38), 0 0 22px rgba(45,212,191,0.12);
+        transform: translateY(-3px) translateZ(0);
+        box-shadow: -7px -7px 15px var(--neu-sl), 8px 8px 17px var(--neu-sd);
     }
-    div[data-testid="stMetric"]::before {
-        content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px;
-        transform: scaleY(0.75); transform-origin: top;
-        transition: transform 0.2s var(--ease);
-    }
-    div[data-testid="stMetric"]:hover::before {transform: scaleY(1);}
-    div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+1) div[data-testid="stMetric"]::before {background: #2dd4bf;}
-    div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+2) div[data-testid="stMetric"]::before {background: #60a5fa;}
-    div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+3) div[data-testid="stMetric"]::before {background: #f5a623;}
-    div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+4) div[data-testid="stMetric"]::before {background: #f472b6;}
-    div[data-testid="stHorizontalBlock"] > div:nth-of-type(5n+5) div[data-testid="stMetric"]::before {background: #a78bfa;}
     div[data-testid="stMetricValue"], div[data-testid="stMetricValue"] * {
         font-family: ui-monospace, "SFMono-Regular", Menlo, monospace !important;
-        font-weight: 600 !important; color: #f5f7fa !important;
-        transition: color 0.2s var(--ease);
+        font-weight: 700 !important; color: var(--neu-text) !important;
     }
     div[data-testid="stMetricLabel"], div[data-testid="stMetricLabel"] * {
-        font-size: 0.84rem !important; color: #b8c0cc !important; font-weight: 500 !important;
+        font-size: 0.82rem !important; color: var(--neu-text2) !important; font-weight: 600 !important;
     }
 
-    /* ── Alert (success/info/warning/error): xuất hiện mượt ── */
     div[data-testid="stAlert"] {
+        border-radius: var(--r-md);
         transition: transform 0.1s var(--ease);
     }
     div[data-testid="stAlert"]:hover {transform: translateY(-1px);}
-
-    /* Đã bỏ animation mờ dần toàn màn hình để chuyển tab/tương tác nhanh nhất có thể */
-`;
-    doc.head.appendChild(css);
-})();
-</script>
-<script>
-(function(){
-    var doc = window.parent.document;
-    if (doc.getElementById('bg-sakura-layer')) return;
-
-    var css = doc.createElement('style');
-    css.id = 'bg-sakura-style';
-    css.textContent = `
-      #bg-sakura-layer { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
-      #bg-sakura-layer .petal {
-          position: absolute; top: -20px; opacity: 0.5; will-change: transform;
-          animation-name: bgSakuraFall; animation-timing-function: linear; animation-iteration-count: infinite;
-      }
-      @keyframes bgSakuraFall {
-          0%   { transform: translate(0,0) rotate(0deg); }
-          100% { transform: translate(var(--drift), 112vh) rotate(360deg); }
-      }
     `;
     doc.head.appendChild(css);
 
-    var layer = doc.createElement('div');
-    layer.id = 'bg-sakura-layer';
-    var colors = ['#ffd6e8', '#ffc2dd', '#ffe3ef'];
-    for (var i = 0; i < 10; i++) {
-        var p = doc.createElement('div');
-        p.className = 'petal';
-        var size = 8 + Math.random()*6;
-        var dur = 11 + Math.random()*8;
-        p.style.left = (Math.random()*100) + 'vw';
-        p.style.width = size + 'px';
-        p.style.height = size + 'px';
-        p.style.borderRadius = '0 60% 0 60%';
-        p.style.background = 'radial-gradient(circle at 30% 30%, #fff, ' + colors[i % 3] + ' 70%)';
-        p.style.setProperty('--drift', (Math.random()*160 - 80) + 'px');
-        p.style.animationDuration = dur + 's';
-        // delay âm: cánh hoa bắt đầu ở giữa chừng vòng rơi, tránh cảm giác tất cả rơi đồng loạt lúc mới tải trang
-        p.style.animationDelay = (-Math.random()*dur) + 's';
-        layer.appendChild(p);
-    }
-    doc.body.insertBefore(layer, doc.body.firstChild);
-})();
-</script>
-<script>
-(function(){
-    var doc = window.parent.document;
-    // Streamlit thường render lại 2-3 lần liên tiếp rất nhanh lúc mới mở web
-    // (khởi tạo session/widget) — mỗi lần render lại sẽ tạo banner MỚI (chưa
-    // chạy hiệu ứng), thay thế banner cũ. Nên trong 3 giây đầu, hễ thấy banner
-    // MỚI (chưa có cờ 'revealed') là áp hiệu ứng lại, đảm bảo bắt đúng bản
-    // banner CUỐI CÙNG thực sự hiển thị cho người dùng.
-    function reveal(){
-        var el = doc.querySelector('.welcome-title');
-        if (!el || el.dataset.revealed) return;
-        el.dataset.revealed = '1';
-        var text = el.textContent;
-        el.textContent = '';
-        var frag = doc.createDocumentFragment();
-        var n = text.length;
-        text.split('').forEach(function(ch, i){
-            var span = doc.createElement('span');
-            span.textContent = (ch === ' ') ? '\\u00A0' : ch;
-            span.style.opacity = '0';
-            span.style.animation = 'wtLetterIn 0.7s ease-out forwards';
-            span.style.animationDelay = (i * 0.08) + 's';
-            frag.appendChild(span);
-        });
-        el.appendChild(frag);
-        // Sau khi chữ cuối cùng hiện xong mới cho vệt sáng lướt qua (giống logo boot thật)
-        var totalMs = (n * 80) + 700 + 150;
-        window.parent.setTimeout(function(){ el.classList.add('wt-shimmer'); }, totalMs);
-    }
-    var settleUntil = Date.now() + 3000;
-    var iv = window.parent.setInterval(function(){
-        reveal();
-        if (Date.now() > settleUntil) window.parent.clearInterval(iv);
-    }, 150);
-})();
-</script>
-<script>
-(function(){
-    var doc = window.parent.document;
-    if (doc.getElementById('boot-splash')) return;
-
-    var css = doc.createElement('style');
-    css.id = 'boot-splash-style';
-    css.textContent = `
-      @import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap');
-      #boot-splash {
-        position: fixed; inset: 0; z-index: 999999;
-        background: #0b0d12;
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        transition: opacity 0.55s ease;
-      }
-      #boot-splash.bs-hide { opacity: 0; pointer-events: none; }
-      #boot-splash .bs-logo-wrap {
-        position: relative; width: 100px; height: 100px;
-        opacity: 0; transform: scale(0.5);
-        animation: bsLogoIn 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.15s forwards;
-      }
-      #boot-splash .bs-logo-wrap svg { width: 100%; height: 100%; }
-      #boot-splash .bs-sparkle {
-        position: absolute; color: #ffb3d1; opacity: 0;
-        animation: bsTwinkle 1.6s ease-in-out infinite;
-      }
-      #boot-splash .bs-sparkle.s1 { top: -6px;  left: -18px; font-size: 1.1rem; animation-delay: 0.7s; }
-      #boot-splash .bs-sparkle.s2 { top: 10px;  right: -22px; font-size: 0.85rem; animation-delay: 1.2s; }
-      #boot-splash .bs-sparkle.s3 { bottom: -4px; left: -8px; font-size: 0.7rem; animation-delay: 1.6s; }
-      @keyframes bsTwinkle {
-        0%, 100% {opacity: 0; transform: scale(0.6) rotate(0deg);}
-        50%      {opacity: 1; transform: scale(1.15) rotate(20deg);}
-      }
-      #boot-splash .bs-text {
-        margin-top: 20px;
-        font-family: 'ChocoCooky', 'Choco Cooky', 'Patrick Hand', cursive;
-        font-size: 3.2rem; font-weight: 700;
-        background: linear-gradient(90deg, #5eead4, #7dd3fc 55%, #f9a8d4);
-        -webkit-background-clip: text; background-clip: text; color: transparent;
-        transform: translateY(10px) rotate(-2deg); transform-origin: center;
-        opacity: 0;
-        animation: bsTextIn 0.5s ease 0.55s forwards;
-      }
-      #boot-splash .bs-sub {
-        margin-top: 8px; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
-        font-size: 1rem; color: #8b95a1;
-        opacity: 0;
-        animation: bsTextIn 0.5s ease 0.85s forwards;
-      }
-      @keyframes bsLogoIn { to {opacity: 1; transform: scale(1);} }
-      @keyframes bsTextIn { to {opacity: 1; transform: translateY(0) rotate(-2deg);} }
-      #boot-splash .sakura {
-        position: absolute; top: -24px; will-change: transform, opacity;
-        animation-name: sakuraFall; animation-timing-function: linear; animation-fill-mode: forwards;
-      }
-      @keyframes sakuraFall {
-        0%   {transform: translate(0,0) rotate(0deg);   opacity: 0.95;}
-        85%  {opacity: 0.9;}
-        100% {transform: translate(var(--drift), 100vh) rotate(360deg); opacity: 0;}
-      }
-    `;
-    doc.head.appendChild(css);
-
-    var el = doc.createElement('div');
-    el.id = 'boot-splash';
-    el.innerHTML =
-        '<div class="bs-logo-wrap">' +
-          '<span class="bs-sparkle s1">&#10022;</span>' +
-          '<span class="bs-sparkle s2">&#10022;</span>' +
-          '<span class="bs-sparkle s3">&#10022;</span>' +
-          '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
-            '<g>' +
-              '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd"/>' +
-              '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffb3d1" transform="rotate(72 50 50)"/>' +
-              '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd" transform="rotate(144 50 50)"/>' +
-              '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffb3d1" transform="rotate(216 50 50)"/>' +
-              '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd" transform="rotate(288 50 50)"/>' +
-              '<circle cx="50" cy="50" r="7" fill="#fff6ee"/>' +
-              '<circle cx="47" cy="47" r="1.3" fill="#ffcf6b"/>' +
-              '<circle cx="53" cy="47" r="1.3" fill="#ffcf6b"/>' +
-              '<circle cx="50" cy="52.5" r="1.3" fill="#ffcf6b"/>' +
-            '</g>' +
-          '</svg>' +
-        '</div>' +
-        '<div class="bs-text">Welcome, Tân</div>' +
-        '<div class="bs-sub">Tân Hotel &middot; Front Office toolkit</div>';
-    doc.body.appendChild(el);
-
-    // ── Hoa anh đào rơi nhẹ nhàng khắp màn hình khởi động ──
-    var petalColors = ['#ffd6e8','#ffc2dd','#ffe3ef'];
-    for (var i = 0; i < 18; i++) {
-        var p = doc.createElement('div');
-        p.className = 'sakura';
-        var size = 9 + Math.random()*8;
-        var left = Math.random()*100;
-        var dur = 4 + Math.random()*3.5;
-        var delay = Math.random()*2.5;
-        var drift = (Math.random()*140 - 70) + 'px';
-        var color = petalColors[i % petalColors.length];
-        p.style.left = left + 'vw';
-        p.style.width = size + 'px';
-        p.style.height = size + 'px';
-        p.style.background = 'radial-gradient(circle at 30% 30%, #fff, ' + color + ' 70%)';
-        p.style.borderRadius = '0 60% 0 60%';
-        p.style.setProperty('--drift', drift);
-        p.style.animationDuration = dur + 's';
-        p.style.animationDelay = delay + 's';
-        el.appendChild(p);
+    // ── Hoa anh đào rơi liên tục ở nền — thuần transform/opacity, vô hại hiệu năng ──
+    if (!doc.getElementById('bg-sakura-layer')) {
+        var css2 = doc.createElement('style');
+        css2.id = 'bg-sakura-style';
+        css2.textContent = `
+          #bg-sakura-layer { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+          #bg-sakura-layer .petal {
+              position: absolute; top: -20px; opacity: 0.55; will-change: transform;
+              animation-name: bgSakuraFall; animation-timing-function: linear; animation-iteration-count: infinite;
+          }
+          @keyframes bgSakuraFall {
+              0%   { transform: translate(0,0) rotate(0deg); }
+              100% { transform: translate(var(--drift), 112vh) rotate(360deg); }
+          }
+        `;
+        doc.head.appendChild(css2);
+        var layer = doc.createElement('div');
+        layer.id = 'bg-sakura-layer';
+        var colors = ['#f6a8c9', '#f293bc', '#f9c1d9'];
+        for (var i = 0; i < 10; i++) {
+            var p = doc.createElement('div');
+            p.className = 'petal';
+            var size = 8 + Math.random()*6;
+            var dur = 11 + Math.random()*8;
+            p.style.left = (Math.random()*100) + 'vw';
+            p.style.width = size + 'px';
+            p.style.height = size + 'px';
+            p.style.borderRadius = '0 60% 0 60%';
+            p.style.background = 'radial-gradient(circle at 30% 30%, #fff, ' + colors[i % 3] + ' 70%)';
+            p.style.setProperty('--drift', (Math.random()*160 - 80) + 'px');
+            p.style.animationDuration = dur + 's';
+            p.style.animationDelay = (-Math.random()*dur) + 's';
+            layer.appendChild(p);
+        }
+        doc.body.insertBefore(layer, doc.body.firstChild);
     }
 
-    setTimeout(function(){
-        el.classList.add('bs-hide');
-        setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 600);
-    }, 1900);
+    // ── Chữ "Welcome, Tân" hiện từng ký tự + vệt sáng lướt (chạy 1 lần khi mở web) ──
+    (function(){
+        function reveal(){
+            var el = doc.querySelector('.welcome-title');
+            if (!el || el.dataset.revealed) return;
+            el.dataset.revealed = '1';
+            var text = el.textContent;
+            el.textContent = '';
+            var frag = doc.createDocumentFragment();
+            var n = text.length;
+            text.split('').forEach(function(ch, i){
+                var span = doc.createElement('span');
+                span.textContent = (ch === ' ') ? '\\u00A0' : ch;
+                span.style.opacity = '0';
+                span.style.animation = 'wtLetterIn 0.7s ease-out forwards';
+                span.style.animationDelay = (i * 0.08) + 's';
+                frag.appendChild(span);
+            });
+            el.appendChild(frag);
+            var totalMs = (n * 80) + 700 + 150;
+            window.parent.setTimeout(function(){ el.classList.add('wt-shimmer'); }, totalMs);
+        }
+        var settleUntil = Date.now() + 3000;
+        var iv = window.parent.setInterval(function(){
+            reveal();
+            if (Date.now() > settleUntil) window.parent.clearInterval(iv);
+        }, 150);
+    })();
+
+    // ── Màn hình khởi động: nền sáng, hoa anh đào + "Welcome, Tân" chữ ký ──
+    if (!doc.getElementById('boot-splash')) {
+        var css3 = doc.createElement('style');
+        css3.id = 'boot-splash-style';
+        css3.textContent = `
+          @import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap');
+          #boot-splash {
+            position: fixed; inset: 0; z-index: 999999;
+            background: #e6e9ef;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            transition: opacity 0.55s ease;
+          }
+          #boot-splash.bs-hide { opacity: 0; pointer-events: none; }
+          #boot-splash .bs-logo-wrap {
+            position: relative; width: 104px; height: 104px;
+            opacity: 0; transform: scale(0.5);
+            animation: bsLogoIn 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.15s forwards;
+          }
+          #boot-splash .bs-logo-wrap::before {
+            content: ""; position: absolute; inset: -14px; border-radius: 50%;
+            background: #e6e9ef;
+            box-shadow: -8px -8px 18px rgba(255,255,255,0.85), 8px 8px 18px rgba(163,177,198,0.55);
+          }
+          #boot-splash .bs-logo-wrap svg { position: relative; width: 100%; height: 100%; }
+          #boot-splash .bs-sparkle {
+            position: absolute; color: #f293bc; opacity: 0;
+            animation: bsTwinkle 1.6s ease-in-out infinite;
+          }
+          #boot-splash .bs-sparkle.s1 { top: -12px;  left: -22px; font-size: 1.1rem; animation-delay: 0.7s; }
+          #boot-splash .bs-sparkle.s2 { top: 8px;  right: -26px; font-size: 0.85rem; animation-delay: 1.2s; }
+          #boot-splash .bs-sparkle.s3 { bottom: -8px; left: -12px; font-size: 0.7rem; animation-delay: 1.6s; }
+          @keyframes bsTwinkle {
+            0%, 100% {opacity: 0; transform: scale(0.6) rotate(0deg);}
+            50%      {opacity: 1; transform: scale(1.15) rotate(20deg);}
+          }
+          #boot-splash .bs-text {
+            margin-top: 30px;
+            font-family: 'ChocoCooky', 'Choco Cooky', 'Patrick Hand', cursive;
+            font-size: 3.2rem; font-weight: 700; color: #6c7ce0;
+            transform: translateY(10px) rotate(-2deg); transform-origin: center;
+            opacity: 0;
+            animation: bsTextIn 0.5s ease 0.55s forwards;
+          }
+          #boot-splash .bs-sub {
+            margin-top: 8px; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+            font-size: 1rem; color: #8b93a3;
+            opacity: 0;
+            animation: bsTextIn 0.5s ease 0.85s forwards;
+          }
+          @keyframes bsLogoIn { to {opacity: 1; transform: scale(1);} }
+          @keyframes bsTextIn { to {opacity: 1; transform: translateY(0) rotate(-2deg);} }
+          #boot-splash .sakura {
+            position: absolute; top: -24px; will-change: transform, opacity;
+            animation-name: sakuraFall; animation-timing-function: linear; animation-fill-mode: forwards;
+          }
+          @keyframes sakuraFall {
+            0%   {transform: translate(0,0) rotate(0deg);   opacity: 0.95;}
+            85%  {opacity: 0.9;}
+            100% {transform: translate(var(--drift), 100vh) rotate(360deg); opacity: 0;}
+          }
+        `;
+        doc.head.appendChild(css3);
+
+        var el = doc.createElement('div');
+        el.id = 'boot-splash';
+        el.innerHTML =
+            '<div class="bs-logo-wrap">' +
+              '<span class="bs-sparkle s1">&#10022;</span>' +
+              '<span class="bs-sparkle s2">&#10022;</span>' +
+              '<span class="bs-sparkle s3">&#10022;</span>' +
+              '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
+                '<g>' +
+                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f6a8c9"/>' +
+                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f293bc" transform="rotate(72 50 50)"/>' +
+                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f6a8c9" transform="rotate(144 50 50)"/>' +
+                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f293bc" transform="rotate(216 50 50)"/>' +
+                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f6a8c9" transform="rotate(288 50 50)"/>' +
+                  '<circle cx="50" cy="50" r="7" fill="#fff6ee"/>' +
+                  '<circle cx="47" cy="47" r="1.3" fill="#ffcf6b"/>' +
+                  '<circle cx="53" cy="47" r="1.3" fill="#ffcf6b"/>' +
+                  '<circle cx="50" cy="52.5" r="1.3" fill="#ffcf6b"/>' +
+                '</g>' +
+              '</svg>' +
+            '</div>' +
+            '<div class="bs-text">Welcome, Tân</div>' +
+            '<div class="bs-sub">Tân Hotel &middot; Front Office toolkit</div>';
+        doc.body.appendChild(el);
+
+        var petalColors = ['#f6a8c9','#f293bc','#f9c1d9'];
+        for (var j = 0; j < 18; j++) {
+            var pt = doc.createElement('div');
+            pt.className = 'sakura';
+            var psize = 9 + Math.random()*8;
+            var pdur = 4 + Math.random()*3.5;
+            pt.style.left = (Math.random()*100) + 'vw';
+            pt.style.width = psize + 'px';
+            pt.style.height = psize + 'px';
+            pt.style.background = 'radial-gradient(circle at 30% 30%, #fff, ' + petalColors[j % 3] + ' 70%)';
+            pt.style.borderRadius = '0 60% 0 60%';
+            pt.style.setProperty('--drift', (Math.random()*140 - 70) + 'px');
+            pt.style.animationDuration = pdur + 's';
+            pt.style.animationDelay = (Math.random()*2.5) + 's';
+            el.appendChild(pt);
+        }
+
+        setTimeout(function(){
+            el.classList.add('bs-hide');
+            setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 600);
+        }, 1900);
+    }
 })();
 </script>
 """, height=1)
@@ -2029,7 +2000,7 @@ if st.session_state.menu == "daily":
                 has_dk14 = False
                 conv = 0; gks_cnt = 0; gbl_cnt = 0
                 df = None; df_intl = None; df_vn = None
-                visa_map = {}; visa_unmatched = []
+                visa_map = {}; visa_unmatched = []; visa_source = None
                 # Đọc file visa (nếu có) → map tên → date visa
                 if visa_file is not None:
                     try:
@@ -2052,7 +2023,7 @@ if st.session_state.menu == "daily":
                         wb_vn   = split_wb(wb, 'Việt Nam')
 
                         progress.progress(45, text="Điền mẫu KBTT...")
-                        wb_kbtt, visa_unmatched = build_kbtt(df_intl, visa_map=visa_map)
+                        wb_kbtt, visa_unmatched, visa_source = build_kbtt(df_intl, visa_map=visa_map)
 
                         progress.progress(60, text="Điền mẫu Thông báo lưu trú VNM...")
                         wb_vnm, gks_cnt, gbl_cnt = build_vnm(df_vn)
@@ -2089,8 +2060,9 @@ if st.session_state.menu == "daily":
                     _daily.update({'total': len(df), 'intl': len(df_intl), 'vn': len(df_vn),
                                    'gks': gks_cnt, 'gbl': gbl_cnt, 'conv': conv,
                                    'unknown_nats': unknown_nats,
-                                   'visa_used': bool(visa_map),
-                                   'visa_matched': len(df_intl) - len(visa_unmatched) if visa_map else 0,
+                                   'visa_used': visa_source is not None,
+                                   'visa_source': visa_source,
+                                   'visa_matched': len(df_intl) - len(visa_unmatched) if visa_source else 0,
                                    'visa_unmatched': visa_unmatched,
                                    'visa_skipped_vn': visa_map.get('skipped_vn', 0) if isinstance(visa_map, dict) else 0})
                 st.session_state['daily_results'] = _daily
@@ -2112,7 +2084,8 @@ if st.session_state.menu == "daily":
             if _dr['unknown_nats']:
                 st.warning("⚠️ Quốc tịch chưa có mã (giữ nguyên tên, cần kiểm tra): " + ", ".join(_dr['unknown_nats']))
             if _dr.get('visa_used'):
-                st.info(f"🛂 Đã điền date visa cho **{_dr['visa_matched']}/{_dr['intl']}** khách quốc tế (khớp theo tên).")
+                _src_txt = "đọc từ cột TẠM TRÚ trong file khách" if _dr.get('visa_source') == 'column' else "khớp theo hộ chiếu/tên từ file visa rời"
+                st.info(f"🛂 Đã điền date visa cho **{_dr['visa_matched']}/{_dr['intl']}** khách quốc tế ({_src_txt}).")
                 if _dr.get('visa_skipped_vn'):
                     st.caption(f"ℹ️ Đã tự động bỏ qua {_dr['visa_skipped_vn']} khách Việt Nam trong file visa (không cần thời hạn tạm trú).")
                 if _dr.get('visa_unmatched'):
