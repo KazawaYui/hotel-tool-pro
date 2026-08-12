@@ -9,6 +9,15 @@ headingFont = "sans serif"
 baseRadius = "0.6rem"
 borderColor = "#E4E7EF"
 showWidgetBorder = true
+sidebarBackgroundColor = "#F3F5FA"
+skeletonBackgroundColor = "#EEF1F7"
+
+[client]
+toolbarMode = "minimal"
+showErrorDetails = "type"
+
+[browser]
+gatherUsageStats = false
 
 [server]
 maxUploadSize = 100
