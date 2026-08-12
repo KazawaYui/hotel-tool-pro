@@ -1482,6 +1482,52 @@ if not st.session_state.get("_app_scripts_injected"):
         transition: transform 0.1s var(--ease);
     }
     div[data-testid="stAlert"]:hover {transform: translateY(-1px);}
+
+    /* ── Form (cổng mật khẩu): panel nổi đồng bộ Neumorphism ── */
+    div[data-testid="stForm"] {
+        background: var(--neu-bg); border: none;
+        border-radius: var(--r-lg); padding: 1.1rem 1.2rem;
+        box-shadow: -8px -8px 18px var(--neu-sl), 8px 8px 18px var(--neu-sd);
+    }
+
+    /* ── Bảng dữ liệu: bo góc + bóng nổi đồng bộ ── */
+    div[data-testid="stDataFrame"] {
+        border-radius: var(--r-md); overflow: hidden;
+        box-shadow: -6px -6px 13px var(--neu-sl), 6px 6px 13px var(--neu-sd);
+    }
+
+    /* ── Bố cục: giới hạn chiều rộng dễ đọc, ẩn khoảng trống của iframe tiêm script ── */
+    div[data-testid="stMainBlockContainer"] {max-width: 1180px;}
+    div[data-testid="stElementContainer"]:has(iframe[height="1"]) {display: none;}
+    div[data-testid="stMainBlockContainer"] hr {border-color: rgba(163,177,198,0.45);}
+
+    /* ── Focus bàn phím rõ ràng (accessibility) ── */
+    .stButton button:focus-visible, .stDownloadButton button:focus-visible {
+        outline: 3px solid rgba(108,124,224,0.45); outline-offset: 2px;
+    }
+
+    /* ── Màn hình nhỏ: thu gọn padding, banner & metric ── */
+    @media (max-width: 768px) {
+        div[data-testid="stMainBlockContainer"] {padding-left: 1rem; padding-right: 1rem;}
+        .welcome-banner {padding: 0.85rem 1rem; gap: 10px; margin-bottom: 1.1rem;}
+        .welcome-title {font-size: 1rem;}
+        .welcome-emoji {width: 34px; height: 34px;}
+        div[data-testid="stMetric"] {padding: 0.7rem 0.75rem 0.6rem;}
+        div[data-testid="stMetricValue"] {font-size: 1.5rem !important;}
+    }
+
+    /* ── Tôn trọng cài đặt giảm chuyển động của hệ điều hành ── */
+    @media (prefers-reduced-motion: reduce) {
+        .sb-mascot, .welcome-emoji, .sb-dot::after, .welcome-title::after,
+        #bg-sakura-layer .petal, #boot-splash .sakura, #boot-splash .bs-sparkle {
+            animation: none !important;
+        }
+        .welcome-title span,
+        #boot-splash .bs-logo-wrap, #boot-splash .bs-text, #boot-splash .bs-sub {
+            animation: none !important; opacity: 1 !important; transform: none !important;
+        }
+        .stApp *, #boot-splash {transition-duration: 0.01ms !important;}
+    }
     `;
     doc.head.appendChild(css);
 
@@ -1526,7 +1572,8 @@ if not st.session_state.get("_app_scripts_injected"):
     (function(){
         function reveal(){
             var el = doc.querySelector('.welcome-title');
-            if (!el || el.dataset.revealed) return;
+            if (!el) return false;
+            if (el.dataset.revealed) return true;
             el.dataset.revealed = '1';
             var text = el.textContent;
             el.textContent = '';
@@ -1543,16 +1590,21 @@ if not st.session_state.get("_app_scripts_injected"):
             el.appendChild(frag);
             var totalMs = (n * 80) + 700 + 150;
             window.parent.setTimeout(function(){ el.classList.add('wt-shimmer'); }, totalMs);
+            return true;
         }
+        // Dừng polling ngay khi hiệu ứng đã chạy — không chờ hết 3s
         var settleUntil = Date.now() + 3000;
         var iv = window.parent.setInterval(function(){
-            reveal();
-            if (Date.now() > settleUntil) window.parent.clearInterval(iv);
+            if (reveal() || Date.now() > settleUntil) window.parent.clearInterval(iv);
         }, 150);
     })();
 
     // ── Màn hình khởi động: nền sáng, hoa anh đào + "Welcome, Tân" chữ ký ──
-    if (!doc.getElementById('boot-splash')) {
+    // Chỉ hiện lần đầu mỗi phiên tab — refresh/mở lại không phải chờ 1.9s nữa
+    var _bsSeen = false;
+    try { _bsSeen = window.parent.sessionStorage.getItem('tanBootSplashSeen') === '1'; } catch (e) {}
+    if (!_bsSeen && !doc.getElementById('boot-splash')) {
+        try { window.parent.sessionStorage.setItem('tanBootSplashSeen', '1'); } catch (e) {}
         var css3 = doc.createElement('style');
         css3.id = 'boot-splash-style';
         css3.textContent = `

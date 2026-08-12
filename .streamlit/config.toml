@@ -1,16 +1,19 @@
+# Bảng màu đồng bộ với lớp giao diện Neumorphism tiêm trong app.py
+# (--neu-bg #E6E9EF, --neu-accent #6C7CE0, --neu-text #3D4451) — tránh
+# "nháy" nền trắng lúc tải và widget nền trắng chọi với nền xám.
 [theme]
 base = "light"
-primaryColor = "#5B6FE1"
-backgroundColor = "#F7F8FC"
-secondaryBackgroundColor = "#FFFFFF"
-textColor = "#202634"
+primaryColor = "#6C7CE0"
+backgroundColor = "#E6E9EF"
+secondaryBackgroundColor = "#EDF0F5"
+textColor = "#3D4451"
 font = "sans serif"
 headingFont = "sans serif"
-baseRadius = "0.6rem"
-borderColor = "#E4E7EF"
-showWidgetBorder = true
-sidebarBackgroundColor = "#F3F5FA"
-skeletonBackgroundColor = "#EEF1F7"
+baseRadius = "1rem"
+borderColor = "#D5DAE4"
+showWidgetBorder = false
+sidebarBackgroundColor = "#E6E9EF"
+skeletonBackgroundColor = "#DDE2EA"
 
 [client]
 toolbarMode = "minimal"
