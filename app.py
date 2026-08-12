@@ -462,6 +462,227 @@ def serial2date(s):
 def wb_to_bytes(wb):
     buf = io.BytesIO(); wb.save(buf); return buf.getvalue()
 
+# ── Tiện ích nghiệp vụ lễ tân (tỷ giá, kiểm tra dữ liệu, visa, báo cáo, giao ca) ──
+@st.cache_data(ttl=600, show_spinner=False)
+def fetch_vcb_rates():
+    """Lấy tỷ giá CHUYỂN KHOẢN USD/EUR → VND từ Vietcombank (cache 10 phút).
+    Chỉ là tiện ích — lễ tân vẫn nhập tay được nếu mạng/VCB lỗi."""
+    import urllib.request
+    import xml.etree.ElementTree as ET
+    url = 'https://portal.vietcombank.com.vn/Usercontrols/TVPortal.TyGia/pXML.aspx'
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        root = ET.fromstring(resp.read())
+    rates = {}
+    for ex in root.iter('Exrate'):
+        code = (ex.get('CurrencyCode') or '').upper()
+        if code in ('USD', 'EUR'):
+            try:
+                rates[code] = float((ex.get('Transfer') or '').replace(',', ''))
+            except ValueError:
+                pass
+    if 'USD' not in rates:
+        raise ValueError('không đọc được tỷ giá USD trong dữ liệu VCB')
+    return rates, datetime.datetime.now().strftime('%H:%M %d/%m/%Y')
+
+def _gv(row, *names):
+    """Lấy giá trị đầu tiên khác rỗng theo danh sách tên cột (chịu biến thể tên cột)."""
+    for n in names:
+        if n in row.index:
+            v = row[n]
+            if pd.notna(v) and str(v).strip() != '':
+                return v
+    return None
+
+def _fmt_room(v):
+    """Số phòng đọc từ Excel đôi khi ra dạng số thực (103.0) — trả về '103'."""
+    s = str(v or '').strip()
+    if s.endswith('.0') and s[:-2].isdigit():
+        s = s[:-2]
+    return s
+
+def _to_date(v):
+    """Đọc ngày linh hoạt (datetime / chuỗi dd/mm/yyyy) → datetime.date hoặc None."""
+    if v is None:
+        return None
+    if hasattr(v, 'year') and not isinstance(v, str):
+        try:
+            return datetime.date(v.year, v.month, v.day)
+        except Exception:
+            return None
+    t = pd.to_datetime(str(v).strip(), dayfirst=True, errors='coerce')
+    return None if pd.isna(t) else t.date()
+
+def validate_guests(df):
+    """Kiểm tra chất lượng dữ liệu khách TRƯỚC khi nộp hồ sơ KBTT/VNM/ĐK14.
+    🔴 = lỗi dễ khiến công an trả hồ sơ · 🟡 = nên kiểm tra lại trước khi nộp."""
+    issues = []
+    for idx, row in df.iterrows():
+        line = idx + 2  # số dòng trên Excel gốc (dòng 1 là header)
+        ht = str(_gv(row, 'HỌ TÊN ', 'HỌ TÊN') or '').strip()
+        sp = _fmt_room(_gv(row, 'SỐ PHÒNG'))
+        intl = str(_gv(row, 'LOẠI KHÁCH') or '').strip() == 'Quốc tế'
+        def add(sev, msg):
+            issues.append({'Mức độ': sev, 'Dòng': line, 'Họ tên': ht or '(trống)',
+                           'Phòng': sp, 'Vấn đề': msg})
+        if not ht:
+            add('🔴', 'Thiếu họ tên')
+        sg = str(_gv(row, 'SỐ GIẤY TỜ') or '').strip()
+        if not sg:
+            add('🔴' if intl else '🟡',
+                'Thiếu số giấy tờ' + (' (hộ chiếu bắt buộc cho KBTT)' if intl else ''))
+        elif intl and not _re.fullmatch(r'[A-Za-z0-9]{4,15}', sg.replace(' ', '')):
+            add('🟡', f'Số hộ chiếu có ký tự lạ: "{sg}"')
+        if _gv(row, 'NGÀY SINH') is None:
+            add('🟡', 'Thiếu ngày sinh')
+        if str(_gv(row, 'GIỚI TÍNH') or '').strip() not in ('Nam', 'Nữ'):
+            add('🟡', 'Giới tính trống/không chuẩn (cần "Nam" hoặc "Nữ")')
+        if not sp:
+            add('🟡', 'Thiếu số phòng')
+        nd = _to_date(_gv(row, 'NGÀY ĐẾN'))
+        ni = _to_date(_gv(row, 'NGÀY ÐI', 'NGÀY ĐI'))
+        if nd and ni and ni < nd:
+            add('🔴', f'Ngày đi {ni.strftime("%d/%m/%Y")} TRƯỚC ngày đến {nd.strftime("%d/%m/%Y")}')
+        if intl:
+            qt = str(_gv(row, 'QUỐC TỊCH') or '').strip()
+            if not qt:
+                add('🔴', 'Thiếu quốc tịch')
+            elif not _re.match(r'^[A-Z]{2,3} - ', str(lookup_nat_kbtt(qt))):
+                add('🟡', f'Quốc tịch chưa có mã: "{qt}"')
+    return pd.DataFrame(issues, columns=['Mức độ', 'Dòng', 'Họ tên', 'Phòng', 'Vấn đề'])
+
+def check_visa_expiry(df_intl, visa_map=None):
+    """Gom hạn tạm trú/visa từng khách quốc tế (ưu tiên cột TẠM TRÚ trong file
+    khách, dự phòng file visa rời khớp hộ chiếu/tên) → list dict ngày dạng ISO,
+    lưu được vào session để lọc lại theo số ngày cảnh báo mà không cần xử lý lại."""
+    visa_map = visa_map or {}
+    by_pp = visa_map.get('by_pp', {}) if isinstance(visa_map, dict) else {}
+    by_name = visa_map.get('by_name', {}) if isinstance(visa_map, dict) else {}
+    visa_col = None
+    for cand in ['TẠM TRÚ', 'THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM', 'TẠM TRÚ ĐẾN NGÀY',
+                 'Visa date', 'Visadate', 'Thời hạn tạm trú', 'NGÀY VISA', 'Visa Date']:
+        for c in df_intl.columns:
+            if _norm_nat(c) == _norm_nat(cand):
+                visa_col = c; break
+        if visa_col:
+            break
+    out = []
+    for _, row in df_intl.iterrows():
+        ht = str(_gv(row, 'HỌ TÊN ', 'HỌ TÊN') or '').strip()
+        sg = str(_gv(row, 'SỐ GIẤY TỜ') or '').strip()
+        vd_raw = _gv(row, visa_col) if visa_col is not None else None
+        if vd_raw is None and (by_pp or by_name):
+            vd_raw = by_pp.get(_norm_pp(sg)) or by_name.get(_norm_name(ht))
+        vd = _to_date(vd_raw)
+        if vd is None:
+            continue
+        ni = _to_date(_gv(row, 'NGÀY ÐI', 'NGÀY ĐI'))
+        out.append({'name': ht, 'room': _fmt_room(_gv(row, 'SỐ PHÒNG')),
+                    'nat': str(_gv(row, 'QUỐC TỊCH') or '').strip(),
+                    'visa': vd.isoformat(), 'dep': ni.isoformat() if ni else None})
+    return out
+
+def build_handover_xlsx(info, entries):
+    """Xuất sổ giao ca thành file Excel in được, có cột 'Đã xử lý' để ca sau tick tay."""
+    wb = Workbook(); ws = wb.active; ws.title = 'Giao ca'
+    thin = Side(style='thin'); bdr = Border(left=thin, right=thin, top=thin, bottom=thin)
+    for col, w in zip('ABCDEF', [5, 8, 26, 9, 58, 10]):
+        ws.column_dimensions[col].width = w
+    ws.merge_cells('A1:F1')
+    c = ws.cell(1, 1)
+    c.value = (f"SỔ GIAO CA — {info.get('date', '')} — {info.get('shift', '')}"
+               f" — Lễ tân: {info.get('staff', '') or '…'}")
+    c.font = Font(name='Times New Roman', size=14, bold=True)
+    c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    ws.row_dimensions[1].height = 30
+    for ci, h in enumerate(['STT', 'Giờ ghi', 'Phân loại', 'Phòng', 'Nội dung bàn giao', 'Đã xử lý'], 1):
+        cell = ws.cell(2, ci); cell.value = h
+        cell.font = Font(name='Times New Roman', size=11, bold=True)
+        cell.fill = PatternFill('solid', fgColor='DDEBF7'); cell.border = bdr
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    for i, e in enumerate(entries, 1):
+        ws.row_dimensions[i + 2].height = 32
+        vals = [i, e.get('time', ''), e.get('cat', ''), e.get('room', ''), e.get('note', ''), '☐']
+        for ci, v in enumerate(vals, 1):
+            cell = ws.cell(i + 2, ci); cell.value = v
+            cell.font = Font(name='Times New Roman', size=11); cell.border = bdr
+            cell.alignment = Alignment(horizontal='left' if ci == 5 else 'center',
+                                       vertical='center', wrap_text=True)
+    return wb
+
+def build_daily_report(date_str, daily, arr_stats, recon, reconr):
+    """Báo cáo ngày 1 trang (Excel) cho quản lý — tổng hợp mọi số liệu các công cụ
+    đã chạy trong phiên; phần nào chưa chạy thì tự bỏ qua."""
+    wb = Workbook(); ws = wb.active; ws.title = 'Bao cao ngay'
+    thin = Side(style='thin'); bdr = Border(left=thin, right=thin, top=thin, bottom=thin)
+    for col, w in zip('AB', [40, 22]):
+        ws.column_dimensions[col].width = w
+    bold = Font(name='Times New Roman', size=11, bold=True)
+    norm = Font(name='Times New Roman', size=11)
+    fill_h = PatternFill('solid', fgColor='DDEBF7')
+    ws.merge_cells('A1:B1')
+    t = ws.cell(1, 1); t.value = f"BÁO CÁO NGÀY {date_str} — TÂN HOTEL (FRONT OFFICE)"
+    t.font = Font(name='Times New Roman', size=14, bold=True)
+    t.alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[1].height = 28
+    r = 3
+    def section(title):
+        nonlocal r
+        ws.merge_cells(f'A{r}:B{r}')
+        c = ws.cell(r, 1); c.value = title; c.font = bold; c.fill = fill_h; c.border = bdr
+        ws.cell(r, 2).border = bdr
+        r += 1
+    def kv(label, value):
+        nonlocal r
+        a = ws.cell(r, 1); a.value = label; a.font = norm; a.border = bdr
+        b = ws.cell(r, 2); b.value = value; b.font = bold; b.border = bdr
+        b.alignment = Alignment(horizontal='center')
+        r += 1
+    if daily:
+        section('1. KHÁCH LƯU TRÚ (file dữ liệu khách)')
+        kv('Tổng khách', daily.get('total'))
+        kv('Khách quốc tế', daily.get('intl'))
+        kv('Khách Việt Nam', daily.get('vn'))
+        if daily.get('rooms_cnt'):
+            kv('Số phòng có khách', daily.get('rooms_cnt'))
+        if daily.get('avg_nights'):
+            kv('Số đêm lưu trú bình quân', daily.get('avg_nights'))
+        kv('Trẻ em (GKS) + Giấy bảo lãnh (GBL)', f"{daily.get('gks', 0)} + {daily.get('gbl', 0)}")
+        r += 1
+        if daily.get('nat_top'):
+            section('2. TOP QUỐC TỊCH')
+            for nat, cnt in daily['nat_top']:
+                kv(nat, cnt)
+            r += 1
+    if arr_stats:
+        section('3. BOOKING ĐẾN & THANH TOÁN (file ARR)')
+        kv('Số booking arrival', arr_stats.get('bookings'))
+        kv('Số phòng arrival', arr_stats.get('rooms'))
+        if arr_stats.get('ota') is not None:
+            kv('Booking qua OTA', arr_stats.get('ota'))
+        kv('Cần cà thẻ (CÀ THẺ)', arr_stats.get('ca_the'))
+        kv('Cần thu tiền (THU TIỀN)', arr_stats.get('thu_tien'))
+        kv('Xem lại BU', arr_stats.get('xem_lai_bu'))
+        kv('FOC Late C/O', arr_stats.get('foc_lco'))
+        r += 1
+    if recon:
+        section('4. ĐỐI CHIẾU LƯU TRÚ NGƯỜI NƯỚC NGOÀI')
+        kv('Khách chưa đăng ký lưu trú', len(recon.get('chua_dk', [])))
+        kv('Có trên lưu trú, thiếu trên Smile', len(recon.get('thua', [])))
+        kv('Đăng ký trùng', len(recon.get('dup', [])))
+        r += 1
+    if reconr:
+        section('5. ĐỐI CHIẾU HỆ THỐNG PHÒNG')
+        kv('Phòng chưa đăng ký', len(reconr.get('room_chua', [])))
+        kv('Phòng thừa trong file', len(reconr.get('room_thua', [])))
+        kv('Phòng trùng trong file', len(reconr.get('sys_dup', [])))
+        r += 1
+    r += 1
+    f = ws.cell(r, 1)
+    f.value = f"Xuất lúc {datetime.datetime.now().strftime('%H:%M %d/%m/%Y')} — Hotel Tool Pro"
+    f.font = Font(name='Times New Roman', size=9, italic=True, color='FF888888')
+    return wb
+
 # ── Processing ────────────────────────────────────────────────────────────
 def process_xlsx(xlsx_bytes, rate):
     """Điền dữ liệu file đầu vào lên FILE MẪU customer (QLLT) — giữ nguyên 100%
@@ -1721,7 +1942,7 @@ if not st.session_state.get("_app_scripts_injected"):
 
 # Menu selection (session state)
 if "menu" not in st.session_state:
-    st.session_state.menu = "daily"
+    st.session_state.menu = "dashboard"
 
 def go_menu(name):
     st.session_state.menu = name
@@ -1750,6 +1971,10 @@ with st.sidebar:
     ''', unsafe_allow_html=True)
 
     st.markdown('<div class="sb-section">Công cụ</div>', unsafe_allow_html=True)
+    st.button("Tổng quan ca trực", key="nav_dashboard", use_container_width=True,
+              icon=":material/dashboard:",
+              type="primary" if st.session_state.menu == "dashboard" else "secondary",
+              on_click=go_menu, args=("dashboard",))
     st.button("Xử lý hàng ngày", key="nav_daily", use_container_width=True,
               icon=":material/checklist:",
               type="primary" if st.session_state.menu == "daily" else "secondary",
@@ -1758,6 +1983,10 @@ with st.sidebar:
               icon=":material/print:",
               type="primary" if st.session_state.menu == "regcard" else "secondary",
               on_click=go_menu, args=("regcard",))
+    st.button("Sổ giao ca", key="nav_handover", use_container_width=True,
+              icon=":material/handshake:",
+              type="primary" if st.session_state.menu == "handover" else "secondary",
+              on_click=go_menu, args=("handover",))
 
     st.markdown('<div class="sb-section">Đối chiếu</div>', unsafe_allow_html=True)
     if st.session_state.get("recon_ok"):
@@ -2006,6 +2235,7 @@ def build_arr(book_bytes):
     stats = {
         'bookings': len(bookings),
         'rooms': sum(b['rooms'] for b in bookings),
+        'ota': sum(1 for b in bookings if any(o in b['company'].upper() for o in ARR_OTA)),
         'dummy': dummy_count,
         'ca_the': sum(1 for x in result if x['type'] == 'sep' and x['conf'] == 'CÀ THẺ'),
         'thu_tien': sum(1 for x in result if x['type'] == 'sep' and x['conf'] == 'THU TIỀN'),
@@ -2015,6 +2245,85 @@ def build_arr(book_bytes):
     return wb, stats
 
 
+# ── Dashboard ca trực ─────────────────────────────────────────────────────
+if st.session_state.menu == "dashboard":
+    st.write("")
+    _now = datetime.datetime.now()
+    _thu = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][_now.weekday()]
+    st.markdown(f'<div class="section-label">📊 Tổng quan ca trực — {_thu}, {_now.strftime("%d/%m/%Y")}</div>',
+                unsafe_allow_html=True)
+
+    _d = st.session_state.get('daily_results')
+    _rc = st.session_state.get('rc_results')
+    _re_p = st.session_state.get('recon_results')
+    _re_r = st.session_state.get('reconr_results')
+
+    # ── Checklist tiến độ công việc trong ca (tự động theo phiên) ──
+    with st.container(border=True):
+        st.markdown("**Tiến độ công việc trong ca** · số liệu thuộc phiên làm việc hiện tại")
+        _handover_n = len((st.session_state.get('handover') or {}).get('entries', []))
+        _tasks = [
+            ("Xử lý hàng ngày (KBTT · VNM · ĐK14)", _d is not None, "daily"),
+            ("Regcard + file ARR", _rc is not None, "regcard"),
+            ("Đối chiếu người nước ngoài", _re_p is not None,
+             "recon_person" if st.session_state.get("recon_ok") else "recon"),
+            ("Đối chiếu hệ thống phòng", _re_r is not None,
+             "recon_room" if st.session_state.get("recon_ok") else "recon"),
+            (f"Sổ giao ca ({_handover_n} ghi chú)", _handover_n > 0, "handover"),
+        ]
+        for _ti, (_label, _done, _target) in enumerate(_tasks):
+            tc1, tc2 = st.columns([6, 1])
+            tc1.markdown(("✅ " if _done else "⬜ ") + _label)
+            tc2.button("Mở →", key=f"dash_go_{_ti}", use_container_width=True,
+                       on_click=go_menu, args=(_target,))
+
+    # ── Số liệu nhanh từ các công cụ đã chạy ──
+    if _d and _d.get('has_xlsx'):
+        st.write("")
+        st.markdown('<div class="section-label">🛏️ Khách lưu trú hôm nay</div>', unsafe_allow_html=True)
+        _iss_d = _d.get('issues')
+        _n_red = int((_iss_d['Mức độ'] == '🔴').sum()) if _iss_d is not None and len(_iss_d) else 0
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Tổng khách", _d['total'])
+        k2.metric("Quốc tế", _d['intl'])
+        k3.metric("Việt Nam", _d['vn'])
+        k4.metric("Lỗi dữ liệu 🔴", _n_red,
+                  "cần sửa trước khi nộp" if _n_red else "dữ liệu sạch",
+                  delta_color="inverse" if _n_red else "off")
+
+    if _rc and _rc.get('arr_stats'):
+        st.write("")
+        st.markdown('<div class="section-label">💰 Booking đến & thanh toán</div>', unsafe_allow_html=True)
+        _as = _rc['arr_stats']
+        b1, b2, b3, b4, b5 = st.columns(5)
+        b1.metric("📦 Booking", _as['bookings'])
+        b2.metric("🚪 Phòng", _as['rooms'])
+        b3.metric("💳 Cà thẻ", _as['ca_the'])
+        b4.metric("💵 Thu tiền", _as['thu_tien'])
+        b5.metric("⚠️ Xem lại BU", _as['xem_lai_bu'])
+
+    if not _d and not _rc:
+        st.info("Chưa có số liệu trong phiên này — bắt đầu bằng **Xử lý hàng ngày** hoặc "
+                "**Regcard + ARR** ở sidebar. Dashboard sẽ tự tổng hợp khi các công cụ chạy xong.")
+
+    # ── Báo cáo ngày 1 trang cho quản lý ──
+    st.write("")
+    st.markdown('<div class="section-label">📈 Báo cáo ngày cho quản lý</div>', unsafe_allow_html=True)
+    if _d or _rc or _re_p or _re_r:
+        _rp_date = (_d or {}).get('date_str') or datetime.date.today().strftime('%d_%m')
+        _wb_rp = build_daily_report(_rp_date.replace('_', '/'),
+                                    _d if _d and _d.get('has_xlsx') else None,
+                                    (_rc or {}).get('arr_stats'), _re_p, _re_r)
+        st.download_button("⬇️ Tải báo cáo ngày (Excel, 1 trang)", wb_to_bytes(_wb_rp),
+                           file_name=f"bao_cao_ngay_{_rp_date}.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                           use_container_width=True, type="primary", key="dl_report")
+        st.caption("Tổng hợp khách lưu trú, top quốc tịch, booking & thanh toán, kết quả đối chiếu "
+                   "— từ các công cụ đã chạy trong phiên.")
+    else:
+        st.caption("Báo cáo khả dụng sau khi chạy ít nhất một công cụ "
+                   "(Xử lý hàng ngày / Regcard + ARR / Đối chiếu).")
+
 # ── Daily processing screen ───────────────────────────────────────────────
 if st.session_state.menu == "daily":
     st.write("")
@@ -2022,7 +2331,23 @@ if st.session_state.menu == "daily":
     with st.container(border=True):
         col1, col2 = st.columns(2)
         with col1:
-            rate = st.number_input("💱 Tỷ giá USD/EUR → VNĐ", value=29535.15, step=0.01, format="%.2f")
+            if 'rate_input' not in st.session_state:
+                st.session_state.rate_input = 29535.15
+            def _apply_vcb_rate():
+                try:
+                    _rates, _ts = fetch_vcb_rates()
+                    st.session_state.rate_input = _rates['USD']
+                    _eur = f" · EUR {_rates['EUR']:,.2f}" if _rates.get('EUR') else ''
+                    st.session_state['vcb_note'] = (
+                        f"✅ Tỷ giá chuyển khoản VCB lúc {_ts}: USD {_rates['USD']:,.2f}{_eur} "
+                        f"— đã điền USD vào ô tỷ giá.")
+                except Exception as _e:
+                    st.session_state['vcb_note'] = (
+                        f"⚠️ Không lấy được tỷ giá VCB ({_e}) — nhập tay như bình thường.")
+            rate = st.number_input("💱 Tỷ giá USD/EUR → VNĐ", step=0.01, format="%.2f", key="rate_input")
+            st.button("🔄 Lấy tỷ giá VCB (chuyển khoản)", on_click=_apply_vcb_rate, key="btn_vcb")
+            if st.session_state.get('vcb_note'):
+                st.caption(st.session_state['vcb_note'])
         with col2:
             today = datetime.date.today()
             date_str = st.text_input("📅 Ngày (dùng cho tên file)", value=f"{today.day}_{today.month:02d}")
@@ -2060,6 +2385,8 @@ if st.session_state.menu == "daily":
                     except Exception as _ve:
                         st.warning(f"⚠️ Không đọc được file visa: {_ve}")
 
+                out_files = {}   # tên file → bytes: dùng cho ZIP + nút tải từng file riêng
+                _issues = None; _visa_watch = []
                 with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
                     # ── Xử lý file XLSX (nếu có) ──
                     if has_xlsx:
@@ -2070,21 +2397,25 @@ if st.session_state.menu == "daily":
                         df_intl = df[df['LOẠI KHÁCH']=='Quốc tế'].reset_index(drop=True)
                         df_vn   = df[df['LOẠI KHÁCH']=='Việt Nam'].reset_index(drop=True)
 
-                        progress.progress(30, text="Tách file Quốc tế / Việt Nam...")
+                        progress.progress(25, text="Kiểm tra chất lượng dữ liệu...")
+                        _issues = validate_guests(df)
+                        _visa_watch = check_visa_expiry(df_intl, visa_map=visa_map)
+
+                        progress.progress(35, text="Tách file Quốc tế / Việt Nam...")
                         wb_intl = split_wb(wb, 'Quốc tế')
                         wb_vn   = split_wb(wb, 'Việt Nam')
 
-                        progress.progress(45, text="Điền mẫu KBTT...")
+                        progress.progress(50, text="Điền mẫu KBTT...")
                         wb_kbtt, visa_unmatched, visa_source = build_kbtt(df_intl, visa_map=visa_map)
 
-                        progress.progress(60, text="Điền mẫu Thông báo lưu trú VNM...")
+                        progress.progress(65, text="Điền mẫu Thông báo lưu trú VNM...")
                         wb_vnm, gks_cnt, gbl_cnt = build_vnm(df_vn)
 
-                        zf.writestr(f'converted_{date_str}.xlsx',      wb_to_bytes(wb))
-                        zf.writestr(f'KhachQuocTe_{date_str}.xlsx',    wb_to_bytes(wb_intl))
-                        zf.writestr(f'KhachVietNam_{date_str}.xlsx',   wb_to_bytes(wb_vn))
-                        zf.writestr(f'ho_so_KBTT_NNN_{date_str}.xlsx', wb_to_bytes(wb_kbtt))
-                        zf.writestr(f'thong_bao_luu_tru_VNM_{date_str}.xlsx', wb_to_bytes(wb_vnm))
+                        out_files[f'converted_{date_str}.xlsx']      = wb_to_bytes(wb)
+                        out_files[f'KhachQuocTe_{date_str}.xlsx']    = wb_to_bytes(wb_intl)
+                        out_files[f'KhachVietNam_{date_str}.xlsx']   = wb_to_bytes(wb_vn)
+                        out_files[f'ho_so_KBTT_NNN_{date_str}.xlsx'] = wb_to_bytes(wb_kbtt)
+                        out_files[f'thong_bao_luu_tru_VNM_{date_str}.xlsx'] = wb_to_bytes(wb_vnm)
                         files_made += ["📄 converted (file chung)", "🌍 KhachQuocTe", "🇻🇳 KhachVietNam",
                                        "📝 KBTT NNN", "📑 Thông báo lưu trú VNM"]
 
@@ -2093,15 +2424,19 @@ if st.session_state.menu == "daily":
                         progress.progress(85, text="Điền mẫu ĐK14...")
                         xls_bytes = xls_file.read()
                         wb_dk14, dk_count = build_dk14(xls_bytes)
-                        zf.writestr(f'dk14_{date_str}.xlsx', wb_to_bytes(wb_dk14))
+                        out_files[f'dk14_{date_str}.xlsx'] = wb_to_bytes(wb_dk14)
                         has_dk14 = True
                         files_made.append("🚔 ĐK14")
+
+                    for _ofn, _ofb in out_files.items():
+                        zf.writestr(_ofn, _ofb)
 
                 progress.progress(100, text="Hoàn tất!")
                 progress.empty()
 
                 # Lưu kết quả vào session — kết quả & nút tải không biến mất sau rerun
                 _daily = {'files_made': files_made, 'zip': zip_buf.getvalue(),
+                          'files': out_files, 'rate': rate,
                           'date_str': date_str, 'has_xlsx': has_xlsx, 'has_dk14': has_dk14}
                 if has_xlsx:
                     unknown_nats = []
@@ -2109,6 +2444,23 @@ if st.session_state.menu == "daily":
                         mapped = lookup_nat_kbtt(q)
                         if not _re.match(r'^[A-Z]{2,3} - ', str(mapped)):
                             unknown_nats.append(str(q))
+                    # Thống kê phục vụ báo cáo ngày cho quản lý
+                    _nat_top = (df.get('QUỐC TỊCH', pd.Series(dtype=str)).dropna().astype(str)
+                                .str.strip().value_counts().head(10))
+                    _arr_s = pd.to_datetime(df.get('NGÀY ĐẾN'), dayfirst=True, errors='coerce')
+                    _dep_col_d = 'NGÀY ÐI' if 'NGÀY ÐI' in df.columns else ('NGÀY ĐI' if 'NGÀY ĐI' in df.columns else None)
+                    _avg_nights = None
+                    if _dep_col_d:
+                        _dep_s = pd.to_datetime(df[_dep_col_d], dayfirst=True, errors='coerce')
+                        _nvals = (_dep_s - _arr_s).dt.days.dropna()
+                        _nvals = _nvals[_nvals > 0]
+                        if len(_nvals):
+                            _avg_nights = round(float(_nvals.mean()), 1)
+                    _rooms_cnt = int(df.get('SỐ PHÒNG', pd.Series(dtype=str)).dropna().astype(str)
+                                     .str.strip().nunique())
+                    _daily.update({'issues': _issues, 'visa_watch': _visa_watch,
+                                   'nat_top': [(str(k), int(v)) for k, v in _nat_top.items()],
+                                   'avg_nights': _avg_nights, 'rooms_cnt': _rooms_cnt or None})
                     _daily.update({'total': len(df), 'intl': len(df_intl), 'vn': len(df_vn),
                                    'gks': gks_cnt, 'gbl': gbl_cnt, 'conv': conv,
                                    'unknown_nats': unknown_nats,
@@ -2132,7 +2484,7 @@ if st.session_state.menu == "daily":
             c2.metric("Quốc tế", _dr['intl'])
             c3.metric("Việt Nam", _dr['vn'])
             c4.metric("GKS + GBL", f"{_dr['gks']} + {_dr['gbl']}")
-            st.info(f"💱 Đã quy đổi tỷ giá cho **{_dr['conv']}** ô (đã tô vàng)")
+            st.info(f"💱 Đã quy đổi tỷ giá cho **{_dr['conv']}** ô (đã tô vàng, tỷ giá {_dr.get('rate', 0):,.2f})")
             if _dr['unknown_nats']:
                 st.warning("⚠️ Quốc tịch chưa có mã (giữ nguyên tên, cần kiểm tra): " + ", ".join(_dr['unknown_nats']))
             if _dr.get('visa_used'):
@@ -2143,6 +2495,48 @@ if st.session_state.menu == "daily":
                 if _dr.get('visa_unmatched'):
                     st.warning("⚠️ Không tìm thấy date visa cho (cột tạm trú để trống): "
                                + ", ".join(_dr['visa_unmatched']))
+
+            # ── Kiểm tra chất lượng dữ liệu trước khi nộp hồ sơ ──
+            _iss = _dr.get('issues')
+            if _iss is not None and len(_iss):
+                _n_red = int((_iss['Mức độ'] == '🔴').sum())
+                _n_yel = int((_iss['Mức độ'] == '🟡').sum())
+                st.write("")
+                st.markdown('<div class="section-label">✅ Kiểm tra dữ liệu trước khi nộp hồ sơ</div>',
+                           unsafe_allow_html=True)
+                if _n_red:
+                    st.error(f"🔴 **{_n_red}** vấn đề cần sửa trước khi nộp hồ sơ công an "
+                             f"+ 🟡 **{_n_yel}** vấn đề nên kiểm tra lại.")
+                else:
+                    st.warning(f"🟡 **{_n_yel}** vấn đề nên kiểm tra lại (không chặn nộp hồ sơ).")
+                st.dataframe(_iss, use_container_width=True, hide_index=True)
+            elif _iss is not None:
+                st.success("✅ Kiểm tra dữ liệu: không phát hiện vấn đề nào.")
+
+            # ── Cảnh báo visa/tạm trú sắp hết hạn ──
+            _vw = _dr.get('visa_watch') or []
+            if _vw:
+                st.write("")
+                st.markdown('<div class="section-label">🛂 Cảnh báo hạn tạm trú / visa</div>', unsafe_allow_html=True)
+                _vw_days = st.slider("Cảnh báo khách còn lưu trú mà visa hết hạn trong vòng (ngày)",
+                                     1, 30, 3, key="visa_warn_days")
+                _cutoff = datetime.date.today() + datetime.timedelta(days=_vw_days)
+                _soon = []
+                for _v in _vw:
+                    _vd = datetime.date.fromisoformat(_v['visa'])
+                    _dep = datetime.date.fromisoformat(_v['dep']) if _v.get('dep') else None
+                    # chỉ cảnh báo khách còn ở (chưa checkout trước ngày visa hết hạn)
+                    if _vd <= _cutoff and (_dep is None or _dep >= datetime.date.today()):
+                        _soon.append({'Phòng': _v['room'], 'Họ tên': _v['name'], 'Quốc tịch': _v['nat'],
+                                     'Hết hạn tạm trú': _vd.strftime('%d/%m/%Y'),
+                                     'Còn': (_vd - datetime.date.today()).days,
+                                     'Ngày đi dự kiến': (_dep.strftime('%d/%m/%Y') if _dep else '—')})
+                if _soon:
+                    _df_soon = pd.DataFrame(_soon).sort_values('Còn')
+                    st.error(f"🔴 **{len(_soon)}** khách cần gia hạn/rời đi trước khi tạm trú hết hạn:")
+                    st.dataframe(_df_soon, use_container_width=True, hide_index=True)
+                else:
+                    st.success(f"✅ Không có khách nào hết hạn tạm trú trong {_vw_days} ngày tới.")
         elif _dr['has_dk14']:
             st.info("ℹ️ Chỉ tạo file ĐK14 (không có file XLSX dữ liệu khách).")
 
@@ -2156,6 +2550,14 @@ if st.session_state.menu == "daily":
             use_container_width=True,
             type="primary"
         )
+
+        # ── Tải riêng từng file (không cần giải nén ZIP) ──
+        if _dr.get('files'):
+            with st.expander("⬇️ Tải riêng từng file"):
+                for _fn, _fb in _dr['files'].items():
+                    st.download_button(f"⬇️ {_fn}", _fb, file_name=_fn,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True, key=f"dl_single_{_fn}")
 
 # ── Regcard screen ────────────────────────────────────────────────────────
 if st.session_state.menu == "regcard":
@@ -2235,6 +2637,73 @@ if st.session_state.menu == "regcard":
                         use_container_width=True, type="primary", key="dl_rc_arr")
             if _res['arr_err']:
                 st.warning(f"⚠️ Không tạo được file ARR: {_res['arr_err']}")
+
+
+# ── Sổ giao ca ─────────────────────────────────────────────────────────────
+if st.session_state.menu == "handover":
+    st.write("")
+    st.markdown('<div class="section-label">🤝 Sổ giao ca</div>', unsafe_allow_html=True)
+    st.caption("Ghi chú trong ca (khách nợ, yêu cầu đặc biệt, sự cố, đồ thất lạc...) để ca sau nắm được. "
+               "Lưu trong phiên làm việc này — bấm **Tải file Excel** cuối trang để bàn giao/lưu trữ lâu dài, "
+               "và **Nạp lại file** ở đầu ca sau để tiếp tục ghi chú.")
+
+    if 'handover' not in st.session_state:
+        st.session_state.handover = {'entries': []}
+
+    with st.container(border=True):
+        hc1, hc2 = st.columns(2)
+        with hc1:
+            h_shift = st.selectbox("Ca trực", ["Ca sáng", "Ca chiều", "Ca đêm"], key="h_shift")
+        with hc2:
+            h_staff = st.text_input("Tên lễ tân trực", key="h_staff", placeholder="VD: Tân")
+
+        st.write("")
+        with st.form("handover_add_form", clear_on_submit=True):
+            fc1, fc2 = st.columns([1, 1])
+            with fc1:
+                h_cat = st.selectbox("Phân loại", ["Khách nợ", "Yêu cầu đặc biệt", "Sự cố",
+                                                     "Đồ thất lạc", "Bảo trì", "Khác"], key="h_cat")
+            with fc2:
+                h_room = st.text_input("Số phòng (nếu có)", key="h_room")
+            h_note = st.text_area("Nội dung bàn giao", key="h_note", height=80)
+            h_submit = st.form_submit_button("➕ Thêm vào sổ giao ca", type="primary", use_container_width=True)
+            if h_submit:
+                if not h_note.strip():
+                    st.warning("⚠️ Vui lòng nhập nội dung bàn giao.")
+                else:
+                    st.session_state.handover['entries'].append({
+                        'time': datetime.datetime.now().strftime('%H:%M'),
+                        'cat': h_cat, 'room': h_room.strip(), 'note': h_note.strip(),
+                    })
+                    st.rerun()
+
+    _entries = st.session_state.handover['entries']
+    st.write("")
+    if _entries:
+        st.markdown(f"**{len(_entries)} ghi chú trong ca này**")
+        for _ei, _e in enumerate(reversed(_entries)):
+            _real_i = len(_entries) - 1 - _ei
+            with st.container(border=True):
+                ic1, ic2 = st.columns([10, 1])
+                with ic1:
+                    _room_txt = f" · 🚪 Phòng {_e['room']}" if _e['room'] else ""
+                    st.markdown(f"🕐 **{_e['time']}** · 🏷️ {_e['cat']}{_room_txt}")
+                    st.write(_e['note'])
+                with ic2:
+                    if st.button("🗑️", key=f"h_del_{_real_i}", help="Xóa ghi chú này"):
+                        st.session_state.handover['entries'].pop(_real_i)
+                        st.rerun()
+
+        st.write("")
+        _wb_ho = build_handover_xlsx(
+            {'date': datetime.date.today().strftime('%d/%m/%Y'), 'shift': h_shift, 'staff': h_staff},
+            _entries)
+        st.download_button("⬇️ Tải sổ giao ca (Excel)", wb_to_bytes(_wb_ho),
+                           file_name=f"giao_ca_{datetime.date.today().strftime('%d_%m')}.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                           use_container_width=True, type="primary", key="dl_handover")
+    else:
+        st.info("Chưa có ghi chú nào trong ca này. Thêm ghi chú ở form phía trên.")
 
 
 # ── Đối chiếu: sub-menu 2 lựa chọn (có cổng mật khẩu riêng) ────────────────
