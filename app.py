@@ -683,6 +683,61 @@ def build_daily_report(date_str, daily, arr_stats, recon, reconr):
     f.font = Font(name='Times New Roman', size=9, italic=True, color='FF888888')
     return wb
 
+def build_shift_activity_log():
+    """Tóm tắt HOẠT ĐỘNG CA LÀM VIỆC dạng JSON — chỉ số liệu thống kê tổng hợp
+    (đếm/thời gian), TUYỆT ĐỐI KHÔNG chứa tên khách, số hộ chiếu, số phòng cụ
+    thể của từng khách, hay nội dung ghi chú tự do của sổ giao ca. Dùng để
+    nhận diện quy trình/thói quen sử dụng ca làm việc khi commit vào logs/
+    trong repo — không phải để xem lại thông tin từng khách."""
+    d = st.session_state.get('daily_results')
+    rc = st.session_state.get('rc_results')
+    rp = st.session_state.get('recon_results')
+    rr = st.session_state.get('reconr_results')
+    ho = st.session_state.get('handover')
+
+    log = {
+        'date': datetime.date.today().isoformat(),
+        'export_time': datetime.datetime.now().strftime('%H:%M:%S'),
+        'nav_sequence': [{'time': e['time'], 'tool': MENU_LABELS.get(e['menu'], e['menu'])}
+                         for e in st.session_state.get('nav_log', [])],
+        'daily_processing': None, 'regcard_arr': None,
+        'recon_person': None, 'recon_room': None, 'handover': None,
+    }
+    if d and d.get('has_xlsx'):
+        iss = d.get('issues')
+        vw = d.get('visa_watch') or []
+        log['daily_processing'] = {
+            'total_guests': d.get('total'), 'intl': d.get('intl'), 'vn': d.get('vn'),
+            'gks': d.get('gks'), 'gbl': d.get('gbl'), 'rooms_count': d.get('rooms_cnt'),
+            'avg_nights': d.get('avg_nights'), 'currency_cells_converted': d.get('conv'),
+            'unknown_nationalities_count': len(d.get('unknown_nats') or []),
+            'validation_red_count': int((iss['Mức độ'] == '🔴').sum()) if iss is not None and len(iss) else 0,
+            'validation_yellow_count': int((iss['Mức độ'] == '🟡').sum()) if iss is not None and len(iss) else 0,
+            'visa_watch_guests_count': len(vw),
+            'visa_used': bool(d.get('visa_used')),
+        }
+    if rc and rc.get('arr_stats'):
+        a = rc['arr_stats']
+        log['regcard_arr'] = {
+            'regcards_created': rc.get('count'), 'bookings': a.get('bookings'), 'rooms': a.get('rooms'),
+            'ota_bookings': a.get('ota'), 'ca_the': a.get('ca_the'), 'thu_tien': a.get('thu_tien'),
+            'xem_lai_bu': a.get('xem_lai_bu'), 'foc_lco': a.get('foc_lco'),
+        }
+    if rp:
+        log['recon_person'] = {'smile_filtered': rp.get('smile_filtered'), 'luutru_filtered': rp.get('luutru_filtered'),
+                               'chua_dang_ky': len(rp.get('chua_dk', [])), 'thua': len(rp.get('thua', [])),
+                               'trung': len(rp.get('dup', []))}
+    if rr:
+        log['recon_room'] = {'smile_rooms': rr.get('smile_rooms'), 'sys_unique': rr.get('sys_unique'),
+                             'room_match': rr.get('room_match'), 'chua_dang_ky': len(rr.get('room_chua', [])),
+                             'thua': len(rr.get('room_thua', [])), 'trung': len(rr.get('sys_dup', []))}
+    if ho and ho.get('entries'):
+        by_cat = {}
+        for e in ho['entries']:
+            by_cat[e['cat']] = by_cat.get(e['cat'], 0) + 1
+        log['handover'] = {'total_entries': len(ho['entries']), 'by_category': by_cat}  # KHÔNG kèm nội dung ghi chú
+    return log
+
 # ── Processing ────────────────────────────────────────────────────────────
 def process_xlsx(xlsx_bytes, rate):
     """Điền dữ liệu file đầu vào lên FILE MẪU customer (QLLT) — giữ nguyên 100%
@@ -1944,8 +1999,18 @@ if not st.session_state.get("_app_scripts_injected"):
 if "menu" not in st.session_state:
     st.session_state.menu = "dashboard"
 
+MENU_LABELS = {
+    'dashboard': 'Tổng quan ca trực', 'daily': 'Xử lý hàng ngày', 'regcard': 'Regcard + ARR',
+    'handover': 'Sổ giao ca', 'recon': 'Đối chiếu (cổng mật khẩu)',
+    'recon_person': 'Đối chiếu người nước ngoài', 'recon_room': 'Đối chiếu hệ thống phòng',
+}
+
 def go_menu(name):
     st.session_state.menu = name
+    # Ghi lại TRÌNH TỰ chuyển màn hình (chỉ tên công cụ + giờ) để nhận diện quy
+    # trình ca làm — KHÔNG ghi bất kỳ dữ liệu khách nào (tên/hộ chiếu/phòng...).
+    st.session_state.setdefault('nav_log', []).append(
+        {'time': datetime.datetime.now().strftime('%H:%M:%S'), 'menu': name})
 
 # ── Sidebar điều hướng ────────────────────────────────────────────────────
 with st.sidebar:
@@ -2323,6 +2388,28 @@ if st.session_state.menu == "dashboard":
     else:
         st.caption("Báo cáo khả dụng sau khi chạy ít nhất một công cụ "
                    "(Xử lý hàng ngày / Regcard + ARR / Đối chiếu).")
+
+    # ── Nhật ký hoạt động ca (ẩn danh) — phục vụ phân tích quy trình làm việc ──
+    st.write("")
+    st.markdown('<div class="section-label">🗒️ Nhật ký hoạt động ca (ẩn danh)</div>', unsafe_allow_html=True)
+    _log = build_shift_activity_log()
+    _has_activity = any([_log['daily_processing'], _log['regcard_arr'], _log['recon_person'],
+                         _log['recon_room'], _log['handover'], _log['nav_sequence']])
+    if _has_activity:
+        st.caption("Xuất file JSON tóm tắt **số liệu thống kê + trình tự thao tác** trong ca — "
+                   "**không có** tên khách, số hộ chiếu, hay nội dung ghi chú sổ giao ca. "
+                   "Lưu file này vào thư mục `logs/` trong repo và commit để hệ thống phân tích quy trình "
+                   "làm việc hàng ngày đọc được.")
+        with st.expander("👁️ Xem trước nội dung sẽ xuất (kiểm tra không có dữ liệu cá nhân)"):
+            st.json(_log)
+        import json as _json
+        _log_bytes = _json.dumps(_log, ensure_ascii=False, indent=2).encode('utf-8')
+        _log_fname = f"shift_{datetime.datetime.now().strftime('%Y-%m-%d_%H%M')}.json"
+        st.download_button(f"⬇️ Xuất nhật ký hoạt động ({_log_fname})", _log_bytes,
+                           file_name=_log_fname, mime="application/json",
+                           use_container_width=True, key="dl_activity_log")
+    else:
+        st.caption("Chưa có hoạt động nào trong phiên này để xuất nhật ký.")
 
 # ── Daily processing screen ───────────────────────────────────────────────
 if st.session_state.menu == "daily":
