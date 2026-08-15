@@ -3,7 +3,7 @@ import pandas as pd
 from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from copy import copy
-import xlrd, datetime, io, zipfile, base64, os
+import xlrd, datetime, io, zipfile, base64, os, json
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.lib.colors import white, black
@@ -17,6 +17,55 @@ def now_vn():
     return datetime.datetime.now(VN_TZ)
 def today_vn():
     return now_vn().date()
+
+# ── Tiến độ ca làm việc — lưu trên đĩa server để SỐNG SÓT qua việc tải lại
+# trang (F5) trong ngày. LƯU Ý: file này KHÔNG bền vững qua các lần deploy lại
+# app (Streamlit Cloud xóa filesystem mỗi lần deploy) — chỉ chống việc mất dữ
+# liệu do reload trang trong 1 ngày làm việc, không thay thế backup lâu dài.
+# Chỉ lưu tiến độ + số liệu TỔNG HỢP (không tên/hộ chiếu khách) cho các công cụ
+# xử lý dữ liệu khách; RIÊNG Sổ giao ca lưu đầy đủ nội dung vì đó chính là mục
+# đích của sổ giao ca (thông tin cần truyền lại nguyên vẹn cho ca sau).
+DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
+
+def _progress_path(date_iso=None):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    return os.path.join(DATA_DIR, f'progress_{date_iso or today_vn().isoformat()}.json')
+
+def _default_progress():
+    return {'date': today_vn().isoformat(), 'nav_sequence': [], 'tasks': {}, 'handover_entries': []}
+
+def _load_progress():
+    p = _progress_path()
+    if os.path.exists(p):
+        try:
+            with open(p, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if data.get('date') == today_vn().isoformat():
+                return data
+        except Exception:
+            pass
+    return _default_progress()
+
+def _atomic_write_json(path, data):
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+def _progress_update(mutate_fn):
+    """Đọc file tiến độ MỚI NHẤT từ đĩa (không phải bản trong session_state) rồi
+    mới sửa và ghi lại — giảm rủi ro 2 tab/phiên trong ngày ghi đè mất dữ liệu
+    của nhau. Đồng bộ luôn vào session_state để hiển thị ngay trong lượt chạy
+    hiện tại."""
+    state = _load_progress()
+    mutate_fn(state)
+    state['last_updated'] = now_vn().strftime('%H:%M:%S')
+    try:
+        _atomic_write_json(_progress_path(), state)
+    except Exception:
+        pass  # đĩa lỗi/không ghi được không được làm crash app — tính năng chỉ là tiện ích
+    st.session_state.progress = state
+    return state
 
 # Load app icon (favicon) từ icon.b64
 @st.cache_resource
@@ -2015,12 +2064,21 @@ MENU_LABELS = {
     'recon_person': 'Đối chiếu người nước ngoài', 'recon_room': 'Đối chiếu hệ thống phòng',
 }
 
+# Nạp tiến độ đã lưu trên đĩa cho HÔM NAY — chạy 1 lần khi phiên bắt đầu, và
+# tự làm mới nếu phiên mở vắt qua nửa đêm (ngày mới → tiến độ trống lại).
+if st.session_state.get('progress_date') != today_vn().isoformat():
+    st.session_state.progress_date = today_vn().isoformat()
+    st.session_state.progress = _load_progress()
+    st.session_state.nav_log = list(st.session_state.progress.get('nav_sequence', []))
+    st.session_state.handover = {'entries': list(st.session_state.progress.get('handover_entries', []))}
+
 def go_menu(name):
     st.session_state.menu = name
     # Ghi lại TRÌNH TỰ chuyển màn hình (chỉ tên công cụ + giờ) để nhận diện quy
     # trình ca làm — KHÔNG ghi bất kỳ dữ liệu khách nào (tên/hộ chiếu/phòng...).
-    st.session_state.setdefault('nav_log', []).append(
-        {'time': now_vn().strftime('%H:%M:%S'), 'menu': name})
+    entry = {'time': now_vn().strftime('%H:%M:%S'), 'menu': name}
+    st.session_state.setdefault('nav_log', []).append(entry)
+    _progress_update(lambda state: state.setdefault('nav_sequence', []).append(entry))
 
 # ── Sidebar điều hướng ────────────────────────────────────────────────────
 with st.sidebar:
@@ -2332,27 +2390,39 @@ if st.session_state.menu == "dashboard":
     _rc = st.session_state.get('rc_results')
     _re_p = st.session_state.get('recon_results')
     _re_r = st.session_state.get('reconr_results')
+    # Tiến độ đã lưu trên đĩa cho HÔM NAY — còn nguyên dù tải lại trang hoặc
+    # công cụ đó được chạy ở 1 phiên/tab khác trước đó trong ngày.
+    _ptasks = st.session_state.get('progress', {}).get('tasks', {})
+    _p_daily = _ptasks.get('daily', {})
+    _p_regcard = _ptasks.get('regcard', {})
+    _p_rp = _ptasks.get('recon_person', {})
+    _p_rr = _ptasks.get('recon_room', {})
 
-    # ── Checklist tiến độ công việc trong ca (tự động theo phiên) ──
+    # ── Checklist tiến độ công việc trong ca (còn nguyên dù tải lại trang) ──
     with st.container(border=True):
-        st.markdown("**Tiến độ công việc trong ca** · số liệu thuộc phiên làm việc hiện tại")
+        st.markdown("**Tiến độ công việc trong ca** · theo dõi trong ngày, không mất khi tải lại trang")
         _handover_n = len((st.session_state.get('handover') or {}).get('entries', []))
         _tasks = [
-            ("Xử lý hàng ngày (KBTT · VNM · ĐK14)", _d is not None, "daily"),
-            ("Regcard + file ARR", _rc is not None, "regcard"),
-            ("Đối chiếu người nước ngoài", _re_p is not None,
-             "recon_person" if st.session_state.get("recon_ok") else "recon"),
-            ("Đối chiếu hệ thống phòng", _re_r is not None,
-             "recon_room" if st.session_state.get("recon_ok") else "recon"),
-            (f"Sổ giao ca ({_handover_n} ghi chú)", _handover_n > 0, "handover"),
+            ("Xử lý hàng ngày (KBTT · VNM · ĐK14)", _d is not None or _p_daily.get('done'),
+             "daily", None if _d else _p_daily.get('time')),
+            ("Regcard + file ARR", _rc is not None or _p_regcard.get('done'),
+             "regcard", None if _rc else _p_regcard.get('time')),
+            ("Đối chiếu người nước ngoài", _re_p is not None or _p_rp.get('done'),
+             "recon_person" if st.session_state.get("recon_ok") else "recon",
+             None if _re_p else _p_rp.get('time')),
+            ("Đối chiếu hệ thống phòng", _re_r is not None or _p_rr.get('done'),
+             "recon_room" if st.session_state.get("recon_ok") else "recon",
+             None if _re_r else _p_rr.get('time')),
+            (f"Sổ giao ca ({_handover_n} ghi chú)", _handover_n > 0, "handover", None),
         ]
-        for _ti, (_label, _done, _target) in enumerate(_tasks):
+        for _ti, (_label, _done, _target, _stale_time) in enumerate(_tasks):
             tc1, tc2 = st.columns([6, 1])
-            tc1.markdown(("✅ " if _done else "⬜ ") + _label)
+            _suffix = f" · lúc {_stale_time} (phiên trước — mở lại để xem chi tiết/tải file)" if _stale_time else ""
+            tc1.markdown(("✅ " if _done else "⬜ ") + _label + _suffix)
             tc2.button("Mở →", key=f"dash_go_{_ti}", use_container_width=True,
                        on_click=go_menu, args=(_target,))
 
-    # ── Số liệu nhanh từ các công cụ đã chạy ──
+    # ── Số liệu nhanh từ các công cụ đã chạy (phiên hiện tại hoặc đã lưu trong ngày) ──
     if _d and _d.get('has_xlsx'):
         st.write("")
         st.markdown('<div class="section-label">🛏️ Khách lưu trú hôm nay</div>', unsafe_allow_html=True)
@@ -2365,6 +2435,16 @@ if st.session_state.menu == "dashboard":
         k4.metric("Lỗi dữ liệu 🔴", _n_red,
                   "cần sửa trước khi nộp" if _n_red else "dữ liệu sạch",
                   delta_color="inverse" if _n_red else "off")
+    elif _p_daily.get('summary'):
+        st.write("")
+        st.markdown('<div class="section-label">🛏️ Khách lưu trú hôm nay</div>', unsafe_allow_html=True)
+        st.caption(f"Số liệu lúc {_p_daily['time']} (phiên trước trong ngày) — chạy lại để xem chi tiết/tải file.")
+        _ps = _p_daily['summary']
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Tổng khách", _ps.get('total'))
+        k2.metric("Quốc tế", _ps.get('intl'))
+        k3.metric("Việt Nam", _ps.get('vn'))
+        k4.metric("Lỗi dữ liệu 🔴", _ps.get('red_issues'))
 
     if _rc and _rc.get('arr_stats'):
         st.write("")
@@ -2376,9 +2456,20 @@ if st.session_state.menu == "dashboard":
         b3.metric("💳 Cà thẻ", _as['ca_the'])
         b4.metric("💵 Thu tiền", _as['thu_tien'])
         b5.metric("⚠️ Xem lại BU", _as['xem_lai_bu'])
+    elif _p_regcard.get('summary'):
+        st.write("")
+        st.markdown('<div class="section-label">💰 Booking đến & thanh toán</div>', unsafe_allow_html=True)
+        st.caption(f"Số liệu lúc {_p_regcard['time']} (phiên trước trong ngày) — chạy lại để tải file.")
+        _as = _p_regcard['summary']
+        b1, b2, b3, b4, b5 = st.columns(5)
+        b1.metric("📦 Booking", _as.get('bookings'))
+        b2.metric("🚪 Phòng", _as.get('rooms'))
+        b3.metric("💳 Cà thẻ", _as.get('ca_the'))
+        b4.metric("💵 Thu tiền", _as.get('thu_tien'))
+        b5.metric("⚠️ Xem lại BU", _as.get('xem_lai_bu'))
 
-    if not _d and not _rc:
-        st.info("Chưa có số liệu trong phiên này — bắt đầu bằng **Xử lý hàng ngày** hoặc "
+    if not _d and not _rc and not _p_daily and not _p_regcard:
+        st.info("Chưa có số liệu trong ngày — bắt đầu bằng **Xử lý hàng ngày** hoặc "
                 "**Regcard + ARR** ở sidebar. Dashboard sẽ tự tổng hợp khi các công cụ chạy xong.")
 
     # ── Báo cáo ngày 1 trang cho quản lý ──
@@ -2567,6 +2658,21 @@ if st.session_state.menu == "daily":
                                    'visa_unmatched': visa_unmatched,
                                    'visa_skipped_vn': visa_map.get('skipped_vn', 0) if isinstance(visa_map, dict) else 0})
                 st.session_state['daily_results'] = _daily
+
+                def _mark_daily_done(state, _daily=_daily, has_xlsx=has_xlsx, has_dk14=has_dk14):
+                    task = {'done': True, 'time': now_vn().strftime('%H:%M:%S'),
+                            'has_xlsx': has_xlsx, 'has_dk14': has_dk14}
+                    if has_xlsx:
+                        iss = _daily.get('issues')
+                        task['summary'] = {
+                            'total': _daily.get('total'), 'intl': _daily.get('intl'), 'vn': _daily.get('vn'),
+                            'gks': _daily.get('gks'), 'gbl': _daily.get('gbl'), 'conv': _daily.get('conv'),
+                            'red_issues': int((iss['Mức độ'] == '🔴').sum()) if iss is not None and len(iss) else 0,
+                            'yellow_issues': int((iss['Mức độ'] == '🟡').sum()) if iss is not None and len(iss) else 0,
+                            'visa_watch_count': len(_daily.get('visa_watch') or []),
+                        }
+                    state.setdefault('tasks', {})['daily'] = task
+                _progress_update(_mark_daily_done)
             except Exception as e:
                 st.session_state.pop('daily_results', None)
                 st.error(f"❌ Lỗi: {e}")
@@ -2691,6 +2797,14 @@ if st.session_state.menu == "regcard":
                     'date': today_vn().strftime('%d_%m'),
                     'arr_date': today_vn().strftime('%d.%m.%Y'),
                 }
+
+                def _mark_regcard_done(state, count=count, arr_stats=arr_stats):
+                    task = {'done': True, 'time': now_vn().strftime('%H:%M:%S'), 'regcards': count}
+                    if arr_stats:
+                        task['summary'] = {k: arr_stats.get(k) for k in
+                                           ('bookings', 'rooms', 'ota', 'ca_the', 'thu_tien', 'xem_lai_bu', 'foc_lco')}
+                    state.setdefault('tasks', {})['regcard'] = task
+                _progress_update(_mark_regcard_done)
             except Exception as e:
                 st.session_state.pop('rc_results', None)
                 st.error(f"❌ Lỗi: {e}")
@@ -2741,11 +2855,8 @@ if st.session_state.menu == "handover":
     st.write("")
     st.markdown('<div class="section-label">🤝 Sổ giao ca</div>', unsafe_allow_html=True)
     st.caption("Ghi chú trong ca (khách nợ, yêu cầu đặc biệt, sự cố, đồ thất lạc...) để ca sau nắm được. "
-               "Lưu trong phiên làm việc này — bấm **Tải file Excel** cuối trang để bàn giao/lưu trữ lâu dài, "
-               "và **Nạp lại file** ở đầu ca sau để tiếp tục ghi chú.")
-
-    if 'handover' not in st.session_state:
-        st.session_state.handover = {'entries': []}
+               "Tự động lưu trên server theo ngày — mở lại/tải lại trang trong ngày vẫn còn nguyên. "
+               "Bấm **Tải file Excel** cuối trang khi cần in hoặc lưu trữ lâu dài.")
 
     with st.container(border=True):
         hc1, hc2 = st.columns(2)
@@ -2768,10 +2879,10 @@ if st.session_state.menu == "handover":
                 if not h_note.strip():
                     st.warning("⚠️ Vui lòng nhập nội dung bàn giao.")
                 else:
-                    st.session_state.handover['entries'].append({
-                        'time': now_vn().strftime('%H:%M'),
-                        'cat': h_cat, 'room': h_room.strip(), 'note': h_note.strip(),
-                    })
+                    _new_entry = {'time': now_vn().strftime('%H:%M'),
+                                  'cat': h_cat, 'room': h_room.strip(), 'note': h_note.strip()}
+                    _progress_update(lambda state: state.setdefault('handover_entries', []).append(_new_entry))
+                    st.session_state.handover['entries'].append(_new_entry)
                     st.rerun()
 
     _entries = st.session_state.handover['entries']
@@ -2788,7 +2899,14 @@ if st.session_state.menu == "handover":
                     st.write(_e['note'])
                 with ic2:
                     if st.button("🗑️", key=f"h_del_{_real_i}", help="Xóa ghi chú này"):
-                        st.session_state.handover['entries'].pop(_real_i)
+                        _target = _e
+                        def _m(state, _target=_target):
+                            entries = state.setdefault('handover_entries', [])
+                            if _target in entries:
+                                entries.remove(_target)
+                        _progress_update(_m)
+                        st.session_state.handover['entries'] = list(
+                            st.session_state.progress.get('handover_entries', []))
                         st.rerun()
 
         st.write("")
@@ -2861,7 +2979,15 @@ if st.session_state.menu == "recon_person":
         with st.spinner("Đang đối chiếu..."):
             try:
                 today = pd.to_datetime(today_str, format='%d/%m/%Y')
-                st.session_state['recon_results'] = reconcile(smile_file.read(), luutru_file.read(), today)
+                _rp = reconcile(smile_file.read(), luutru_file.read(), today)
+                st.session_state['recon_results'] = _rp
+
+                def _mark_recon_person_done(state, _rp=_rp):
+                    state.setdefault('tasks', {})['recon_person'] = {
+                        'done': True, 'time': now_vn().strftime('%H:%M:%S'),
+                        'summary': {'chua_dang_ky': len(_rp.get('chua_dk', [])),
+                                   'thua': len(_rp.get('thua', [])), 'trung': len(_rp.get('dup', []))}}
+                _progress_update(_mark_recon_person_done)
             except Exception as e:
                 st.session_state.pop('recon_results', None)
                 st.error(f"❌ Lỗi: {e}")
@@ -3009,7 +3135,15 @@ if st.session_state.menu == "recon_room":
         with st.spinner("Đang đối chiếu phòng..."):
             try:
                 today_r = pd.to_datetime(today_str_r, format='%d/%m/%Y')
-                st.session_state['reconr_results'] = reconcile_rooms(smile_file_r.read(), room_file.read(), today_r)
+                _rr = reconcile_rooms(smile_file_r.read(), room_file.read(), today_r)
+                st.session_state['reconr_results'] = _rr
+
+                def _mark_recon_room_done(state, _rr=_rr):
+                    state.setdefault('tasks', {})['recon_room'] = {
+                        'done': True, 'time': now_vn().strftime('%H:%M:%S'),
+                        'summary': {'chua_dang_ky': len(_rr.get('room_chua', [])),
+                                   'thua': len(_rr.get('room_thua', [])), 'trung': len(_rr.get('sys_dup', []))}}
+                _progress_update(_mark_recon_room_done)
             except Exception as e:
                 st.session_state.pop('reconr_results', None)
                 st.error(f"❌ Lỗi: {e}")
