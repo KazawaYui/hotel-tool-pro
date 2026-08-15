@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 .streamlit/secrets.toml
+# Tiến độ ca làm việc lưu tạm trên đĩa server (data/progress_*.json) — trạng
+# thái runtime, KHÔNG commit. Khác với logs/ là nơi lễ tân chủ động lưu trữ.
+data/
