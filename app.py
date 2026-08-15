@@ -8,6 +8,16 @@ from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.lib.colors import white, black
 
+# Server host (Streamlit Cloud...) chạy giờ UTC, khách sạn ở Việt Nam (UTC+7,
+# không có giờ mùa hè) — mọi mốc giờ hiển thị/ghi log trong app PHẢI dùng
+# now_vn()/today_vn() bên dưới, KHÔNG dùng thẳng datetime.datetime.now() hay
+# datetime.date.today() (trả về giờ server, sai múi giờ thực tế của khách sạn).
+VN_TZ = datetime.timezone(datetime.timedelta(hours=7))
+def now_vn():
+    return datetime.datetime.now(VN_TZ)
+def today_vn():
+    return now_vn().date()
+
 # Load app icon (favicon) từ icon.b64
 @st.cache_resource
 def _load_app_icon():
@@ -483,7 +493,7 @@ def fetch_vcb_rates():
                 pass
     if 'USD' not in rates:
         raise ValueError('không đọc được tỷ giá USD trong dữ liệu VCB')
-    return rates, datetime.datetime.now().strftime('%H:%M %d/%m/%Y')
+    return rates, now_vn().strftime('%H:%M %d/%m/%Y')
 
 def _gv(row, *names):
     """Lấy giá trị đầu tiên khác rỗng theo danh sách tên cột (chịu biến thể tên cột)."""
@@ -679,7 +689,7 @@ def build_daily_report(date_str, daily, arr_stats, recon, reconr):
         r += 1
     r += 1
     f = ws.cell(r, 1)
-    f.value = f"Xuất lúc {datetime.datetime.now().strftime('%H:%M %d/%m/%Y')} — Hotel Tool Pro"
+    f.value = f"Xuất lúc {now_vn().strftime('%H:%M %d/%m/%Y')} — Hotel Tool Pro"
     f.font = Font(name='Times New Roman', size=9, italic=True, color='FF888888')
     return wb
 
@@ -696,8 +706,8 @@ def build_shift_activity_log():
     ho = st.session_state.get('handover')
 
     log = {
-        'date': datetime.date.today().isoformat(),
-        'export_time': datetime.datetime.now().strftime('%H:%M:%S'),
+        'date': today_vn().isoformat(),
+        'export_time': now_vn().strftime('%H:%M:%S'),
         'nav_sequence': [{'time': e['time'], 'tool': MENU_LABELS.get(e['menu'], e['menu'])}
                          for e in st.session_state.get('nav_log', [])],
         'daily_processing': None, 'regcard_arr': None,
@@ -2010,7 +2020,7 @@ def go_menu(name):
     # Ghi lại TRÌNH TỰ chuyển màn hình (chỉ tên công cụ + giờ) để nhận diện quy
     # trình ca làm — KHÔNG ghi bất kỳ dữ liệu khách nào (tên/hộ chiếu/phòng...).
     st.session_state.setdefault('nav_log', []).append(
-        {'time': datetime.datetime.now().strftime('%H:%M:%S'), 'menu': name})
+        {'time': now_vn().strftime('%H:%M:%S'), 'menu': name})
 
 # ── Sidebar điều hướng ────────────────────────────────────────────────────
 with st.sidebar:
@@ -2313,7 +2323,7 @@ def build_arr(book_bytes):
 # ── Dashboard ca trực ─────────────────────────────────────────────────────
 if st.session_state.menu == "dashboard":
     st.write("")
-    _now = datetime.datetime.now()
+    _now = now_vn()
     _thu = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][_now.weekday()]
     st.markdown(f'<div class="section-label">📊 Tổng quan ca trực — {_thu}, {_now.strftime("%d/%m/%Y")}</div>',
                 unsafe_allow_html=True)
@@ -2375,7 +2385,7 @@ if st.session_state.menu == "dashboard":
     st.write("")
     st.markdown('<div class="section-label">📈 Báo cáo ngày cho quản lý</div>', unsafe_allow_html=True)
     if _d or _rc or _re_p or _re_r:
-        _rp_date = (_d or {}).get('date_str') or datetime.date.today().strftime('%d_%m')
+        _rp_date = (_d or {}).get('date_str') or today_vn().strftime('%d_%m')
         _wb_rp = build_daily_report(_rp_date.replace('_', '/'),
                                     _d if _d and _d.get('has_xlsx') else None,
                                     (_rc or {}).get('arr_stats'), _re_p, _re_r)
@@ -2404,7 +2414,7 @@ if st.session_state.menu == "dashboard":
             st.json(_log)
         import json as _json
         _log_bytes = _json.dumps(_log, ensure_ascii=False, indent=2).encode('utf-8')
-        _log_fname = f"shift_{datetime.datetime.now().strftime('%Y-%m-%d_%H%M')}.json"
+        _log_fname = f"shift_{now_vn().strftime('%Y-%m-%d_%H%M')}.json"
         st.download_button(f"⬇️ Xuất nhật ký hoạt động ({_log_fname})", _log_bytes,
                            file_name=_log_fname, mime="application/json",
                            use_container_width=True, key="dl_activity_log")
@@ -2436,7 +2446,7 @@ if st.session_state.menu == "daily":
             if st.session_state.get('vcb_note'):
                 st.caption(st.session_state['vcb_note'])
         with col2:
-            today = datetime.date.today()
+            today = today_vn()
             date_str = st.text_input("📅 Ngày (dùng cho tên file)", value=f"{today.day}_{today.month:02d}")
 
     st.write("")
@@ -2607,16 +2617,16 @@ if st.session_state.menu == "daily":
                 st.markdown('<div class="section-label">🛂 Cảnh báo hạn tạm trú / visa</div>', unsafe_allow_html=True)
                 _vw_days = st.slider("Cảnh báo khách còn lưu trú mà visa hết hạn trong vòng (ngày)",
                                      1, 30, 3, key="visa_warn_days")
-                _cutoff = datetime.date.today() + datetime.timedelta(days=_vw_days)
+                _cutoff = today_vn() + datetime.timedelta(days=_vw_days)
                 _soon = []
                 for _v in _vw:
                     _vd = datetime.date.fromisoformat(_v['visa'])
                     _dep = datetime.date.fromisoformat(_v['dep']) if _v.get('dep') else None
                     # chỉ cảnh báo khách còn ở (chưa checkout trước ngày visa hết hạn)
-                    if _vd <= _cutoff and (_dep is None or _dep >= datetime.date.today()):
+                    if _vd <= _cutoff and (_dep is None or _dep >= today_vn()):
                         _soon.append({'Phòng': _v['room'], 'Họ tên': _v['name'], 'Quốc tịch': _v['nat'],
                                      'Hết hạn tạm trú': _vd.strftime('%d/%m/%Y'),
-                                     'Còn': (_vd - datetime.date.today()).days,
+                                     'Còn': (_vd - today_vn()).days,
                                      'Ngày đi dự kiến': (_dep.strftime('%d/%m/%Y') if _dep else '—')})
                 if _soon:
                     _df_soon = pd.DataFrame(_soon).sort_values('Còn')
@@ -2678,8 +2688,8 @@ if st.session_state.menu == "regcard":
                 st.session_state['rc_results'] = {
                     'pdf': pdf_data, 'count': count,
                     'arr': arr_bytes, 'arr_stats': arr_stats, 'arr_err': arr_err,
-                    'date': datetime.date.today().strftime('%d_%m'),
-                    'arr_date': datetime.date.today().strftime('%d.%m.%Y'),
+                    'date': today_vn().strftime('%d_%m'),
+                    'arr_date': today_vn().strftime('%d.%m.%Y'),
                 }
             except Exception as e:
                 st.session_state.pop('rc_results', None)
@@ -2759,7 +2769,7 @@ if st.session_state.menu == "handover":
                     st.warning("⚠️ Vui lòng nhập nội dung bàn giao.")
                 else:
                     st.session_state.handover['entries'].append({
-                        'time': datetime.datetime.now().strftime('%H:%M'),
+                        'time': now_vn().strftime('%H:%M'),
                         'cat': h_cat, 'room': h_room.strip(), 'note': h_note.strip(),
                     })
                     st.rerun()
@@ -2783,10 +2793,10 @@ if st.session_state.menu == "handover":
 
         st.write("")
         _wb_ho = build_handover_xlsx(
-            {'date': datetime.date.today().strftime('%d/%m/%Y'), 'shift': h_shift, 'staff': h_staff},
+            {'date': today_vn().strftime('%d/%m/%Y'), 'shift': h_shift, 'staff': h_staff},
             _entries)
         st.download_button("⬇️ Tải sổ giao ca (Excel)", wb_to_bytes(_wb_ho),
-                           file_name=f"giao_ca_{datetime.date.today().strftime('%d_%m')}.xlsx",
+                           file_name=f"giao_ca_{today_vn().strftime('%d_%m')}.xlsx",
                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                            use_container_width=True, type="primary", key="dl_handover")
     else:
@@ -2841,7 +2851,7 @@ if st.session_state.menu == "recon_person":
     with rc2:
         luutru_file = st.file_uploader("File Trang lưu trú người nước ngoài (.xlsx)", type=['xlsx'], key="recon_luutru")
 
-    today_str = st.text_input("📅 Ngày xuất file (hôm nay)", value=datetime.date.today().strftime('%d/%m/%Y'),
+    today_str = st.text_input("📅 Ngày xuất file (hôm nay)", value=today_vn().strftime('%d/%m/%Y'),
                               help="Dùng để loại bỏ: khách arrival hôm nay (Smile) và khách ngày đi dự kiến hôm nay (Lưu trú)")
 
     st.write("")
@@ -2988,7 +2998,7 @@ if st.session_state.menu == "recon_room":
     with rr2:
         room_file = st.file_uploader("File số phòng (.xlsx — chỉ chứa danh sách số phòng)", type=['xlsx'], key="reconr_room")
 
-    today_str_r = st.text_input("📅 Ngày xuất file (hôm nay)", value=datetime.date.today().strftime('%d/%m/%Y'),
+    today_str_r = st.text_input("📅 Ngày xuất file (hôm nay)", value=today_vn().strftime('%d/%m/%Y'),
                                 key="reconr_today",
                                 help="Khách có Arrival = ngày này trên Smile sẽ được loại bỏ khỏi đối chiếu")
 
