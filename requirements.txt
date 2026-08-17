@@ -5,3 +5,5 @@ xlrd
 pypdf
 reportlab
 Pillow
+SQLAlchemy>=2.0
+psycopg2-binary
