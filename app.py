@@ -67,6 +67,93 @@ def _progress_update(mutate_fn):
     st.session_state.progress = state
     return state
 
+# ── Sổ giao ca — lưu trữ đám mây (Supabase/Postgres), BỀN VỮNG qua mọi lần
+# deploy lại (khác với data/progress_*.json ở trên chỉ sống qua 1 ngày). Cần
+# cấu hình st.secrets["connections"]["supabase_db"]["url"] — xem hướng dẫn
+# trong secrets.toml.example. NẾU CHƯA CẤU HÌNH: mọi hàm db_* trả về None/rỗng
+# một cách an toàn, màn Sổ giao ca tự động dùng lại lưu tạm trên đĩa (không
+# bền vững qua deploy) — app KHÔNG bao giờ crash vì thiếu Supabase.
+try:
+    from sqlalchemy import text as _sql_text
+except Exception:
+    _sql_text = None
+
+def _get_db():
+    if _sql_text is None:
+        return None
+    try:
+        return st.connection("supabase_db", type="sql")
+    except Exception:
+        return None
+
+@st.cache_resource(show_spinner=False)
+def _db_schema_ready():
+    """Tạo bảng shift_handover nếu chưa có — chỉ chạy 1 lần mỗi phiên server
+    (cache_resource), không phải mỗi lần rerun."""
+    conn = _get_db()
+    if conn is None:
+        return False
+    try:
+        with conn.session as s:
+            s.execute(_sql_text("""
+                CREATE TABLE IF NOT EXISTS shift_handover (
+                    id BIGSERIAL PRIMARY KEY,
+                    shift_date DATE NOT NULL,
+                    entry_time TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    room TEXT,
+                    note TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+            """))
+            s.execute(_sql_text(
+                "CREATE INDEX IF NOT EXISTS idx_shift_handover_date ON shift_handover(shift_date)"))
+            s.commit()
+        return True
+    except Exception:
+        return False
+
+def db_available():
+    return _get_db() is not None and _db_schema_ready()
+
+def db_add_entry(shift_date, entry_time, category, room, note):
+    conn = _get_db()
+    with conn.session as s:
+        s.execute(_sql_text("""INSERT INTO shift_handover (shift_date, entry_time, category, room, note)
+                               VALUES (:d, :t, :c, :r, :n)"""),
+                  {'d': shift_date, 't': entry_time, 'c': category, 'r': room, 'n': note})
+        s.commit()
+
+def db_delete_entry(entry_id):
+    conn = _get_db()
+    with conn.session as s:
+        s.execute(_sql_text("DELETE FROM shift_handover WHERE id = :id"), {'id': int(entry_id)})
+        s.commit()
+
+def db_load_entries(shift_date):
+    """Trả về DataFrame [id, entry_time, category, room, note] cho 1 ngày, mới nhất trước."""
+    conn = _get_db()
+    return conn.query(
+        "SELECT id, entry_time, category, room, note FROM shift_handover "
+        "WHERE shift_date = :d ORDER BY entry_time DESC, id DESC",
+        params={'d': shift_date}, ttl=0)
+
+def db_load_dates(limit=180):
+    """Danh sách các ngày đã có ghi chú (mới nhất trước) — phục vụ ô chọn ngày xem lại lịch sử."""
+    conn = _get_db()
+    df = conn.query(
+        "SELECT DISTINCT shift_date FROM shift_handover ORDER BY shift_date DESC LIMIT :lim",
+        params={'lim': limit}, ttl=0)
+    return list(df['shift_date']) if not df.empty else []
+
+def compute_day_summary(df_entries):
+    """Tổng hợp tự động: đếm ghi chú theo phân loại + danh sách phòng được nhắc tới."""
+    if df_entries is None or df_entries.empty:
+        return {'total': 0, 'by_category': {}, 'rooms': []}
+    by_cat = df_entries['category'].value_counts().to_dict()
+    rooms = sorted(set(str(r).strip() for r in df_entries['room'].dropna() if str(r).strip()))
+    return {'total': len(df_entries), 'by_category': by_cat, 'rooms': rooms}
+
 # Load app icon (favicon) từ icon.b64
 @st.cache_resource
 def _load_app_icon():
@@ -790,11 +877,18 @@ def build_shift_activity_log():
         log['recon_room'] = {'smile_rooms': rr.get('smile_rooms'), 'sys_unique': rr.get('sys_unique'),
                              'room_match': rr.get('room_match'), 'chua_dang_ky': len(rr.get('room_chua', [])),
                              'thua': len(rr.get('room_thua', [])), 'trung': len(rr.get('sys_dup', []))}
-    if ho and ho.get('entries'):
+    # Ưu tiên đếm từ Supabase (nếu đã kết nối) để chính xác dù người khác cũng
+    # ghi chú trong ngày — chỉ đếm theo phân loại, KHÔNG kèm nội dung ghi chú.
+    if db_available():
+        _df_ho = db_load_entries(today_vn())
+        if not _df_ho.empty:
+            log['handover'] = {'total_entries': len(_df_ho),
+                               'by_category': _df_ho['category'].value_counts().to_dict()}
+    elif ho and ho.get('entries'):
         by_cat = {}
         for e in ho['entries']:
             by_cat[e['cat']] = by_cat.get(e['cat'], 0) + 1
-        log['handover'] = {'total_entries': len(ho['entries']), 'by_category': by_cat}  # KHÔNG kèm nội dung ghi chú
+        log['handover'] = {'total_entries': len(ho['entries']), 'by_category': by_cat}
     return log
 
 # ── Processing ────────────────────────────────────────────────────────────
@@ -2401,7 +2495,10 @@ if st.session_state.menu == "dashboard":
     # ── Checklist tiến độ công việc trong ca (còn nguyên dù tải lại trang) ──
     with st.container(border=True):
         st.markdown("**Tiến độ công việc trong ca** · theo dõi trong ngày, không mất khi tải lại trang")
-        _handover_n = len((st.session_state.get('handover') or {}).get('entries', []))
+        if db_available():
+            _handover_n = len(db_load_entries(today_vn()))
+        else:
+            _handover_n = len((st.session_state.get('handover') or {}).get('entries', []))
         _tasks = [
             ("Xử lý hàng ngày (KBTT · VNM · ĐK14)", _d is not None or _p_daily.get('done'),
              "daily", None if _d else _p_daily.get('time')),
@@ -2854,71 +2951,169 @@ if st.session_state.menu == "regcard":
 if st.session_state.menu == "handover":
     st.write("")
     st.markdown('<div class="section-label">🤝 Sổ giao ca</div>', unsafe_allow_html=True)
-    st.caption("Ghi chú trong ca (khách nợ, yêu cầu đặc biệt, sự cố, đồ thất lạc...) để ca sau nắm được. "
-               "Tự động lưu trên server theo ngày — mở lại/tải lại trang trong ngày vẫn còn nguyên. "
-               "Bấm **Tải file Excel** cuối trang khi cần in hoặc lưu trữ lâu dài.")
 
-    with st.container(border=True):
-        hc1, hc2 = st.columns(2)
-        with hc1:
-            h_shift = st.selectbox("Ca trực", ["Ca sáng", "Ca chiều", "Ca đêm"], key="h_shift")
-        with hc2:
-            h_staff = st.text_input("Tên lễ tân trực", key="h_staff", placeholder="VD: Tân")
+    _db_on = db_available()
+
+    if _db_on:
+        st.caption("Ghi chú trong ca (khách nợ, yêu cầu đặc biệt, sự cố, đồ thất lạc...) để ca sau nắm được. "
+                   "Lưu trên **đám mây (Supabase)** — không mất khi app deploy lại, xem lại được mọi ngày trong quá khứ.")
+
+        with st.container(border=True):
+            hc1, hc2, hc3 = st.columns([1, 1, 1])
+            with hc1:
+                h_shift = st.selectbox("Ca trực", ["Ca sáng", "Ca chiều", "Ca đêm"], key="h_shift")
+            with hc2:
+                h_staff = st.text_input("Tên lễ tân trực", key="h_staff", placeholder="VD: Tân")
+            with hc3:
+                _avail_dates = db_load_dates()
+                _sel_date = st.date_input("📅 Xem ngày", value=today_vn(),
+                                          max_value=today_vn(), key="h_view_date",
+                                          help="Chọn lại ngày trong quá khứ để xem lịch sử sổ giao ca")
+        _is_today = _sel_date == today_vn()
+
+        _df_e = db_load_entries(_sel_date)
+        _summary = compute_day_summary(_df_e)
 
         st.write("")
-        with st.form("handover_add_form", clear_on_submit=True):
-            fc1, fc2 = st.columns([1, 1])
-            with fc1:
-                h_cat = st.selectbox("Phân loại", ["Khách nợ", "Yêu cầu đặc biệt", "Sự cố",
-                                                     "Đồ thất lạc", "Bảo trì", "Khác"], key="h_cat")
-            with fc2:
-                h_room = st.text_input("Số phòng (nếu có)", key="h_room")
-            h_note = st.text_area("Nội dung bàn giao", key="h_note", height=80)
-            h_submit = st.form_submit_button("➕ Thêm vào sổ giao ca", type="primary", use_container_width=True)
-            if h_submit:
-                if not h_note.strip():
-                    st.warning("⚠️ Vui lòng nhập nội dung bàn giao.")
-                else:
-                    _new_entry = {'time': now_vn().strftime('%H:%M'),
-                                  'cat': h_cat, 'room': h_room.strip(), 'note': h_note.strip()}
-                    _progress_update(lambda state: state.setdefault('handover_entries', []).append(_new_entry))
-                    st.session_state.handover['entries'].append(_new_entry)
-                    st.rerun()
+        if not _is_today:
+            st.info(f"📜 Đang xem lại lịch sử ngày **{_sel_date.strftime('%d/%m/%Y')}** (chỉ xem, "
+                    "không thêm/xóa được — quay lại hôm nay để ghi chú mới).")
 
-    _entries = st.session_state.handover['entries']
-    st.write("")
-    if _entries:
-        st.markdown(f"**{len(_entries)} ghi chú trong ca này**")
-        for _ei, _e in enumerate(reversed(_entries)):
-            _real_i = len(_entries) - 1 - _ei
+        st.markdown('<div class="section-label">📊 Tổng hợp tự động</div>', unsafe_allow_html=True)
+        if _summary['total'] == 0:
+            st.caption(f"Chưa có ghi chú nào ngày {_sel_date.strftime('%d/%m/%Y')}.")
+        else:
+            sc1, sc2 = st.columns([1, 2])
+            with sc1:
+                st.metric("Tổng ghi chú", _summary['total'])
+            with sc2:
+                _cat_txt = " · ".join(f"{k}: {v}" for k, v in _summary['by_category'].items())
+                st.markdown(f"**Theo phân loại:** {_cat_txt}")
+            if _summary['rooms']:
+                st.caption("🚪 Phòng được nhắc tới: " + ", ".join(_summary['rooms']))
+
+        if _is_today:
+            st.write("")
             with st.container(border=True):
-                ic1, ic2 = st.columns([10, 1])
-                with ic1:
-                    _room_txt = f" · 🚪 Phòng {_e['room']}" if _e['room'] else ""
-                    st.markdown(f"🕐 **{_e['time']}** · 🏷️ {_e['cat']}{_room_txt}")
-                    st.write(_e['note'])
-                with ic2:
-                    if st.button("🗑️", key=f"h_del_{_real_i}", help="Xóa ghi chú này"):
-                        _target = _e
-                        def _m(state, _target=_target):
-                            entries = state.setdefault('handover_entries', [])
-                            if _target in entries:
-                                entries.remove(_target)
-                        _progress_update(_m)
-                        st.session_state.handover['entries'] = list(
-                            st.session_state.progress.get('handover_entries', []))
+                with st.form("handover_add_form", clear_on_submit=True):
+                    fc1, fc2 = st.columns([1, 1])
+                    with fc1:
+                        h_cat = st.selectbox("Phân loại", ["Khách nợ", "Yêu cầu đặc biệt", "Sự cố",
+                                                             "Đồ thất lạc", "Bảo trì", "Khác"], key="h_cat")
+                    with fc2:
+                        h_room = st.text_input("Số phòng (nếu có)", key="h_room")
+                    h_note = st.text_area("Nội dung bàn giao", key="h_note", height=80)
+                    h_submit = st.form_submit_button("➕ Thêm vào sổ giao ca", type="primary", use_container_width=True)
+                    if h_submit:
+                        if not h_note.strip():
+                            st.warning("⚠️ Vui lòng nhập nội dung bàn giao.")
+                        else:
+                            db_add_entry(today_vn(), now_vn().strftime('%H:%M'),
+                                        h_cat, h_room.strip(), h_note.strip())
+                            st.rerun()
+
+        st.write("")
+        if not _df_e.empty:
+            st.markdown(f"**{len(_df_e)} ghi chú ngày {_sel_date.strftime('%d/%m/%Y')}**")
+            for _, _row in _df_e.iterrows():
+                with st.container(border=True):
+                    ic1, ic2 = st.columns([10, 1])
+                    with ic1:
+                        _room_txt = f" · 🚪 Phòng {_row['room']}" if _row['room'] else ""
+                        st.markdown(f"🕐 **{_row['entry_time']}** · 🏷️ {_row['category']}{_room_txt}")
+                        st.write(_row['note'])
+                    with ic2:
+                        if _is_today and st.button("🗑️", key=f"h_del_{_row['id']}", help="Xóa ghi chú này"):
+                            db_delete_entry(_row['id'])
+                            st.rerun()
+
+            st.write("")
+            _entries_for_xlsx = [{'time': r['entry_time'], 'cat': r['category'],
+                                  'room': r['room'] or '', 'note': r['note']}
+                                 for _, r in _df_e.iloc[::-1].iterrows()]
+            _wb_ho = build_handover_xlsx(
+                {'date': _sel_date.strftime('%d/%m/%Y'),
+                 'shift': h_shift if _is_today else '', 'staff': h_staff if _is_today else ''},
+                _entries_for_xlsx)
+            st.download_button(f"⬇️ Tải sổ giao ca ngày {_sel_date.strftime('%d_%m')} (Excel)", wb_to_bytes(_wb_ho),
+                               file_name=f"giao_ca_{_sel_date.strftime('%d_%m_%Y')}.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                               use_container_width=True, type="primary", key="dl_handover")
+        elif _is_today:
+            st.info("Chưa có ghi chú nào trong ca này. Thêm ghi chú ở form phía trên.")
+
+    else:
+        # ── Chưa cấu hình Supabase — dùng lại lưu tạm trên đĩa server (chỉ sống
+        # trong ngày, mất khi deploy lại). Xem secrets.toml.example để kết nối
+        # lưu trữ đám mây bền vững + xem lại lịch sử nhiều ngày.
+        st.caption("Ghi chú trong ca (khách nợ, yêu cầu đặc biệt, sự cố, đồ thất lạc...) để ca sau nắm được. "
+                   "Tự động lưu trên server theo ngày — mở lại/tải lại trang trong ngày vẫn còn nguyên. "
+                   "Bấm **Tải file Excel** cuối trang khi cần in hoặc lưu trữ lâu dài.")
+        st.info("☁️ **Chưa kết nối lưu trữ đám mây** — ghi chú chỉ lưu tạm trên server, sẽ mất khi app deploy lại "
+                "và không xem lại được các ngày trước. Xem hướng dẫn kết nối Supabase trong `secrets.toml.example` "
+                "để lưu trữ bền vững + xem lại lịch sử nhiều ngày.")
+
+        with st.container(border=True):
+            hc1, hc2 = st.columns(2)
+            with hc1:
+                h_shift = st.selectbox("Ca trực", ["Ca sáng", "Ca chiều", "Ca đêm"], key="h_shift")
+            with hc2:
+                h_staff = st.text_input("Tên lễ tân trực", key="h_staff", placeholder="VD: Tân")
+
+            st.write("")
+            with st.form("handover_add_form", clear_on_submit=True):
+                fc1, fc2 = st.columns([1, 1])
+                with fc1:
+                    h_cat = st.selectbox("Phân loại", ["Khách nợ", "Yêu cầu đặc biệt", "Sự cố",
+                                                         "Đồ thất lạc", "Bảo trì", "Khác"], key="h_cat")
+                with fc2:
+                    h_room = st.text_input("Số phòng (nếu có)", key="h_room")
+                h_note = st.text_area("Nội dung bàn giao", key="h_note", height=80)
+                h_submit = st.form_submit_button("➕ Thêm vào sổ giao ca", type="primary", use_container_width=True)
+                if h_submit:
+                    if not h_note.strip():
+                        st.warning("⚠️ Vui lòng nhập nội dung bàn giao.")
+                    else:
+                        _new_entry = {'time': now_vn().strftime('%H:%M'),
+                                      'cat': h_cat, 'room': h_room.strip(), 'note': h_note.strip()}
+                        _progress_update(lambda state: state.setdefault('handover_entries', []).append(_new_entry))
+                        st.session_state.handover['entries'].append(_new_entry)
                         st.rerun()
 
+        _entries = st.session_state.handover['entries']
         st.write("")
-        _wb_ho = build_handover_xlsx(
-            {'date': today_vn().strftime('%d/%m/%Y'), 'shift': h_shift, 'staff': h_staff},
-            _entries)
-        st.download_button("⬇️ Tải sổ giao ca (Excel)", wb_to_bytes(_wb_ho),
-                           file_name=f"giao_ca_{today_vn().strftime('%d_%m')}.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                           use_container_width=True, type="primary", key="dl_handover")
-    else:
-        st.info("Chưa có ghi chú nào trong ca này. Thêm ghi chú ở form phía trên.")
+        if _entries:
+            st.markdown(f"**{len(_entries)} ghi chú trong ca này**")
+            for _ei, _e in enumerate(reversed(_entries)):
+                _real_i = len(_entries) - 1 - _ei
+                with st.container(border=True):
+                    ic1, ic2 = st.columns([10, 1])
+                    with ic1:
+                        _room_txt = f" · 🚪 Phòng {_e['room']}" if _e['room'] else ""
+                        st.markdown(f"🕐 **{_e['time']}** · 🏷️ {_e['cat']}{_room_txt}")
+                        st.write(_e['note'])
+                    with ic2:
+                        if st.button("🗑️", key=f"h_del_{_real_i}", help="Xóa ghi chú này"):
+                            _target = _e
+                            def _m(state, _target=_target):
+                                entries = state.setdefault('handover_entries', [])
+                                if _target in entries:
+                                    entries.remove(_target)
+                            _progress_update(_m)
+                            st.session_state.handover['entries'] = list(
+                                st.session_state.progress.get('handover_entries', []))
+                            st.rerun()
+
+            st.write("")
+            _wb_ho = build_handover_xlsx(
+                {'date': today_vn().strftime('%d/%m/%Y'), 'shift': h_shift, 'staff': h_staff},
+                _entries)
+            st.download_button("⬇️ Tải sổ giao ca (Excel)", wb_to_bytes(_wb_ho),
+                               file_name=f"giao_ca_{today_vn().strftime('%d_%m')}.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                               use_container_width=True, type="primary", key="dl_handover")
+        else:
+            st.info("Chưa có ghi chú nào trong ca này. Thêm ghi chú ở form phía trên.")
 
 
 # ── Đối chiếu: sub-menu 2 lựa chọn (có cổng mật khẩu riêng) ────────────────
