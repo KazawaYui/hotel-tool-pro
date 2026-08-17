@@ -78,12 +78,21 @@ try:
 except Exception:
     _sql_text = None
 
+def _redact_db_error(e):
+    """Ẩn mật khẩu (nếu lỡ lọt vào chuỗi kết nối trong thông báo lỗi của
+    SQLAlchemy) trước khi hiển thị cho người dùng — tránh lộ secret lên UI."""
+    import re as _re_local
+    return _re_local.sub(r'://([^:/@\s]+):([^@\s]+)@', r'://\1:***@', str(e))
+
 def _get_db():
     if _sql_text is None:
+        st.session_state['_db_last_error'] = ("Thiếu thư viện SQLAlchemy/psycopg2-binary trong môi trường chạy — "
+                                               "vào Manage app → Reboot app để cài lại requirements.txt.")
         return None
     try:
         return st.connection("supabase_db", type="sql")
-    except Exception:
+    except Exception as e:
+        st.session_state['_db_last_error'] = _redact_db_error(e)
         return None
 
 @st.cache_resource(show_spinner=False)
@@ -110,7 +119,8 @@ def _db_schema_ready():
                 "CREATE INDEX IF NOT EXISTS idx_shift_handover_date ON shift_handover(shift_date)"))
             s.commit()
         return True
-    except Exception:
+    except Exception as e:
+        st.session_state['_db_last_error'] = _redact_db_error(e)
         return False
 
 def db_available():
@@ -3052,6 +3062,14 @@ if st.session_state.menu == "handover":
         st.info("☁️ **Chưa kết nối lưu trữ đám mây** — ghi chú chỉ lưu tạm trên server, sẽ mất khi app deploy lại "
                 "và không xem lại được các ngày trước. Xem hướng dẫn kết nối Supabase trong `secrets.toml.example` "
                 "để lưu trữ bền vững + xem lại lịch sử nhiều ngày.")
+        _db_err = st.session_state.get('_db_last_error')
+        if _db_err:
+            with st.expander("🔍 Xem lý do kết nối thất bại (để tự sửa secrets)"):
+                st.code(_db_err, language=None)
+        if st.button("🔄 Thử kết nối lại", key="db_retry",
+                    help="Bấm sau khi đã sửa Secrets — không cần Reboot cả app"):
+            _db_schema_ready.clear()
+            st.rerun()
 
         with st.container(border=True):
             hc1, hc2 = st.columns(2)
