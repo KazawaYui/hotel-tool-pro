@@ -712,26 +712,22 @@ def validate_guests(df):
     return pd.DataFrame(issues, columns=['Mức độ', 'Dòng', 'Họ tên', 'Phòng', 'Vấn đề'])
 
 def check_visa_expiry(df_intl, visa_map=None):
-    """Gom hạn tạm trú/visa từng khách quốc tế (ưu tiên cột TẠM TRÚ trong file
-    khách, dự phòng file visa rời khớp hộ chiếu/tên) → list dict ngày dạng ISO,
-    lưu được vào session để lọc lại theo số ngày cảnh báo mà không cần xử lý lại."""
+    """Gom hạn tạm trú/visa từng khách quốc tế — CHỈ tin dữ liệu từ file Visa
+    rời do lễ tân chủ động upload (khớp theo hộ chiếu trước, tên là dự phòng).
+    KHÔNG tự đọc cột 'TẠM TRÚ'/'TẠM TRÚ ĐẾN NGÀY' có sẵn trong file dữ liệu
+    khách (customer.xls) nữa — cột đó thường do PMS tự điền mặc định, không
+    phải visa đã xác nhận thật, tin nhầm có thể điền sai lên hồ sơ khai báo
+    công an. → list dict ngày dạng ISO, lưu được vào session để lọc lại theo
+    số ngày cảnh báo mà không cần xử lý lại."""
     visa_map = visa_map or {}
     by_pp = visa_map.get('by_pp', {}) if isinstance(visa_map, dict) else {}
     by_name = visa_map.get('by_name', {}) if isinstance(visa_map, dict) else {}
-    visa_col = None
-    for cand in ['TẠM TRÚ', 'THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM', 'TẠM TRÚ ĐẾN NGÀY',
-                 'Visa date', 'Visadate', 'Thời hạn tạm trú', 'NGÀY VISA', 'Visa Date']:
-        for c in df_intl.columns:
-            if _norm_nat(c) == _norm_nat(cand):
-                visa_col = c; break
-        if visa_col:
-            break
     out = []
     for _, row in df_intl.iterrows():
         ht = str(_gv(row, 'HỌ TÊN ', 'HỌ TÊN') or '').strip()
         sg = str(_gv(row, 'SỐ GIẤY TỜ') or '').strip()
-        vd_raw = _gv(row, visa_col) if visa_col is not None else None
-        if vd_raw is None and (by_pp or by_name):
+        vd_raw = None
+        if by_pp or by_name:
             vd_raw = by_pp.get(_norm_pp(sg)) or by_name.get(_norm_name(ht))
         vd = _to_date(vd_raw)
         if vd is None:
@@ -953,7 +949,6 @@ def process_xlsx(xlsx_bytes, rate):
             dg = ws.cell(er, don_gia_idx)
             if dg.value and isinstance(dg.value, (int, float)) and 0 < dg.value < 1000:
                 dg.value = round(dg.value * rate)
-                dg.fill = PatternFill("solid", start_color="FFFF00")
                 conv += 1
     return wb, conv
 
@@ -1063,12 +1058,13 @@ def parse_visa_file(visa_bytes):
 def build_kbtt(df_intl, visa_map=None):
     """Điền mẫu KBTT. Dòng 3 là dòng "[TEST] SAMPLE" BẮT BUỘC giữ nguyên (không
     bị ghi đè) — dữ liệu khách thật được điền bắt đầu từ dòng 4 trở xuống.
-    Cột L 'THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM' ưu tiên lấy TRỰC TIẾP từ
-    cột "TẠM TRÚ" có sẵn trong chính file dữ liệu khách (df_intl) — vì cùng 1
-    dòng = cùng 1 khách nên không cần khớp tên/hộ chiếu với file rời nữa.
-    Nếu file dữ liệu khách không có cột đó, mới dùng visa_map (file visa rời,
-    giữ lại để tương thích ngược) khớp theo SỐ HỘ CHIẾU trước, tên là dự phòng.
-    Trả về (wb, danh_sách_tên_không_khớp, nguồn_visa)."""
+    Cột L 'THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM' CHỈ điền khi có visa_map
+    từ file Visa rời do lễ tân chủ động upload (khớp theo SỐ HỘ CHIẾU trước,
+    tên là dự phòng). KHÔNG tự đọc cột 'TẠM TRÚ'/'TẠM TRÚ ĐẾN NGÀY' có sẵn
+    trong file dữ liệu khách nữa — cột đó thường do PMS tự điền mặc định
+    (vd trùng ngày đi), không phải visa đã xác nhận thật; tin nhầm có thể
+    khai sai thời hạn tạm trú lên hồ sơ chính thức nộp công an.
+    Trả về (wb, danh_sách_tên_không_khớp, nguồn_visa, invalid_ids)."""
     visa_map = visa_map or {}
     # Tương thích ngược: nếu visa_map là dict phẳng {tên: ngày} kiểu cũ, coi như by_name
     if isinstance(visa_map, dict) and ("by_pp" in visa_map or "by_name" in visa_map):
@@ -1077,14 +1073,6 @@ def build_kbtt(df_intl, visa_map=None):
     else:
         by_pp = {}
         by_name = visa_map
-    # Tìm cột "TẠM TRÚ" (hoặc tên tương đương) NGAY TRONG file dữ liệu khách — ưu tiên cao nhất
-    visa_col = None
-    for cand in ['TẠM TRÚ', 'THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM', 'TẠM TRÚ ĐẾN NGÀY',
-                 'Visa date', 'Visadate', 'Thời hạn tạm trú', 'NGÀY VISA', 'Visa Date']:
-        for c in df_intl.columns:
-            if _norm_nat(c) == _norm_nat(cand):
-                visa_col = c; break
-        if visa_col: break
     unmatched = []
     invalid_ids = []  # khách có SỐ GIẤY TỜ chỉ là mã tạm nội bộ (GKS/GBL...), đã bị để trống
     wb = load_workbook(io.BytesIO(load_template('kbtt')))
@@ -1110,16 +1098,10 @@ def build_kbtt(df_intl, visa_map=None):
         # hồ sơ KBTT như số hộ chiếu thật, để trống + cảnh báo thay vì điền sai.
         if sh.upper() in ('GKS','GBL','GKA','GBS'):
             invalid_ids.append(ht); sh=''
-        # Cột L (12) — THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM
+        # Cột L (12) — THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM — CHỈ điền từ
+        # file Visa rời (upload thủ công), khớp theo SỐ HỘ CHIẾU trước, tên là dự phòng
         vd = ''
-        if visa_col is not None:
-            raw = row.get(visa_col)
-            if pd.notna(raw) and str(raw).strip():
-                vd = fmt(raw)
-            if not vd:
-                unmatched.append(ht)
-        elif by_pp or by_name:
-            # Dự phòng: file visa rời (tương thích ngược) — khớp theo SỐ HỘ CHIẾU trước, tên là dự phòng
+        if by_pp or by_name:
             vd = by_pp.get(_norm_pp(sh), '') or by_name.get(_norm_name(ht), '')
             if not vd:
                 unmatched.append(ht)
@@ -1151,7 +1133,7 @@ def build_kbtt(df_intl, visa_map=None):
     # Cập nhật vùng Table1 cho khớp số dòng thực (header + dòng TEST + dữ liệu khách)
     if 'Table1' in ws.tables:
         ws.tables['Table1'].ref = f"A2:L{3 + n}"
-    return wb, unmatched, ('column' if visa_col is not None else ('file' if (by_pp or by_name) else None)), invalid_ids
+    return wb, unmatched, ('file' if (by_pp or by_name) else None), invalid_ids
 
 def build_vnm(df_vn):
     wb = load_workbook(io.BytesIO(load_template('vnm')))
@@ -2935,12 +2917,12 @@ if st.session_state.menu == "daily":
             c2.metric("Quốc tế", _dr['intl'])
             c3.metric("Việt Nam", _dr['vn'])
             c4.metric("GKS + GBL", f"{_dr['gks']} + {_dr['gbl']}")
-            st.info(f"💱 Đã quy đổi tỷ giá cho **{_dr['conv']}** ô (đã tô vàng, tỷ giá {_dr.get('rate', 0):,.2f})")
+            st.info(f"💱 Đã quy đổi tỷ giá cho **{_dr['conv']}** ô (tỷ giá {_dr.get('rate', 0):,.2f})")
             if _dr['unknown_nats']:
                 st.warning("⚠️ Quốc tịch chưa có mã (giữ nguyên tên, cần kiểm tra): " + ", ".join(_dr['unknown_nats']))
             if _dr.get('visa_used'):
-                _src_txt = "đọc từ cột TẠM TRÚ trong file khách" if _dr.get('visa_source') == 'column' else "khớp theo hộ chiếu/tên từ file visa rời"
-                st.info(f"🛂 Đã điền date visa cho **{_dr['visa_matched']}/{_dr['intl']}** khách quốc tế ({_src_txt}).")
+                st.info(f"🛂 Đã điền date visa cho **{_dr['visa_matched']}/{_dr['intl']}** khách quốc tế "
+                        f"(khớp theo hộ chiếu/tên từ file Visa rời bạn đã upload).")
                 if _dr.get('visa_skipped_vn'):
                     st.caption(f"ℹ️ Đã tự động bỏ qua {_dr['visa_skipped_vn']} khách Việt Nam trong file visa (không cần thời hạn tạm trú).")
                 if _dr.get('visa_unmatched'):
