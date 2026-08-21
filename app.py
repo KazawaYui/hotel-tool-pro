@@ -563,16 +563,98 @@ def lookup_nat_kbtt(raw):
     return raw  # unknown -> keep original (sẽ hiện cảnh báo)
 
 NAT_DK14 = {
-    'RUS':'Russia  (Liên bang Nga)','UZB':'Uzbekistan  ( U-dơ-bê-ki-xtan )',
-    'KAZ':'Kazakhstan  ( Ka-dắc-xtan )','KOR':'Korea (South)  ( CH Hàn Quốc )',
-    'KGZ':'Kyrgyzstan  ( Kiếc-ghi-di-a )','TJK':'Tajikistan  ( Ta-gi-ki-xtan )',
-    'UKR':'Ukraine  ( U-crai-na )','USA':'United States  ( Mỹ )',
-    'VNM':'Vietnam  ( Việt Nam )','CAN':'Canada  ( Ca-na-da )',
-    'GBR':'United Kingdom  ( Anh )','AUS':'Australia  ( Ô-xtrây-li-a )',
-    'BLR':'Belarus  ( Bê-la-rút )','CHN':'China  ( Trung Quốc )',
-    'DEU':'Germany  ( Đức )','MDA':'Moldova  ( Môn-đô-va )',
-    'FIN':'Finland  ( Phần Lan )','FRA':'France  ( Pháp )',
-    'DNK':'Denmark  ( Đan Mạch )','MUS':'Mauritius  ( Mô-ri-xơ )',
+    'AFG':'Afganistan  ( Ap-ga-ni-xtan )','ZAF':'Africa (South)  ( Nam Phi )',
+    'ALB':'Albania  ( An-ba-ni )','DZA':'Algieria  ( An-giê-ri )',
+    'ASM':'American Samoa  ( Đông Sa-moa )','AND':'Andorra  ( Công quốc An-đơ-ra )',
+    'ATA':'Antarctica  ( Nam Cực )','AGO':'Angola  ( Ăng-gô-la )',
+    'AIA':'Anguilla  ( Ăng-gui-la )','ARG':'Argentina  ( Ac-hen-ti-na )',
+    'ARM':'Armenia  ( Ac-mê-ni-a )','ABW':'Aruba  ( A-ru-ba )',
+    'AUS':'Australia  ( Ô-xtrây-li-a )','AUT':'Austria  ( áo )',
+    'AZE':'Azerbaijan  ( A-déc-bai-gian )','BHS':'Bahamas  ( Ba-ha-ma )',
+    'BHR':'Bahrain  ( Ba-ra-in )','BGD':'Bangladesh  ( Băng-la-đét )',
+    'BRB':'Barbados  ( Bác-ba-đốt )','BLR':'Belarus  ( Bê-la-rút )',
+    'BEL':'Belgium  ( Bỉ )','BLZ':'Belize  ( Bê-li-xê )',
+    'BEN':'Benin  ( Bê-nanh )','BMU':'Bermuda  ( Béc-mu-đa )',
+    'BTN':'Bhutan  ( Bu-tan )','BOL':'Bolivia  ( Bô-li-vi-a )',
+    'BIH':'Bosnia and Herzegovina  ( Bô-xni-a Héc-dê-gô-vi-na )','BWA':'Botswana  ( Bốt-xoa-na )',
+    'BRA':'Brazil  ( Bra-din )','BRN':'Brunei Darussalam  ( Đa-ru-xa-lem thuộc Brunei )',
+    'BGR':'Bulgaria  ( Bun-ga-ri )','BFA':'Burkina Faso  ( Buốc-ki-na Pha-xô )',
+    'BDI':'Burundi  ( Bu-run-đi )','CMR':'Cameroon  ( Ca-mơ-run )',
+    'CAN':'Canada  ( Ca-na-da )','COL':'Colombia  ( Cô-lôm-bi-a )',
+    'COM':'Comoros  ( Cô-mo )','COG':'Congo  ( Công-gô )',
+    'COK':'Cook Islands  ( Quần đảo Cúc )','CRI':'Costa Rica  ( Cô-xta Ri-ca )',
+    'HRV':'Croatia  ( Crô-a-ti-a )','CUB':'Cuba  ( Cu Ba )',
+    'CYP':'Cyprus  ( Đảo Síp )','CZE':'Czech Republic  ( Cộng hoà Séc )',
+    'TCD':'Chad  ( Sát )','CHL':'Chile  ( Chi-lê )',
+    'CHN':'China  ( Trung Quốc )','TWN':'China (Taiwan)  ( Trung Quốc (Đài Loan) )',
+    'DNK':'Denmark  ( Đan Mạch )','DJI':'Djibouti  ( Đi-bô-u-ti )',
+    'DMA':'Dominica  ( Đô-mi-ni-ca )','ECU':'Ecuador  ( Ê-cu-a-đo )',
+    'EGY':'Egypt  ( Ai Cập )','SLV':'El Salvador  ( En Xan-va-đo )',
+    'GNQ':'Equatorial Guinea  ( Ghi-nê Xích đạo )','ERI':'Eritrea  ( Ê-ri-tơ-ri-a )',
+    'EST':'Estonia  ( Ê-xtô-ni-a )','ETH':'Ethiopia  ( Ê-ti-ô-pi-a )',
+    'FJI':'Fiji  ( Fi-ji )','FIN':'Finland  ( Phần Lan )',
+    'FRA':'France  ( Pháp )','GAB':'Gabon  ( Ga-bông )',
+    'GMB':'Gambia  ( Găm-bi-a )','GEO':'Georgia  ( Gru-di-a )',
+    'DEU':'Germany  ( CH Liên bang Đức )','GHA':'Ghana  ( Ga-na )',
+    'GRC':'Greece  ( Hy Lạp )','GRL':'Greenland  ( Grin-lơn )',
+    'GTM':'Guatemala  ( Goa-tê-ma-la )','GIN':'Guinea  ( Ghi-nê )',
+    'GNB':'Guinea-Bissau  ( Ghi-nê Bít-xao )','GUY':'Guyana  ( Gui-na )',
+    'HTI':'Haiti  ( Ha-i-ti )','HND':'Honduras  ( Hon-du-rat )',
+    'HKG':'HongKong  ( Hồng-Kông )','HUN':'Hungari  ( Hung-ga-ri )',
+    'ISL':'Iceland  ( Ai-xơ-len )','IND':'India  ( Ân Độ )',
+    'IDN':'Indonesia  ( In-đô-nê-xi-a )','IRN':'Iran  ( CH Hồi giáo I-ran )',
+    'IRQ':'Iraq  ( I-rắc )','IRL':'Ireland  ( Ai-rơ-len )',
+    'ISR':'Israel  ( I-xra-en )','ITA':'Italy  ( I-ta-li-a )',
+    'JAM':'Jamaica  ( Ja-mai-ca )','JPN':'Japan  ( Nhật Bản )',
+    'JOR':'Jordan  ( Joc-đan )','CAP':'Kampuchea  ( Căm-pu-chia )',
+    'KAZ':'Kazakhstan  ( Ka-dắc-xtan )','KEN':'Kenya  ( Kê-ni-a )',
+    'KOR':'Korea (South)  ( CH Hàn Quốc )','PRK':'Korea Democratic Peoples Republic  ( CHDCND Triều Tiên )',
+    'KWT':'Kuwait  ( Cô-oét )','KGZ':'Kyrgyzstan  ( Kiếc-ghi-di-a )',
+    'LAO':'Laos  ( CHDCND Lào )','LVA':'Latvia  ( Lát-vi-a )',
+    'LBN':'Lebanon  ( Li-ban )','LSO':'Lesotho  ( Lê-xô-thô )',
+    'LBR':'Liberia  ( Li-bê-ri-a )','LBY':'Libya  ( Gia-ma-hi-ri-i-a A-rập Li-bi Nhân dân )',
+    'LIE':'Liechtenstein  ( Công quốc Lích-ten-xtên )','LTU':'Lithuania  ( Lit-hua-ni-a )',
+    'LUX':'Luxembourg  ( Luých-xem-bua )','MAC':'Macau  ( Ma Cao )',
+    'MDG':'Madagascar  ( Ma-đa-ga-xca )','MWI':'Malawi  ( Ma-la-uy )',
+    'MYS':'Malaysia  ( Ma-lai-xi-a )','MDV':'Maldives  ( Man-đi-vơ )',
+    'MLI':'Mali  ( Ma-li )','MLT':'Malta  ( Man-ta )',
+    'MHL':'Marshall Islands  ( Quần đảo Mác-san )','MRT':'Mauritania  ( Mô-ra-ta-ni )',
+    'MUS':'Mauritius  ( Mô-ri-xơ )','MEX':'Mexico  ( Mê-xi-cô )',
+    'MDA':'Moldova  ( Môn-đô-va )','MCO':'Monaco  ( Công quốc Mô-na-cô )',
+    'MNE':'Montenegro  ( Môn-tê-nê-grô )','MNG':'Mongolia  ( Mông Cổ )',
+    'MAR':'Morocco  ( Ma-rốc )','MOZ':'Mozambique  ( Mô-dăm-bích )',
+    'MMR':'Myanmar (Burma)  ( Mi-an-ma )','NAM':'Namibia  ( Na-mi-bi-a )',
+    'NPL':'Nepal  ( Nê-pan )','NLD':'Netherland  ( Hà Lan )',
+    'NZL':'New Zealand  ( Niu Di-lân )','NIC':'Nicaragua  ( Ni-ca-ra-goa )',
+    'NER':'Niger  ( Ni-giê )','NGA':'Nigeria  ( Ni-giê-ri-a )',
+    'NOR':'Norway  ( Vương quốc Na-uy )','OMN':'Oman  ( Ô-man )',
+    'PAK':'Pakistan  ( Pa-ki-xtan )','PLW':'Palau  ( Pa-lau )',
+    'PSE':'Palestine  ( Pa-le-xtin )','PAN':'Panama  ( Pa-na-ma )',
+    'PNG':'Papua New Guinea  ( Pa-pua Niu Ghi-nê )','PRY':'Paraguay  ( Pa-ra-goay )',
+    'PER':'Peru  ( Pê-ru )','POL':'Poland  ( Ba Lan )',
+    'PRT':'Portugal  ( Bồ Đào Nha )','PRI':'Puerto Rico  ( Pu-éc-tô Ri-cô )',
+    'PHL':'Philippine  ( Phi-líp-pin )','QAT':'Qatar  ( Qua-ta )',
+    'ROU':'Romania  ( Ru-ma-ni )','RUS':'Russia  (Liên bang Nga)',
+    'RWA':'Rwanda  ( Ru-an-đa )','LCA':'Saint Lucia  ( Xanh Lu-xi-a )',
+    'SMR':'San Marino  ( Xan Ma-ri-nô )','SAU':'Saudi Arabia  ( A-rập Xau-đi )',
+    'GBR':'United Kingdom  ( Liên hiệp Vương quốc Anh và Bắc Ailen )','SEN':'Senegal  ( Xe-ne-gan )',
+    'SRB':'Serbia  ( Xéc-bi-a )','SYC':'Seychelles  ( Quần đảo Xây-sen )',
+    'SGP':'Singapore  ( Xin-ga-po )','SVK':'Slovakia  ( Xlô-va-ki-a )',
+    'SVN':'Slovenia  ( Slo-vê-ni-a )','SOM':'Somalia  ( Xô-ma-li )',
+    'ESP':'Spain  ( Tây Ban Nha )','LKA':'Srilanka  ( Xri-Lan-ca )',
+    'SDN':'Sudan  ( Xu-đăng )','SWE':'Sweden  ( Thuỵ Điển )',
+    'CHE':'Switzerland  ( Thuỵ Sĩ )','TJK':'Tajikistan  ( Ta-gi-ki-xtan )',
+    'TGO':'Togo  ( Tô-gô )','TON':'Tonga  ( Tôn-ga )',
+    'TUN':'Tunisia  ( Tu-ni-di )','TUR':'Turkey  ( Thổ Nhĩ Kỳ )',
+    'TKM':'Turkmenistan  ( Tuốc-mê-ni-xtan )','TUV':'Tuvalu  ( Tu-va-lu )',
+    'THA':'Thailand  ( Thái Lan )','UGA':'Uganda  ( U-gan-da )',
+    'UKR':'Ukraine  ( U-crai-na )','ARE':'United Arab Emirates  ( A-rập thống nhất )',
+    'TZA':'United Republic of Tanzania  ( CH thống nhất Tan-da-ni-a )',
+    'USA':'United States  ( Mỹ )','URY':'Uruguay  ( U-ru-goay )',
+    'UZB':'Uzbekistan  ( U-dơ-bê-ki-xtan )','VUT':'Vanuatu  ( Va-nu-a-tu )',
+    'VEN':'Venezuela  ( Vê-nê-du-ê-la )','VNM':'Vietnam  ( Việt Nam )',
+    'YEM':'Yemen  ( Y-ê-men )','ZMB':'Zambia  ( Dăm-bi-a )',
+    'ZWE':'Zimbabwe  ( Dim-ba-bu-ê )',
 }
 LOAI_GIAY = {
     'Căn cước công dân':'8 - Thẻ Căn Cước','Hộ chiếu':'4 - Hộ chiếu',
@@ -1185,11 +1267,51 @@ def build_vnm(df_vn):
             if ci<=len(ref): cp(ref[ci-1],cell)
     return wb, gks_cnt, gbl_cnt, ward_unmatched
 
+def _dk_map_gender(g):
+    """Chuẩn hóa giới tính về 'Nam'/'Nữ' — chấp nhận cả chữ cái đơn (M/F, kể
+    cả không hoa) lẫn tiếng Việt đầy đủ (Nam/Nữ), khác bản cũ chỉ nhận đúng
+    ký tự 'M'/'F' (sai hoàn toàn nếu nguồn ghi 'Nam'/'Nữ' như mọi cột GIỚI
+    TÍNH khác trong app — khi đó ngày sinh sẽ không vào được cột nào)."""
+    s = str(g or '').strip().lower()
+    if s in ('nam', 'm', 'male'):
+        return 'Nam'
+    if s in ('nữ', 'nu', 'f', 'female'):
+        return 'Nữ'
+    return str(g or '').strip()
+
+def _dk_is_dummy(name, room):
+    """Nhận diện dòng dummy/test — không phải khách lưu trú thật, không đưa
+    vào sổ ĐK14 chính thức nộp công an."""
+    n = str(name or '').strip().lower()
+    if not n:
+        return True, 'Tên trống'
+    if 'dummy' in n:
+        return True, 'Tên là dummy'
+    if 'pending' in n:
+        return True, 'Tên là pending'
+    if 'water sport' in n:
+        return True, 'Không phải khách lưu trú'
+    if _re.fullmatch(r'[A-Za-z\s]+\d{4,}', str(name or '').strip()):
+        return True, 'Tên chứa mã đặt phòng'
+    digits = _re.sub(r'\D', '', str(room or ''))
+    if digits and int(digits) >= 9000:
+        return True, f'Phòng {room} ≥ 9000 (phòng ảo/posting master)'
+    return False, ''
+
 def build_dk14(xls_bytes):
     wb2=xlrd.open_workbook(file_contents=xls_bytes)
     ws2=wb2.sheet_by_index(0)
-    data=[[ws2.cell_value(r,c) for c in range(ws2.ncols)]
-          for r in range(1,ws2.nrows) if any(ws2.cell_value(r,c) for c in range(ws2.ncols))]
+    data_all=[[ws2.cell_value(r,c) for c in range(ws2.ncols)]
+              for r in range(1,ws2.nrows) if any(ws2.cell_value(r,c) for c in range(ws2.ncols))]
+    data=[]; skipped=[]
+    for row in data_all:
+        _name = row[1] if len(row) > 1 else ''
+        _room = row[9] if len(row) > 9 else ''
+        _is_dummy, _reason = _dk_is_dummy(_name, _room)
+        if _is_dummy:
+            skipped.append((str(_name or '').strip() or '(trống)', _reason))
+        else:
+            data.append(row)
     wb_t=load_workbook(io.BytesIO(load_template('dk14')))
     ws_t=wb_t.active
     cw={col:ws_t.column_dimensions[col].width for col in ws_t.column_dimensions}
@@ -1215,25 +1337,35 @@ def build_dk14(xls_bytes):
     fn=Font(name='Times New Roman',size=12)
     ac=Alignment(horizontal='center',vertical='center',wrap_text=True)
     al=Alignment(horizontal='left',vertical='center',wrap_text=True)
+    _arrs=[]; _deps=[]
     for i,row in enumerate(data,1):
         er=i+17
         name=str(row[1]).strip() if row[1] else ''
-        gender=str(row[3]).strip().upper() if row[3] else ''
+        gender=_dk_map_gender(row[3] if len(row) > 3 else '')
         country=NAT_DK14.get(str(row[4]).strip().upper() if row[4] else '',str(row[4] or ''))
         passport=str(row[5]).strip() if row[5] else ''
         if passport.endswith('.0'): passport=passport[:-2]
         address=str(row[6]).strip() if row[6] else '   '
         dob=serial2date(row[2]); arr=serial2date(row[7]); dep=serial2date(row[8])
-        room=str(row[9]).strip() if row[9] else ''
-        notify=str(row[10]).strip() if row[10] else ''
-        cols=[(1,i,ac),(2,name,al),(3,dob if gender=='M' else None,ac),
-              (4,dob if gender=='F' else None,ac),(5,country,ac),(6,passport,ac),
+        if arr: _arrs.append(arr)
+        if dep: _deps.append(dep)
+        room=_fmt_room(row[9]) if len(row) > 9 else ''
+        notifier=str(row[10]).strip() if len(row) > 10 and row[10] else ''
+        notify = notifier
+        cols=[(1,i,ac),(2,name,al),(3,dob if gender=='Nam' else None,ac),
+              (4,dob if gender=='Nữ' else None,ac),(5,country,ac),(6,passport,ac),
               (7,address,al),(8,arr,ac),(9,dep,ac),(10,room,ac),(11,notify,al),(12,'',ac),(13,'',ac)]
         for ci,val,aln in cols:
             cell=ws_o.cell(er,ci); cell.value=val; cell.font=fn; cell.border=bdr; cell.alignment=aln
             if ci in (3,4) and val: cell.number_format='DD/MM/YYYY'
             elif ci in (8,9) and val: cell.number_format='DD/MM/YYYY'
-    return wb_o, len(data)
+    # Mẫu TT30/2026 có 2 ô tóm tắt "Từ ngày:"/"Đến ngày:" ở J11/J12 — bản cũ để
+    # trống nguyên nhãn không có ngày; điền theo khoảng ngày đến/đi thực tế
+    if _arrs:
+        ws_o.cell(11, 10).value = f"Từ ngày: {min(_arrs).strftime('%d/%m/%Y')}"
+    if _deps:
+        ws_o.cell(12, 10).value = f"Đến ngày: {max(_deps).strftime('%d/%m/%Y')}"
+    return wb_o, len(data), skipped
 
 
 # ── Regcard PDF builder ───────────────────────────────────────────────────
@@ -2787,7 +2919,7 @@ if st.session_state.menu == "daily":
                 conv = 0; gks_cnt = 0; gbl_cnt = 0
                 df = None; df_intl = None; df_vn = None
                 visa_map = {}; visa_unmatched = []; visa_source = None
-                kbtt_invalid_ids = []; vnm_ward_unmatched = []
+                kbtt_invalid_ids = []; vnm_ward_unmatched = []; dk14_skipped = []
                 # Đọc file visa (nếu có) → map tên → date visa
                 if visa_file is not None:
                     try:
@@ -2839,7 +2971,7 @@ if st.session_state.menu == "daily":
                     if xls_file:
                         progress.progress(85, text="Điền mẫu ĐK14...")
                         xls_bytes = xls_file.read()
-                        wb_dk14, dk_count = build_dk14(xls_bytes)
+                        wb_dk14, dk_count, dk14_skipped = build_dk14(xls_bytes)
                         out_files[f'dk14_{date_str}.xlsx'] = wb_to_bytes(wb_dk14)
                         has_dk14 = True
                         files_made.append("🚔 ĐK14")
@@ -2853,7 +2985,8 @@ if st.session_state.menu == "daily":
                 # Lưu kết quả vào session — kết quả & nút tải không biến mất sau rerun
                 _daily = {'files_made': files_made, 'zip': zip_buf.getvalue(),
                           'files': out_files, 'rate': rate,
-                          'date_str': date_str, 'has_xlsx': has_xlsx, 'has_dk14': has_dk14}
+                          'date_str': date_str, 'has_xlsx': has_xlsx, 'has_dk14': has_dk14,
+                          'dk14_count': dk_count if has_dk14 else None, 'dk14_skipped': dk14_skipped}
                 if has_xlsx:
                     unknown_nats = []
                     for q in df_intl.get('QUỐC TỊCH', pd.Series([], dtype=str)).dropna().unique():
@@ -2979,6 +3112,13 @@ if st.session_state.menu == "daily":
                     st.success(f"✅ Không có khách nào hết hạn tạm trú trong {_vw_days} ngày tới.")
         elif _dr['has_dk14']:
             st.info("ℹ️ Chỉ tạo file ĐK14 (không có file XLSX dữ liệu khách).")
+
+        if _dr.get('has_dk14'):
+            st.info(f"🚔 ĐK14: đã điền **{_dr['dk14_count']}** khách.")
+            if _dr.get('dk14_skipped'):
+                _sk = _dr['dk14_skipped']
+                st.caption(f"ℹ️ Đã tự động bỏ qua {len(_sk)} dòng dummy/test (không phải khách lưu trú thật): "
+                           + ", ".join(f"{n} ({r})" for n, r in _sk))
 
         st.markdown("**File đã tạo:** " + " · ".join(_dr['files_made']))
 
