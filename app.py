@@ -651,8 +651,12 @@ def _gv(row, *names):
     return None
 
 def _fmt_room(v):
-    """Số phòng đọc từ Excel đôi khi ra dạng số thực (103.0) — trả về '103'."""
-    s = str(v or '').strip()
+    """Số phòng/số điện thoại đọc từ Excel đôi khi ra dạng số thực (103.0)
+    → trả về '103'. Dùng `v or ''` sẽ SAI với NaN (NaN truthy trong Python)
+    → lọt chuỗi "nan" ra file; phải chặn None/NaN riêng trước."""
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return ''
+    s = str(v).strip()
     if s.endswith('.0') and s[:-2].isdigit():
         s = s[:-2]
     return s
@@ -1082,6 +1086,7 @@ def build_kbtt(df_intl, visa_map=None):
                 visa_col = c; break
         if visa_col: break
     unmatched = []
+    invalid_ids = []  # khách có SỐ GIẤY TỜ chỉ là mã tạm nội bộ (GKS/GBL...), đã bị để trống
     wb = load_workbook(io.BytesIO(load_template('kbtt')))
     ws = wb['KBTT']
     # Cấu trúc mẫu: dòng 1 = ô merge A1:L1 (tiêu đề + chú ý đỏ), dòng 2 = header,
@@ -1096,9 +1101,15 @@ def build_kbtt(df_intl, visa_map=None):
         er=i+3   # dữ liệu khách thật bắt đầu dòng 4 (dòng 3 là TEST, giữ nguyên)
         ht=str(row.get('HỌ TÊN ',row.get('HỌ TÊN',''))).strip()
         ns=fmt(row['NGÀY SINH']); nd=fmt(row['NGÀY ĐẾN']); ni=fmt(row.get('NGÀY ÐI',row.get('NGÀY ĐI','')))
+        ni=_fix_departure_swap(ni, nd)
         gt='M - Nam' if str(row.get('GIỚI TÍNH','')).strip()=='Nam' else 'F - Nữ'
         qt=lookup_nat_kbtt(row.get('QUỐC TỊCH',''))
         sh=str(row.get('SỐ GIẤY TỜ','')).strip(); sp=str(row.get('SỐ PHÒNG','')).strip()
+        # SỐ GIẤY TỜ chỉ là mã tạm nội bộ (GKS/GBL/GKA/GBS = trẻ em dùng giấy
+        # khai sinh/giấy bảo lãnh, chưa có hộ chiếu thật) — KHÔNG được nộp lên
+        # hồ sơ KBTT như số hộ chiếu thật, để trống + cảnh báo thay vì điền sai.
+        if sh.upper() in ('GKS','GBL','GKA','GBS'):
+            invalid_ids.append(ht); sh=''
         # Cột L (12) — THỜI HẠN ĐƯỢC PHÉP TẠM TRÚ TẠI VIỆT NAM
         vd = ''
         if visa_col is not None:
@@ -1140,7 +1151,7 @@ def build_kbtt(df_intl, visa_map=None):
     # Cập nhật vùng Table1 cho khớp số dòng thực (header + dòng TEST + dữ liệu khách)
     if 'Table1' in ws.tables:
         ws.tables['Table1'].ref = f"A2:L{3 + n}"
-    return wb, unmatched, ('column' if visa_col is not None else ('file' if (by_pp or by_name) else None))
+    return wb, unmatched, ('column' if visa_col is not None else ('file' if (by_pp or by_name) else None)), invalid_ids
 
 def build_vnm(df_vn):
     wb = load_workbook(io.BytesIO(load_template('vnm')))
@@ -1149,32 +1160,48 @@ def build_vnm(df_vn):
     ref = [ws.cell(5,c) for c in range(1,ws.max_column+1)]
     for r in range(ws.max_row,4,-1): ws.delete_rows(r)
     gks_cnt=0; gbl_cnt=0
+    ward_unmatched=[]  # (tên khách, phường/xã gốc) không tự tra được mã — giữ raw, cần lễ tân kiểm tra
+    _CUTRU_MAP={'thuongtru':'1 - Thường trú','tamtru':'2 - Tạm trú'}
     for i,(_,row) in enumerate(df_vn.iterrows(),1):
         er=i+4
         ht=str(row.get('HỌ TÊN ',row.get('HỌ TÊN',''))).strip()
         ns=fmt(row['NGÀY SINH']); nd=fmt(row['NGÀY ĐẾN']); ni=fmt(row.get('NGÀY ÐI',row.get('NGÀY ĐI','')))
+        ni=_fix_departure_swap(ni, nd)
         gt='F - Nữ' if str(row.get('GIỚI TÍNH','')).strip()=='Nữ' else 'M - Nam'
         sg_raw=str(row.get('SỐ GIẤY TỜ','')).strip()
         lg_raw=str(row.get('LOẠI GIẤY TỜ','')).strip()
         is_gks='GKS' in sg_raw.upper(); is_gbl='GBL' in sg_raw.upper()
         ten_giay=''
         if is_gks:
-            sg=make_code('GKS',ns); lg='5 - Giấy khai sinh'; gks_cnt+=1
+            # Mã tạm nội bộ (chưa có giấy khai sinh thật cấp số) — theo đúng
+            # danh mục DANH_MUC của mẫu, KHÔNG dùng "5 - Giấy khai sinh" (mã
+            # đó dành cho giấy khai sinh CÓ số thật), ghi "9 - Giấy Tờ Khác"
+            # + nêu rõ loại trong TÊN GIẤY TỜ để tránh khai sai giấy tờ.
+            sg=make_code('GKS',ns); lg='9 - Giấy Tờ Khác'; ten_giay='giấy khai sinh'; gks_cnt+=1
         elif is_gbl:
-            sg=make_code('GBL',ns); lg='9 - Giấy tờ khác'; ten_giay='Giấy bảo lãnh'; gbl_cnt+=1
+            sg=make_code('GBL',ns); lg='9 - Giấy Tờ Khác'; ten_giay='giấy bảo lãnh'; gbl_cnt+=1
         elif sg_raw and sg_raw[0].isalpha():
             # Số giấy tờ bắt đầu bằng chữ cái (vd: P02628567) → là hộ chiếu
             sg=sg_raw; lg='4 - Hộ chiếu'
         else:
             sg=sg_raw; lg=LOAI_GIAY.get(lg_raw,lg_raw)
-        tinh=TINH.get(str(row.get('TP/TỈNH','')).strip().upper(),'')
+        tinh_raw=str(row.get('TP/TỈNH','')).strip()
+        tinh=lookup_province_vnm(tinh_raw) if tinh_raw else ''
+        phuong_raw=str(row.get('PHƯỜNG/XÃ','')).strip()
+        phuong, ward_ok, inferred_prov = lookup_ward_vnm(phuong_raw, tinh or None)
+        if phuong_raw and not ward_ok:
+            ward_unmatched.append((ht, phuong_raw))
+        if inferred_prov and not tinh:
+            tinh = inferred_prov
         dc=str(row.get('ÐỊA CHỈ',row.get('ĐỊA CHỈ',''))).strip()
         sp=str(row.get('SỐ PHÒNG','')).strip()
-        vals=[i,ht,ns,gt,'VNM - Viet Nam',lg,ten_giay,sg,'','1 - Thường trú',tinh,'',dc,nd,ni,sp,'1 - Du lịch','','']
+        dt=_fmt_room(row.get('SỐ ĐIỆN THOẠI',''))  # phòng vệ thêm nếu cột vẫn lọt qua dạng số (mất số 0 đầu)
+        cutru=_CUTRU_MAP.get(_norm_nat(row.get('THƯỜNG TRÚ / TẠM TRÚ','')),'1 - Thường trú')
+        vals=[i,ht,ns,gt,'VNM - Viet Nam',lg,ten_giay,sg,dt,cutru,tinh,phuong,dc,nd,ni,sp,'1 - Du lịch','','']
         for ci,val in enumerate(vals,1):
             cell=ws.cell(er,ci); cell.value=val if isinstance(val,int) else str(val)
             if ci<=len(ref): cp(ref[ci-1],cell)
-    return wb, gks_cnt, gbl_cnt
+    return wb, gks_cnt, gbl_cnt, ward_unmatched
 
 def build_dk14(xls_bytes):
     wb2=xlrd.open_workbook(file_contents=xls_bytes)
@@ -1404,6 +1431,111 @@ def _fix_date(v):
         return pd.to_datetime(s, dayfirst=True)
     except Exception:
         return None
+
+def _fix_departure_swap(ni_str, nd_str):
+    """Nếu NGÀY ĐI (dd/mm/yyyy) đọc ra TRƯỚC NGÀY ĐẾN — thường do lỗi đảo
+    dd/mm khi cả 2 số ≤12 — thử hoán dd↔mm; dùng bản đã hoán nếu nó không còn
+    trước ngày đến nữa. Không đụng các trường hợp khác (giữ nguyên nếu không
+    chắc chắn). Cùng heuristic đã kiểm chứng ở ARR/XNC Converter."""
+    if not ni_str or not nd_str:
+        return ni_str
+    try:
+        dep = datetime.datetime.strptime(ni_str, '%d/%m/%Y')
+        arr = datetime.datetime.strptime(nd_str, '%d/%m/%Y')
+    except Exception:
+        return ni_str
+    if dep >= arr:
+        return ni_str
+    m = _re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})$', ni_str)
+    if not m:
+        return ni_str
+    dd, mm, yy = int(m.group(1)), int(m.group(2)), m.group(3)
+    if dd > 12 or mm > 12 or dd == mm:
+        return ni_str
+    swapped = f"{mm:02d}/{dd:02d}/{yy}"
+    try:
+        sw = datetime.datetime.strptime(swapped, '%d/%m/%Y')
+    except Exception:
+        return ni_str
+    return swapped if sw >= arr else ni_str
+
+def _norm_addr(s):
+    """Chuẩn hóa tên tỉnh/phường để so khớp: bỏ dấu, hoa/thường, bỏ tiền tố
+    Xã/Phường/Thị trấn/Đặc khu/Tỉnh/TP..., bỏ ký tự không phải chữ/số."""
+    s = str(s or '').strip()
+    s = _ud.normalize('NFD', s)
+    s = ''.join(c for c in s if _ud.category(c) != 'Mn')
+    s = s.lower()
+    s = _re.sub(r'^(xa|phuong|thi tran|dac khu|tinh|thanh pho|tp\.?)\s+', '', s)
+    s = _re.sub(r'[^a-z0-9 ]', ' ', s)
+    s = _re.sub(r'\s+', ' ', s).strip()
+    return s
+
+@st.cache_resource(show_spinner=False)
+def load_vn_admin_lookup():
+    """Đọc bảng TINH_THANH + PHUONG_XA nhúng sẵn trong chính mẫu VNM (đúng
+    danh mục dropdown DANH_MUC đang dùng, không phải bảng ngoài) → dict tra
+    cứu theo tên đã chuẩn hóa, dùng để tự điền mã Tỉnh/Thành + Phường/Xã
+    thay vì bỏ trống như trước."""
+    wb = load_workbook(io.BytesIO(load_template('vnm')))
+    prov_by_norm = {}
+    prov_by_code = {}
+    for row in wb['TINH_THANH'].iter_rows(min_row=2, values_only=True):
+        matt, tentt, display = row[0], row[1], row[2]
+        if not matt or not display:
+            continue
+        prov_by_code[str(matt)] = display
+        prov_by_norm.setdefault(_norm_addr(tentt), display)
+    ward_by_norm = {}
+    for row in wb['PHUONG_XA'].iter_rows(min_row=2, values_only=True):
+        ma, ten, matt, display = row[0], row[1], row[2], row[3]
+        if not ma or not display:
+            continue
+        ward_by_norm.setdefault(_norm_addr(ten), []).append((str(matt), display))
+    return prov_by_norm, prov_by_code, ward_by_norm
+
+def lookup_province_vnm(raw):
+    """Mã Tỉnh/Thành cho cột 'TỈNH/ THÀNH PHỐ' của mẫu VNM — khớp đúng tên
+    trong chính mẫu (TINH_THANH) trước, dự phòng bảng TINH cũ (alias/viết
+    tắt như 'TP HCM'), giữ nguyên raw nếu không khớp được (không đoán bừa)."""
+    raw = str(raw or '').strip()
+    if not raw:
+        return ''
+    prov_by_norm, _, _ = load_vn_admin_lookup()
+    hit = prov_by_norm.get(_norm_addr(raw))
+    if hit:
+        return hit
+    legacy = TINH.get(raw.upper())
+    if legacy:
+        return legacy
+    return raw
+
+def lookup_ward_vnm(raw, prov_display=None):
+    """Mã Phường/Xã cho cột 'PHƯỜNG/ XÃ/ ĐẶC KHU' của mẫu VNM. Tên phường có
+    thể trùng giữa nhiều tỉnh, nên khi đã biết tỉnh (prov_display dạng
+    '101 - TP. Hà Nội') sẽ ưu tiên khớp đúng phường thuộc tỉnh đó. Không tự
+    suy đoán khi mơ hồ — trả lại raw để lễ tân tự kiểm tra thay vì điền sai.
+    Trả về (giá_trị_để_điền, đã_khớp: bool, tỉnh_suy_ra_được: str|None)."""
+    raw = str(raw or '').strip()
+    if not raw:
+        return '', False, None
+    _, prov_by_code, ward_by_norm = load_vn_admin_lookup()
+    cands = ward_by_norm.get(_norm_addr(raw)) or []
+    if not cands:
+        return raw, False, None
+    prov_code = None
+    if prov_display:
+        m = _re.match(r'^(\d+)\s*-', str(prov_display))
+        if m:
+            prov_code = m.group(1)
+    if prov_code:
+        scoped = [d for c, d in cands if c == prov_code]
+        if scoped:
+            return scoped[0], True, None
+    if len(cands) == 1:
+        c, d = cands[0]
+        return d, True, (None if prov_display else prov_by_code.get(c))
+    return raw, False, None
 
 def build_regcards(xlsx_bytes, only_main=True):
     """Tạo PDF regcard hàng loạt, gộp theo Conf# (đoàn nhiều phòng → 1 regcard,
@@ -2673,6 +2805,7 @@ if st.session_state.menu == "daily":
                 conv = 0; gks_cnt = 0; gbl_cnt = 0
                 df = None; df_intl = None; df_vn = None
                 visa_map = {}; visa_unmatched = []; visa_source = None
+                kbtt_invalid_ids = []; vnm_ward_unmatched = []
                 # Đọc file visa (nếu có) → map tên → date visa
                 if visa_file is not None:
                     try:
@@ -2688,7 +2821,13 @@ if st.session_state.menu == "daily":
                         progress.progress(10, text="Quy đổi tỷ giá...")
                         xlsx_bytes = xlsx_file.read()
                         wb, conv = process_xlsx(xlsx_bytes, rate)
-                        df = pd.read_excel(io.BytesIO(xlsx_bytes))
+                        # Ép các cột dạng mã đọc bằng chuỗi — nếu không, pandas tự suy
+                        # diễn cột "trông giống số" thành float, làm mất số 0 đứng đầu
+                        # (vd số điện thoại "0912345678" → 912345678.0). An toàn kể cả
+                        # khi cột không tồn tại trong file (bỏ qua, không lỗi).
+                        _id_cols = {c: str for c in
+                                   ('SỐ GIẤY TỜ', 'SỐ ĐIỆN THOẠI', 'SỐ PHÒNG', 'MÃ CHECKIN')}
+                        df = pd.read_excel(io.BytesIO(xlsx_bytes), dtype=_id_cols)
                         df_intl = df[df['LOẠI KHÁCH']=='Quốc tế'].reset_index(drop=True)
                         df_vn   = df[df['LOẠI KHÁCH']=='Việt Nam'].reset_index(drop=True)
 
@@ -2701,10 +2840,10 @@ if st.session_state.menu == "daily":
                         wb_vn   = split_wb(wb, 'Việt Nam')
 
                         progress.progress(50, text="Điền mẫu KBTT...")
-                        wb_kbtt, visa_unmatched, visa_source = build_kbtt(df_intl, visa_map=visa_map)
+                        wb_kbtt, visa_unmatched, visa_source, kbtt_invalid_ids = build_kbtt(df_intl, visa_map=visa_map)
 
                         progress.progress(65, text="Điền mẫu Thông báo lưu trú VNM...")
-                        wb_vnm, gks_cnt, gbl_cnt = build_vnm(df_vn)
+                        wb_vnm, gks_cnt, gbl_cnt, vnm_ward_unmatched = build_vnm(df_vn)
 
                         out_files[f'converted_{date_str}.xlsx']      = wb_to_bytes(wb)
                         out_files[f'KhachQuocTe_{date_str}.xlsx']    = wb_to_bytes(wb_intl)
@@ -2763,7 +2902,9 @@ if st.session_state.menu == "daily":
                                    'visa_source': visa_source,
                                    'visa_matched': len(df_intl) - len(visa_unmatched) if visa_source else 0,
                                    'visa_unmatched': visa_unmatched,
-                                   'visa_skipped_vn': visa_map.get('skipped_vn', 0) if isinstance(visa_map, dict) else 0})
+                                   'visa_skipped_vn': visa_map.get('skipped_vn', 0) if isinstance(visa_map, dict) else 0,
+                                   'kbtt_invalid_ids': kbtt_invalid_ids,
+                                   'vnm_ward_unmatched': vnm_ward_unmatched})
                 st.session_state['daily_results'] = _daily
 
                 def _mark_daily_done(state, _daily=_daily, has_xlsx=has_xlsx, has_dk14=has_dk14):
@@ -2805,6 +2946,13 @@ if st.session_state.menu == "daily":
                 if _dr.get('visa_unmatched'):
                     st.warning("⚠️ Không tìm thấy date visa cho (cột tạm trú để trống): "
                                + ", ".join(_dr['visa_unmatched']))
+            if _dr.get('kbtt_invalid_ids'):
+                st.warning("⚠️ Số giấy tờ chỉ là mã tạm (chưa có hộ chiếu thật) — đã để trống trong hồ sơ KBTT, "
+                           "cần bổ sung số hộ chiếu thật trước khi nộp cho: " + ", ".join(_dr['kbtt_invalid_ids']))
+            if _dr.get('vnm_ward_unmatched'):
+                st.warning("⚠️ Không tự tra được mã Phường/Xã (đã giữ nguyên chữ gốc trong file VNM, "
+                           "cần chọn lại theo danh mục): "
+                           + ", ".join(f"{n} ('{p}')" for n, p in _dr['vnm_ward_unmatched']))
 
             # ── Kiểm tra chất lượng dữ liệu trước khi nộp hồ sơ ──
             _iss = _dr.get('issues')
