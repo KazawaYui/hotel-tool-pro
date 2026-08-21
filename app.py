@@ -1351,10 +1351,7 @@ def build_dk14(xls_bytes):
         if dep: _deps.append(dep)
         room=_fmt_room(row[9]) if len(row) > 9 else ''
         notifier=str(row[10]).strip() if len(row) > 10 and row[10] else ''
-        # Mẫu ĐK14 mới (TT30/2026): cột K "Họ và tên người thông báo lưu trú;
-        # thời gian thông báo lưu trú" — gộp tên + ngày đến, không chỉ mỗi tên
-        arr_str = arr.strftime('%d/%m/%Y') if arr else ''
-        notify = f"{notifier}; {arr_str}" if (notifier and arr_str) else notifier
+        notify = notifier
         cols=[(1,i,ac),(2,name,al),(3,dob if gender=='Nam' else None,ac),
               (4,dob if gender=='Nữ' else None,ac),(5,country,ac),(6,passport,ac),
               (7,address,al),(8,arr,ac),(9,dep,ac),(10,room,ac),(11,notify,al),(12,'',ac),(13,'',ac)]
