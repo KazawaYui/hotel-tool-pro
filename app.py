@@ -3,7 +3,7 @@ import pandas as pd
 from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from copy import copy
-import xlrd, datetime, io, zipfile, base64, os, json, requests
+import xlrd, datetime, io, zipfile, base64, os, json
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.lib.colors import white, black
@@ -117,15 +117,6 @@ def _db_schema_ready():
             """))
             s.execute(_sql_text(
                 "CREATE INDEX IF NOT EXISTS idx_shift_handover_date ON shift_handover(shift_date)"))
-            s.execute(_sql_text("""
-                CREATE TABLE IF NOT EXISTS online_reviews (
-                    platform TEXT PRIMARY KEY,
-                    score TEXT,
-                    review_count TEXT,
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                    source TEXT NOT NULL DEFAULT 'manual'
-                )
-            """))
             s.commit()
         return True
     except Exception as e:
@@ -172,128 +163,6 @@ def compute_day_summary(df_entries):
     by_cat = df_entries['category'].value_counts().to_dict()
     rooms = sorted(set(str(r).strip() for r in df_entries['room'].dropna() if str(r).strip()))
     return {'total': len(df_entries), 'by_category': by_cat, 'rooms': rooms}
-
-# ── Đánh giá Online — điểm review Aquamarine trên TripAdvisor/Agoda/Expedia/
-# Booking.com/Google. TripAdvisor/Agoda/Expedia/Booking.com đều chặn truy cập
-# tự động (đã kiểm chứng: request/browser giả lập đều bị chặn hoặc reset kết
-# nối) nên KHÔNG tự lấy điểm được — staff bấm "Mở trang" xem điểm thật rồi
-# nhập tay. Riêng Google có Places API chính thức nên lấy tự động khi bấm nút.
-# Lưu trữ ưu tiên Supabase (bền vững qua redeploy, dùng lại kết nối của Sổ
-# giao ca), tự động rơi về lưu tạm trên đĩa nếu chưa cấu hình Supabase.
-REVIEW_PLATFORMS = [
-    {'key': 'google', 'label': 'Google', 'scale': '/5',
-     'url': 'https://www.google.com/search?q=Aquamarine+Cam+Ranh+by+Swandor+reviews'},
-    {'key': 'tripadvisor', 'label': 'TripAdvisor', 'scale': '/5',
-     'url': 'https://www.tripadvisor.com/Hotel_Review-g293928-d28030682-Reviews-Aquamarine_Cam_Ranh_By_Swandor-Nha_Trang_Khanh_Hoa_Province.html'},
-    {'key': 'agoda', 'label': 'Agoda', 'scale': '/10',
-     'url': 'https://www.agoda.com/aquamarine-resort-hotel-all-inlcusive/hotel/nha-trang-vn.html'},
-    {'key': 'expedia', 'label': 'Expedia', 'scale': '/5',
-     'url': 'https://www.expedia.com/Cam-Lam-Hotels-Aquamarine-Resort-Cam-Ranh-All-Inclusive.h101906140.Hotel-Information'},
-    {'key': 'booking', 'label': 'Booking.com', 'scale': '/10',
-     'url': 'https://www.booking.com/hotel/vn/aquamarine-resort-cam-ranh-all-inclusive.html'},
-]
-
-GOOGLE_PLACE_QUERY = "Aquamarine Cam Ranh by Swandor, Bai Dai, Cam Lam, Khanh Hoa, Vietnam"
-
-def _reviews_path():
-    os.makedirs(DATA_DIR, exist_ok=True)
-    return os.path.join(DATA_DIR, 'reviews.json')
-
-def _reviews_load_local():
-    p = _reviews_path()
-    if os.path.exists(p):
-        try:
-            with open(p, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
-
-def _reviews_save_local(platform, score, count, source):
-    data = _reviews_load_local()
-    data[platform] = {'score': score, 'count': count,
-                       'updated_at': now_vn().strftime('%d/%m/%Y %H:%M'), 'source': source}
-    try:
-        _atomic_write_json(_reviews_path(), data)
-    except Exception:
-        pass  # đĩa lỗi không được làm crash app — tính năng chỉ là tiện ích
-    return data
-
-def reviews_db_save(platform, score, count, source):
-    conn = _get_db()
-    with conn.session as s:
-        s.execute(_sql_text("""
-            INSERT INTO online_reviews (platform, score, review_count, updated_at, source)
-            VALUES (:p, :s, :c, now(), :src)
-            ON CONFLICT (platform) DO UPDATE SET
-                score = EXCLUDED.score, review_count = EXCLUDED.review_count,
-                updated_at = EXCLUDED.updated_at, source = EXCLUDED.source
-        """), {'p': platform, 's': score, 'c': count, 'src': source})
-        s.commit()
-
-def reviews_db_load():
-    conn = _get_db()
-    df = conn.query(
-        "SELECT platform, score, review_count, updated_at, source FROM online_reviews", ttl=0)
-    out = {}
-    for _, row in df.iterrows():
-        ts = row['updated_at']
-        try:
-            ts_vn = ts.tz_localize('UTC') if ts.tzinfo is None else ts
-            ts_str = ts_vn.astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M')
-        except Exception:
-            ts_str = str(ts)
-        out[row['platform']] = {'score': row['score'], 'count': row['review_count'],
-                                 'updated_at': ts_str, 'source': row['source']}
-    return out
-
-def reviews_load():
-    """Đọc điểm đánh giá đã lưu — ưu tiên Supabase (bền vững qua redeploy), tự
-    động rơi về lưu tạm trên đĩa nếu chưa cấu hình Supabase hoặc DB lỗi."""
-    if db_available():
-        try:
-            return reviews_db_load()
-        except Exception:
-            pass
-    return _reviews_load_local()
-
-def reviews_save(platform, score, count='', source='manual'):
-    if db_available():
-        try:
-            reviews_db_save(platform, score, count, source)
-        except Exception:
-            pass
-    # luôn ghi thêm bản local — vừa hiển thị ngay trong lượt chạy này, vừa làm
-    # phương án dự phòng nếu Supabase chưa cấu hình/lỗi
-    _reviews_save_local(platform, score, count, source)
-
-def fetch_google_rating():
-    """Lấy điểm + số lượt đánh giá Google qua Google Places API (Find Place
-    From Text) — CHỈ chạy khi staff bấm nút (không tự động mỗi lần tải trang,
-    tránh tốn quota/phí API). Cần st.secrets['google_places_api_key']; nếu
-    chưa cấu hình, trả lỗi rõ ràng để UI tự chuyển sang ô nhập tay như 4 nền
-    tảng còn lại — không crash app."""
-    try:
-        api_key = st.secrets.get('google_places_api_key')
-    except Exception:
-        api_key = None
-    if not api_key:
-        return None, "Chưa cấu hình Google Places API key trong Secrets (google_places_api_key)."
-    try:
-        resp = requests.get(
-            'https://maps.googleapis.com/maps/api/place/findplacefromtext/json',
-            params={'input': GOOGLE_PLACE_QUERY, 'inputtype': 'textquery',
-                    'fields': 'place_id,name,rating,user_ratings_total', 'key': api_key},
-            timeout=10)
-        data = resp.json()
-        if data.get('status') != 'OK' or not data.get('candidates'):
-            return None, f"Google API lỗi: {data.get('status')} {data.get('error_message', '')}".strip()
-        c = data['candidates'][0]
-        if c.get('rating') is None:
-            return None, "Không tìm thấy điểm đánh giá cho địa điểm này trên Google."
-        return {'score': str(c['rating']), 'count': str(c.get('user_ratings_total', ''))}, None
-    except Exception as e:
-        return None, f"Lỗi kết nối Google API: {e}"
 
 # Load app icon (favicon) từ icon.b64
 @st.cache_resource
@@ -2541,7 +2410,7 @@ if "menu" not in st.session_state:
 
 MENU_LABELS = {
     'dashboard': 'Tổng quan ca trực', 'daily': 'Xử lý hàng ngày', 'regcard': 'Regcard + ARR',
-    'handover': 'Sổ giao ca', 'reviews': 'Đánh giá Online', 'recon': 'Đối chiếu (cổng mật khẩu)',
+    'handover': 'Sổ giao ca', 'recon': 'Đối chiếu (cổng mật khẩu)',
     'recon_person': 'Đối chiếu người nước ngoài', 'recon_room': 'Đối chiếu hệ thống phòng',
 }
 
@@ -2601,10 +2470,6 @@ with st.sidebar:
               icon=":material/handshake:",
               type="primary" if st.session_state.menu == "handover" else "secondary",
               on_click=go_menu, args=("handover",))
-    st.button("Đánh giá Online", key="nav_reviews", use_container_width=True,
-              icon=":material/star:",
-              type="primary" if st.session_state.menu == "reviews" else "secondary",
-              on_click=go_menu, args=("reviews",))
 
     st.markdown('<div class="sb-section">Đối chiếu</div>', unsafe_allow_html=True)
     if st.session_state.get("recon_ok"):
@@ -3537,61 +3402,6 @@ if st.session_state.menu == "handover":
                                use_container_width=True, type="primary", key="dl_handover")
         else:
             st.info("Chưa có ghi chú nào trong ca này. Thêm ghi chú ở form phía trên.")
-
-
-if st.session_state.menu == "reviews":
-    st.markdown("### ⭐ Đánh giá Online — Aquamarine Cam Ranh by Swandor")
-    if not db_available():
-        st.caption("ℹ️ Chưa cấu hình Supabase — điểm đánh giá đang lưu tạm trên đĩa server, "
-                   "sẽ mất khi app deploy lại (xem hướng dẫn Supabase ở secrets.toml.example).")
-    st.caption("TripAdvisor/Agoda/Expedia/Booking.com đều chặn truy cập tự động (đã kiểm chứng) "
-               "nên bấm **🔗 Mở trang** để xem điểm thật rồi nhập tay bên dưới. Riêng Google lấy "
-               "tự động qua API khi bấm nút.")
-    st.write("")
-
-    _rv_saved = reviews_load()
-
-    for _plat in REVIEW_PLATFORMS:
-        _pk, _label, _scale, _url = _plat['key'], _plat['label'], _plat['scale'], _plat['url']
-        _cur = _rv_saved.get(_pk, {})
-        with st.container(border=True):
-            c1, c2, c3, c4 = st.columns([2, 1.3, 2, 1.3])
-            with c1:
-                st.markdown(f"**{_label}**")
-                if _cur.get('score'):
-                    _src_tag = "🤖 tự động" if _cur.get('source') == 'auto' else "✍️ nhập tay"
-                    st.markdown(f"## {_cur['score']}{_scale}")
-                    _cnt_txt = f" · {_cur['count']} lượt" if _cur.get('count') else ""
-                    st.caption(f"{_src_tag}{_cnt_txt} · cập nhật {_cur.get('updated_at', '')}")
-                else:
-                    st.caption("Chưa có dữ liệu")
-            with c2:
-                st.link_button("🔗 Mở trang", _url, use_container_width=True)
-            if _pk == 'google':
-                with c3:
-                    st.caption("Tự động qua Google Places API")
-                with c4:
-                    if st.button("🔄 Cập nhật", key=f"rv_g_fetch", use_container_width=True):
-                        _res, _err = fetch_google_rating()
-                        if _res:
-                            reviews_save('google', _res['score'], _res['count'], source='auto')
-                            st.success(f"Đã lấy điểm Google: {_res['score']}/5")
-                            st.rerun()
-                        else:
-                            st.error(_err)
-            else:
-                with c3:
-                    st.text_input("Điểm sau khi xem", key=f"rv_{_pk}_score",
-                                   placeholder=f"vd. 4.5{_scale}", label_visibility="collapsed")
-                with c4:
-                    if st.button("💾 Lưu", key=f"rv_{_pk}_save", use_container_width=True):
-                        _val = st.session_state.get(f"rv_{_pk}_score", "").strip()
-                        if _val:
-                            reviews_save(_pk, _val, source='manual')
-                            st.success(f"Đã lưu điểm {_label}: {_val}{_scale}")
-                            st.rerun()
-                        else:
-                            st.warning("Nhập điểm trước khi lưu.")
 
 
 # ── Đối chiếu: sub-menu 2 lựa chọn (có cổng mật khẩu riêng) ────────────────
