@@ -18,6 +18,19 @@ def now_vn():
 def today_vn():
     return now_vn().date()
 
+# ── Chế độ giao diện (sáng/tối) — chọn tay hoặc tự động theo giờ Việt Nam.
+# Mốc 6h-18h coi là ban ngày (giao diện sáng), ngoài khoảng đó là ban đêm
+# (giao diện tối) — có thể chỉnh 2 số này nếu muốn đổi mốc giờ.
+THEME_DAY_START_HOUR = 6
+THEME_NIGHT_START_HOUR = 18
+
+def _compute_effective_theme():
+    mode = st.session_state.get('theme_mode', 'auto')
+    if mode in ('light', 'dark'):
+        return mode
+    h = now_vn().hour
+    return 'light' if THEME_DAY_START_HOUR <= h < THEME_NIGHT_START_HOUR else 'dark'
+
 # ── Tiến độ ca làm việc — lưu trên đĩa server để SỐNG SÓT qua việc tải lại
 # trang (F5) trong ngày. LƯU Ý: file này KHÔNG bền vững qua các lần deploy lại
 # app (Streamlit Cloud xóa filesystem mỗi lần deploy) — chỉ chống việc mất dữ
@@ -2213,6 +2226,88 @@ if not st.session_state.get("_app_scripts_injected"):
         }
         .stApp *, #boot-splash {transition-duration: 0.01ms !important;}
     }
+
+    /* ── Chế độ tối (dark mode) — bật tay hoặc tự động theo giờ (xem hàm
+       _compute_effective_theme trong app.py), chuyển qua thuộc tính
+       data-theme trên thẻ <html> (script riêng, chạy lại mỗi lần rerun vì
+       giờ có thể thay đổi — khác khối CSS này chỉ tiêm 1 lần/phiên). LƯU Ý:
+       widget lõi của Streamlit (dropdown, ô ngày, và đặc biệt bảng dữ liệu
+       st.dataframe vẽ bằng canvas) lấy màu tĩnh từ .streamlit/config.toml
+       lúc server khởi động — CSS không với tới được để đổi màu nền/chữ bên
+       trong canvas đó, chỉ đổi được viền ngoài. ── */
+    html[data-theme="dark"] {
+        --neu-bg: #262a35; --neu-text: #e8eaf1; --neu-text2: #9aa2b6;
+        --neu-muted: #6d7488; --neu-accent: #8b98f5;
+        --neu-sl: #2f3444; --neu-sd: #181b23;
+        color: var(--neu-text);
+    }
+    /* .stApp tự khai báo lại --neu-* của riêng nó (bản sáng, cố định) ở khối
+       CSS phía trên — khai báo trực tiếp trên 1 phần tử luôn thắng giá trị kế
+       thừa từ tổ tiên dù tổ tiên có chọn lọc hơn, nên phải ghi đè lại ở đây
+       thay vì chỉ dựa vào kế thừa từ html. */
+    html[data-theme="dark"] .stApp {
+        --neu-bg: #262a35; --neu-text: #e8eaf1; --neu-text2: #9aa2b6;
+        --neu-muted: #6d7488; --neu-accent: #8b98f5;
+        --neu-sl: #2f3444; --neu-sd: #181b23;
+    }
+    html[data-theme="dark"] .stApp p,
+    html[data-theme="dark"] .stApp span,
+    html[data-theme="dark"] .stApp label,
+    html[data-theme="dark"] .stApp li,
+    html[data-theme="dark"] .stApp h1,
+    html[data-theme="dark"] .stApp h2,
+    html[data-theme="dark"] .stApp h3,
+    html[data-theme="dark"] .stApp h4,
+    html[data-theme="dark"] [data-testid="stMarkdownContainer"],
+    html[data-theme="dark"] [data-testid="stWidgetLabel"] p {
+        color: var(--neu-text);
+    }
+    html[data-theme="dark"] [data-testid="stCaptionContainer"],
+    html[data-theme="dark"] [data-testid="stCaptionContainer"] * {
+        color: var(--neu-text2) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stMainBlockContainer"] hr {
+        border-color: rgba(255,255,255,0.08);
+    }
+    /* Ô chọn (selectbox/multiselect) — bản Streamlit này dùng React Aria
+       combobox (không còn data-baseweb), phần danh sách mở ra được portal ra
+       ngoài .stApp nên các biến --neu-* phải khai báo ở html (phía trên),
+       không phải .stApp, mới "với" tới được. */
+    html[data-theme="dark"] div[data-testid="stSelectbox"] [role="group"] {
+        background: var(--neu-bg) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stSelectbox"] input[role="combobox"] {
+        color: var(--neu-text) !important;
+    }
+    html[data-theme="dark"] div:has(> [role="listbox"]) {
+        background: var(--neu-bg) !important;
+    }
+    html[data-theme="dark"] [role="option"] {
+        color: var(--neu-text) !important;
+    }
+    html[data-theme="dark"] [role="option"][aria-selected="true"],
+    html[data-theme="dark"] [role="option"]:hover {
+        background: rgba(255,255,255,0.06) !important;
+    }
+    html[data-theme="dark"] [data-testid="stDateInput"] input,
+    html[data-theme="dark"] .stTextInput input,
+    html[data-theme="dark"] .stNumberInput input,
+    html[data-theme="dark"] .stTextArea textarea {
+        color: var(--neu-text) !important;
+    }
+    html[data-theme="dark"] [data-testid="stCheckbox"] label,
+    html[data-theme="dark"] [data-testid="stRadio"] label {
+        color: var(--neu-text) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stExpander"] {
+        background: var(--neu-bg);
+    }
+    html[data-theme="dark"] div[data-testid="stExpander"] summary {
+        color: var(--neu-text) !important;
+    }
+    html[data-theme="dark"] div[data-testid="stDataFrame"] {
+        border: 1px solid rgba(255,255,255,0.08);
+    }
     `;
     doc.head.appendChild(css);
 
@@ -2402,6 +2497,18 @@ if not st.session_state.get("_app_scripts_injected"):
 </script>
 """, height=1)
 
+# ── Chế độ giao diện: áp dụng data-theme lên <html> mỗi lần rerun (khác khối
+# CSS phía trên chỉ tiêm 1 lần/phiên) — vì hiệu lực có thể đổi giữa các lần
+# rerun khi ở chế độ "Tự động" (qua giờ) hoặc khi người dùng đổi lựa chọn.
+if 'theme_mode' not in st.session_state:
+    st.session_state.theme_mode = 'auto'
+_effective_theme = _compute_effective_theme()
+st.iframe(f"""
+<script>
+window.parent.document.documentElement.setAttribute('data-theme', '{_effective_theme}');
+</script>
+""", height=1)
+
 
 
 # Menu selection (session state)
@@ -2486,6 +2593,12 @@ with st.sidebar:
                   icon=":material/lock:",
                   type="primary" if st.session_state.menu == "recon" else "secondary",
                   on_click=go_menu, args=("recon",))
+
+    st.markdown('<div class="sb-section">Giao diện</div>', unsafe_allow_html=True)
+    _theme_opts = {'auto': '🕐 Tự động (theo giờ)', 'light': '☀️ Sáng', 'dark': '🌙 Tối'}
+    st.selectbox("Chế độ giao diện", options=list(_theme_opts.keys()),
+                 format_func=lambda k: _theme_opts[k], key="theme_mode",
+                 label_visibility="collapsed")
 
     st.markdown('<div class="sb-status"><span class="sb-dot"></span>Sẵn sàng</div>', unsafe_allow_html=True)
 
