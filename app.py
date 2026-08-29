@@ -2303,6 +2303,24 @@ if not st.session_state.get("_app_scripts_injected"):
     html[data-theme="dark"] [data-testid="stNumberInputContainer"] {
         background: var(--neu-bg) !important;
     }
+    /* Nút -/+ của number input, icon mũi tên mở dropdown (selectbox), icon con
+       mắt hiện/ẩn mật khẩu — đều là icon "currentColor" nhưng bản thân nút
+       chứa nó tự đặt lại màu chữ tĩnh (xám tối) không kế thừa được từ html,
+       khiến icon gần như biến mất trên nền tối. */
+    html[data-theme="dark"] [data-testid="stNumberInputStepDown"],
+    html[data-theme="dark"] [data-testid="stNumberInputStepUp"],
+    html[data-theme="dark"] button[aria-label="Open"],
+    html[data-theme="dark"] button[aria-label="Show password"],
+    html[data-theme="dark"] button[aria-label="Hide password"] {
+        color: var(--neu-text2) !important;
+    }
+    /* Nút "Browse files" của file uploader render trực tiếp ngoài .stButton
+       (không có class .stButton bao ngoài) nên không ăn theo rule nút thường
+       — vẫn giữ nền sáng tĩnh + chữ gần trắng chồng lên nhau, gần như vô hình. */
+    html[data-theme="dark"] div[data-testid="stFileUploader"] button {
+        background: var(--neu-bg) !important; color: var(--neu-text) !important;
+        box-shadow: -4px -4px 9px var(--neu-sl), 4px 4px 9px var(--neu-sd) !important;
+    }
     html[data-theme="dark"] [data-testid="stCheckbox"] label,
     html[data-theme="dark"] [data-testid="stRadio"] label {
         color: var(--neu-text) !important;
