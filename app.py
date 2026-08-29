@@ -2295,6 +2295,14 @@ if not st.session_state.get("_app_scripts_injected"):
     html[data-theme="dark"] .stTextArea textarea {
         color: var(--neu-text) !important;
     }
+    /* Khung gốc (root) của text input/number input/textarea giữ nguyên nền
+       sáng tĩnh từ config.toml — không lộ ra vì ô input con phủ kín lên trên,
+       TRỪ number input có nút -/+ chừa hở góc, lộ nền sáng ra ngoài. */
+    html[data-theme="dark"] [data-testid="stTextInputRootElement"],
+    html[data-theme="dark"] [data-testid="stTextAreaRootElement"],
+    html[data-theme="dark"] [data-testid="stNumberInputContainer"] {
+        background: var(--neu-bg) !important;
+    }
     html[data-theme="dark"] [data-testid="stCheckbox"] label,
     html[data-theme="dark"] [data-testid="stRadio"] label {
         color: var(--neu-text) !important;
