@@ -1280,9 +1280,13 @@ def build_vnm(df_vn):
             sg=sg_raw; lg='4 - Hộ chiếu'
         else:
             sg=sg_raw; lg=LOAI_GIAY.get(lg_raw,lg_raw)
-        tinh_raw=str(row.get('TP/TỈNH','')).strip()
+        # Dùng _fmt_room (không phải str(x).strip() thẳng) vì ô trống trong
+        # Excel đọc qua pandas ra NaN (float) — str(nan)='nan' vẫn là chuỗi
+        # KHÔNG rỗng nên lọt qua điều kiện "if tinh_raw" và bị tra cứu/in ra
+        # chữ "nan" thẳng vào file VNM, dù thực chất khách đó không có dữ liệu.
+        tinh_raw=_fmt_room(row.get('TP/TỈNH',''))
         tinh=lookup_province_vnm(tinh_raw) if tinh_raw else ''
-        phuong_raw=str(row.get('PHƯỜNG/XÃ','')).strip()
+        phuong_raw=_fmt_room(row.get('PHƯỜNG/XÃ',''))
         phuong, ward_ok, inferred_prov = lookup_ward_vnm(phuong_raw, tinh or None)
         if phuong_raw and not ward_ok:
             ward_unmatched.append((ht, phuong_raw))
