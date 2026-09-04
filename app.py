@@ -209,6 +209,14 @@ def _dark_bg_data_uri():
     with open(path, 'r') as f:
         return 'data:image/jpeg;base64,' + f.read().strip()
 
+@st.cache_resource
+def _light_bg_data_uri():
+    """Ảnh nền chế độ sáng (mèo con chui trong túi giấy) — cùng cơ chế với
+    _dark_bg_data_uri() ở trên."""
+    path = os.path.join(os.path.dirname(__file__), 'bg_light.b64')
+    with open(path, 'r') as f:
+        return 'data:image/jpeg;base64,' + f.read().strip()
+
 # ── Lookup tables ─────────────────────────────────────────────────────────
 # Full nationality mapping (normalized keys → "CODE - Name") — 350 entries
 import unicodedata as _ud, re as _re
@@ -2023,6 +2031,17 @@ if not st.session_state.get("_app_scripts_injected"):
         --r-lg: 22px; --r-md: 16px; --r-pill: 999px;
         background: var(--neu-bg);
     }
+    /* Ảnh nền chế độ sáng (mèo con trong túi giấy) — mặc định light mode
+       không có data-theme (chỉ dark mode mới gắn thuộc tính), nên áp dụng
+       khi KHÔNG phải dark; cùng cách phủ gradient nhạt như bản tối để chữ/
+       thẻ nổi vẫn đọc rõ. */
+    html:not([data-theme="dark"]) .stApp {
+        background-image: linear-gradient(rgba(230,233,239,0.90), rgba(230,233,239,0.95)),
+                           url("__LIGHT_BG_DATA_URI__");
+        background-size: cover;
+        background-position: center center;
+        background-repeat: no-repeat;
+    }
 
     /* ── Sidebar: hòa cùng nền, nav dạng pill lõm khi active ── */
     section[data-testid="stSidebar"] {
@@ -2560,7 +2579,9 @@ if not st.session_state.get("_app_scripts_injected"):
 })();
 </script>
 """
-    st.iframe(_boot_script.replace('__DARK_BG_DATA_URI__', _dark_bg_data_uri()), height=1)
+    _boot_script = _boot_script.replace('__DARK_BG_DATA_URI__', _dark_bg_data_uri())
+    _boot_script = _boot_script.replace('__LIGHT_BG_DATA_URI__', _light_bg_data_uri())
+    st.iframe(_boot_script, height=1)
 
 # ── Chế độ giao diện: áp dụng data-theme lên <html> mỗi lần rerun (khác khối
 # CSS phía trên chỉ tiêm 1 lần/phiên) — vì hiệu lực có thể đổi giữa các lần
