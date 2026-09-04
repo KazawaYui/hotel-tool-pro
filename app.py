@@ -1020,7 +1020,25 @@ def process_xlsx(xlsx_bytes, rate):
 
     # Với mỗi cột template, tìm cột nguồn tương ứng theo tên
     headers = [ws.cell(1, ci).value for ci in range(1, n_cols + 1)]
-    col_src = [src_map.get(_norm_nat(h)) if h else None for h in headers]
+    headers_norm = [_norm_nat(h) if h else None for h in headers]
+    col_src = [src_map.get(hn) if hn else None for hn in headers_norm]
+    # Khớp tên tuyệt đối thất bại với 1 số cột nếu file nguồn đặt tên rút gọn
+    # hơn mẫu QLLT (vd nguồn "CỬA KHẨU" ↔ mẫu "CỬA KHẨU NHẬP CẢNH", nguồn
+    # "TẠM TRÚ" ↔ mẫu "TẠM TRÚ ĐẾN NGÀY") → mất trắng dữ liệu cột đó dù có
+    # trong file nguồn. Với cột còn thiếu, thử khớp NỚI LỎNG: 1 trong 2 tên là
+    # phần đầu của tên còn lại (đủ dài để tránh khớp nhầm với tên ngắn/mơ hồ),
+    # mỗi cột nguồn chỉ được dùng khớp 1 lần để tránh nhầm giữa 2 cột đích.
+    _used_src_cols = {c for c in col_src if c}
+    for i, hn in enumerate(headers_norm):
+        if col_src[i] or not hn:
+            continue
+        for src_key, src_col in src_map.items():
+            if src_col in _used_src_cols:
+                continue
+            if len(src_key) >= 4 and (hn.startswith(src_key) or src_key.startswith(hn)):
+                col_src[i] = src_col
+                _used_src_cols.add(src_col)
+                break
     don_gia_idx = next((i + 1 for i, h in enumerate(headers) if h and _norm_nat(h) == _norm_nat('ĐƠN GIÁ')), None)
 
     ws.delete_rows(2)  # bỏ dòng mẫu
