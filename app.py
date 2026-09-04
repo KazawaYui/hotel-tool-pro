@@ -201,6 +201,14 @@ def load_template(name):
     with open(path, 'r') as f:
         return base64.b64decode(f.read())
 
+@st.cache_resource
+def _dark_bg_data_uri():
+    """Ảnh nền chế độ tối (mèo con ngủ) — nhúng thẳng base64 vào CSS, cùng
+    kiểu với load_template() ở trên, không cần hosting/URL ngoài."""
+    path = os.path.join(os.path.dirname(__file__), 'bg_dark.b64')
+    with open(path, 'r') as f:
+        return 'data:image/jpeg;base64,' + f.read().strip()
+
 # ── Lookup tables ─────────────────────────────────────────────────────────
 # Full nationality mapping (normalized keys → "CODE - Name") — 350 entries
 import unicodedata as _ud, re as _re
@@ -1995,7 +2003,7 @@ if not st.session_state.get("_app_scripts_injected"):
     # + màn khởi động) gộp trong 1 lệnh st.iframe duy nhất, tiêm đúng 1 lần
     # mỗi phiên — mọi animation chỉ dùng transform/opacity (chạy trên GPU
     # compositor), không backdrop-filter, không chạy lại khi rerun.
-    st.iframe("""
+    _boot_script = """
 <script>
 (function(){
     var doc = window.parent.document;
@@ -2271,6 +2279,14 @@ if not st.session_state.get("_app_scripts_injected"):
         --neu-bg: #262a35; --neu-text: #e8eaf1; --neu-text2: #9aa2b6;
         --neu-muted: #6d7488; --neu-accent: #8b98f5;
         --neu-sl: #2f3444; --neu-sd: #181b23;
+        /* Ảnh nền mèo con ngủ — phủ thêm lớp gradient tối cùng tông --neu-bg
+           lên trên để chữ/thẻ nổi vẫn đọc rõ, ảnh chỉ hiện mờ mờ làm điểm nhấn
+           chứ không cạnh tranh độ tương phản với nội dung. */
+        background-image: linear-gradient(rgba(38,42,53,0.90), rgba(38,42,53,0.95)),
+                           url("__DARK_BG_DATA_URI__");
+        background-size: cover;
+        background-position: center center;
+        background-repeat: no-repeat;
     }
     html[data-theme="dark"] .stApp p,
     html[data-theme="dark"] .stApp span,
@@ -2543,7 +2559,8 @@ if not st.session_state.get("_app_scripts_injected"):
     }
 })();
 </script>
-""", height=1)
+"""
+    st.iframe(_boot_script.replace('__DARK_BG_DATA_URI__', _dark_bg_data_uri()), height=1)
 
 # ── Chế độ giao diện: áp dụng data-theme lên <html> mỗi lần rerun (khác khối
 # CSS phía trên chỉ tiêm 1 lần/phiên) — vì hiệu lực có thể đổi giữa các lần
