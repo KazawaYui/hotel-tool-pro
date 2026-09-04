@@ -2036,11 +2036,16 @@ if not st.session_state.get("_app_scripts_injected"):
        khi KHÔNG phải dark; cùng cách phủ gradient nhạt như bản tối để chữ/
        thẻ nổi vẫn đọc rõ. */
     html:not([data-theme="dark"]) .stApp {
-        background-image: linear-gradient(rgba(230,233,239,0.90), rgba(230,233,239,0.95)),
+        /* Chữ nhãn mục (.section-label) và vài dòng caption màu xám nhạt nổi
+           trực tiếp trên nền (không nằm trong thẻ nền đặc) nên độ mờ ảnh ở
+           chế độ sáng cần giữ cao hơn bản tối 1 chút mới đủ tương phản đọc
+           được — bản tối chữ trắng nên không bị vấn đề này. */
+        background-image: linear-gradient(rgba(230,233,239,0.55), rgba(230,233,239,0.75)),
                            url("__LIGHT_BG_DATA_URI__");
         background-size: cover;
         background-position: center center;
         background-repeat: no-repeat;
+        background-attachment: fixed;
     }
 
     /* ── Sidebar: hòa cùng nền, nav dạng pill lõm khi active ── */
@@ -2299,13 +2304,15 @@ if not st.session_state.get("_app_scripts_injected"):
         --neu-muted: #6d7488; --neu-accent: #8b98f5;
         --neu-sl: #2f3444; --neu-sd: #181b23;
         /* Ảnh nền mèo con ngủ — phủ thêm lớp gradient tối cùng tông --neu-bg
-           lên trên để chữ/thẻ nổi vẫn đọc rõ, ảnh chỉ hiện mờ mờ làm điểm nhấn
-           chứ không cạnh tranh độ tương phản với nội dung. */
-        background-image: linear-gradient(rgba(38,42,53,0.90), rgba(38,42,53,0.95)),
+           lên trên để chữ/thẻ nổi vẫn đọc rõ (bản thân thẻ/sidebar/nút đã có
+           nền đặc riêng nên luôn đọc được dù độ mờ ảnh nền thế nào — độ mờ ở
+           đây chỉ ảnh hưởng phần khoảng trống giữa các thẻ). */
+        background-image: linear-gradient(rgba(38,42,53,0.35), rgba(38,42,53,0.55)),
                            url("__DARK_BG_DATA_URI__");
         background-size: cover;
         background-position: center center;
         background-repeat: no-repeat;
+        background-attachment: fixed;
     }
     html[data-theme="dark"] .stApp p,
     html[data-theme="dark"] .stApp span,
