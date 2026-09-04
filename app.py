@@ -201,6 +201,22 @@ def load_template(name):
     with open(path, 'r') as f:
         return base64.b64decode(f.read())
 
+@st.cache_resource
+def _dark_bg_data_uri():
+    """Ảnh nền chế độ tối (mèo con ngủ) — nhúng thẳng base64 vào CSS, cùng
+    kiểu với load_template() ở trên, không cần hosting/URL ngoài."""
+    path = os.path.join(os.path.dirname(__file__), 'bg_dark.b64')
+    with open(path, 'r') as f:
+        return 'data:image/jpeg;base64,' + f.read().strip()
+
+@st.cache_resource
+def _light_bg_data_uri():
+    """Ảnh nền chế độ sáng (mèo con chui trong túi giấy) — cùng cơ chế với
+    _dark_bg_data_uri() ở trên."""
+    path = os.path.join(os.path.dirname(__file__), 'bg_light.b64')
+    with open(path, 'r') as f:
+        return 'data:image/jpeg;base64,' + f.read().strip()
+
 # ── Lookup tables ─────────────────────────────────────────────────────────
 # Full nationality mapping (normalized keys → "CODE - Name") — 350 entries
 import unicodedata as _ud, re as _re
@@ -1995,7 +2011,7 @@ if not st.session_state.get("_app_scripts_injected"):
     # + màn khởi động) gộp trong 1 lệnh st.iframe duy nhất, tiêm đúng 1 lần
     # mỗi phiên — mọi animation chỉ dùng transform/opacity (chạy trên GPU
     # compositor), không backdrop-filter, không chạy lại khi rerun.
-    st.iframe("""
+    _boot_script = """
 <script>
 (function(){
     var doc = window.parent.document;
@@ -2014,6 +2030,22 @@ if not st.session_state.get("_app_scripts_injected"):
         --neu-sl: rgba(255,255,255,0.85); --neu-sd: rgba(163,177,198,0.55);
         --r-lg: 22px; --r-md: 16px; --r-pill: 999px;
         background: var(--neu-bg);
+    }
+    /* Ảnh nền chế độ sáng (mèo con trong túi giấy) — mặc định light mode
+       không có data-theme (chỉ dark mode mới gắn thuộc tính), nên áp dụng
+       khi KHÔNG phải dark; cùng cách phủ gradient nhạt như bản tối để chữ/
+       thẻ nổi vẫn đọc rõ. */
+    html:not([data-theme="dark"]) .stApp {
+        /* Chữ nhãn mục (.section-label) và vài dòng caption màu xám nhạt nổi
+           trực tiếp trên nền (không nằm trong thẻ nền đặc) nên độ mờ ảnh ở
+           chế độ sáng cần giữ cao hơn bản tối 1 chút mới đủ tương phản đọc
+           được — bản tối chữ trắng nên không bị vấn đề này. */
+        background-image: linear-gradient(rgba(230,233,239,0.55), rgba(230,233,239,0.75)),
+                           url("__LIGHT_BG_DATA_URI__");
+        background-size: cover;
+        background-position: center center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
     }
 
     /* ── Sidebar: hòa cùng nền, nav dạng pill lõm khi active ── */
@@ -2271,6 +2303,16 @@ if not st.session_state.get("_app_scripts_injected"):
         --neu-bg: #262a35; --neu-text: #e8eaf1; --neu-text2: #9aa2b6;
         --neu-muted: #6d7488; --neu-accent: #8b98f5;
         --neu-sl: #2f3444; --neu-sd: #181b23;
+        /* Ảnh nền mèo con ngủ — phủ thêm lớp gradient tối cùng tông --neu-bg
+           lên trên để chữ/thẻ nổi vẫn đọc rõ (bản thân thẻ/sidebar/nút đã có
+           nền đặc riêng nên luôn đọc được dù độ mờ ảnh nền thế nào — độ mờ ở
+           đây chỉ ảnh hưởng phần khoảng trống giữa các thẻ). */
+        background-image: linear-gradient(rgba(38,42,53,0.35), rgba(38,42,53,0.55)),
+                           url("__DARK_BG_DATA_URI__");
+        background-size: cover;
+        background-position: center center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
     }
     html[data-theme="dark"] .stApp p,
     html[data-theme="dark"] .stApp span,
@@ -2543,7 +2585,10 @@ if not st.session_state.get("_app_scripts_injected"):
     }
 })();
 </script>
-""", height=1)
+"""
+    _boot_script = _boot_script.replace('__DARK_BG_DATA_URI__', _dark_bg_data_uri())
+    _boot_script = _boot_script.replace('__LIGHT_BG_DATA_URI__', _light_bg_data_uri())
+    st.iframe(_boot_script, height=1)
 
 # ── Chế độ giao diện: áp dụng data-theme lên <html> mỗi lần rerun (khác khối
 # CSS phía trên chỉ tiêm 1 lần/phiên) — vì hiệu lực có thể đổi giữa các lần
