@@ -4031,6 +4031,18 @@ if st.session_state.menu == "daily":
 
                         progress.progress(10, text="Quy đổi tỷ giá...")
                         wb, conv = process_xlsx(xlsx_bytes, rate)
+
+                        # Chia giá phòng connecting SAU khi đã quy đổi tỷ giá — ĐƠN GIÁ
+                        # nguồn có thể vẫn ở dạng ngoại tệ nhỏ (VD "278.35" EUR) lúc này
+                        # còn là số NGUYÊN chưa quy đổi; chia trước rồi mới quy đổi từng
+                        # nửa riêng lẻ sẽ làm tròn 2 lần → sai số hàng nghìn đồng so với
+                        # quy đổi trước rồi mới chia (đã xảy ra thực tế: 278.35 EUR bị cắt
+                        # về 278, chia 139/139, mỗi bên quy đổi ra ~4.150.550đ — lệch hẳn
+                        # so với quy đổi cả 278.35 rồi mới chia đúng 8.313.043 → chia đôi).
+                        progress.progress(15, text="Chia giá phòng connecting...")
+                        wb_bytes_conv = wb_to_bytes(wb)
+                        wb_bytes_conv, cnt_report = split_connecting_room_prices(wb_bytes_conv)
+                        wb = load_workbook(io.BytesIO(wb_bytes_conv))
                         # Ép các cột dạng mã đọc bằng chuỗi — nếu không, pandas tự suy
                         # diễn cột "trông giống số" thành float, làm mất số 0 đứng đầu
                         # (vd số điện thoại "0912345678" → 912345678.0). An toàn kể cả
