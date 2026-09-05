@@ -3897,7 +3897,7 @@ if st.session_state.menu == "daily":
         col_n, col_c = st.columns(2)
         with col_n:
             dk_notifier = st.text_input(
-                "Người thông báo lưu trú", value="Ngô Thanh Bình", key="dk_notifier",
+                "Người thông báo lưu trú", value="Đỗ Duy Tân", key="dk_notifier",
                 help="Điền vào cột (11) khi file nguồn không có sẵn tên. Đổi được tuỳ ý.")
         with col_c:
             dk_checkin = st.date_input(
