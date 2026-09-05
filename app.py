@@ -2086,8 +2086,15 @@ if not st.session_state.get("_app_scripts_injected"):
     .sb-brand-sub {color: var(--tx3); font-size: 0.7rem; margin-top: 1px;}
     .sb-section {color: var(--tx3); font-size: 0.6rem; font-weight: 800;
         text-transform: uppercase; letter-spacing: 0.1em; padding: 0.8rem 0.55rem 0.3rem;}
+    .sb-user {display:flex; align-items:center; gap:9px; padding-top:0.8rem;
+        margin-top:0.5rem; border-top: 1px solid var(--line2);}
+    .sb-av {width:28px; height:28px; border-radius:50%; flex-shrink:0; color:#fff;
+        background: linear-gradient(135deg,#818cf8,#c084fc);
+        display:flex; align-items:center; justify-content:center; font-size:0.72rem; font-weight:760;}
+    .sb-un {font-size:0.76rem; font-weight:680; color: var(--tx);}
+    .sb-ur {font-size:0.66rem; color: var(--tx3);}
     .sb-status {display:flex; align-items:center; gap:7px; color: var(--tx3);
-        font-size:0.7rem; padding-top:0.7rem; margin-top:0.4rem; border-top: 1px solid var(--line2);}
+        font-size:0.68rem; padding-top:0.55rem;}
     .sb-dot {position:relative; width:7px; height:7px; border-radius:50%; background:#34d399; flex-shrink:0;}
     .sb-dot::after {content:""; position:absolute; inset:0; border-radius:50%; background:#34d399;
         animation: pulse 2.2s var(--ease) infinite;}
@@ -2131,6 +2138,44 @@ if not st.session_state.get("_app_scripts_injected"):
     }
     .welcome-sub {color: var(--tx3); font-size: 0.76rem; margin-top: 2px;}
 
+    /* ── Top bar: breadcrumb + trạng thái ── */
+    .tan-topbar {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        font-size: 0.82rem; color: var(--tx); padding: 0.15rem 0 0.15rem;
+    }
+    .tan-crumb {color: var(--tx3);}
+    .tan-sep {color: var(--tx3); opacity: .6;}
+    .tan-topbar-r {margin-left: auto; display: flex; align-items: center; gap: 7px;}
+    .tan-h1 {font-size: 1.35rem; font-weight: 790; letter-spacing: -.03em; color: var(--tx);}
+    .tan-h1sub {font-size: 0.78rem; color: var(--tx3); margin: 2px 0 0.7rem;}
+
+    /* ── Thẻ số liệu nhỏ (bento) ── */
+    .kpi-lab {font-size: 0.76rem; color: var(--tx2); font-weight: 640;
+        display: flex; align-items: center; gap: 8px;}
+    .kpi-ic {width: 26px; height: 26px; border-radius: 8px; display: inline-flex;
+        align-items: center; justify-content: center; font-size: 0.78rem; background: var(--chip);}
+    .kpi-ic.err {background: rgba(239,68,68,.14);}
+    .kpi-ic.ok {background: rgba(16,185,129,.14);}
+    .kpi-ic.acc {background: rgba(99,91,240,.14);}
+    .kpi-val {font-size: 1.85rem; font-weight: 800; letter-spacing: -.035em;
+        line-height: 1; margin-top: 1.5rem; color: var(--tx); font-variant-numeric: tabular-nums;}
+    .kpi-val.err {color: var(--err);}
+    .kpi-sub {font-size: 0.7rem; color: var(--tx3); font-weight: 620; margin-top: .45rem;}
+
+    /* ── Panel (thẻ có tiêu đề + danh sách dòng) ── */
+    .pan-h {display: flex; align-items: center; gap: 8px; padding-bottom: .55rem;
+        margin-bottom: .5rem; border-bottom: 1px solid var(--line2);}
+    .pan-t {font-size: 0.85rem; font-weight: 730; letter-spacing: -.015em; color: var(--tx);}
+    .pan-row {display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.82rem;}
+    .pan-rt {color: var(--tx); font-weight: 560;}
+    .pan-mut {font-size: 0.7rem; color: var(--tx3); font-weight: 620;}
+    .pan-line {display: flex; align-items: center; justify-content: space-between;
+        gap: 10px; padding: .48rem 0; font-size: 0.8rem; color: var(--tx2);
+        border-bottom: 1px solid var(--line2);}
+    .pan-line:last-child {border-bottom: 0;}
+    .pan-v {font-weight: 750; color: var(--tx); font-variant-numeric: tabular-nums;}
+    .pan-empty {font-size: 0.78rem; color: var(--tx3); line-height: 1.55; padding: .3rem 0 .7rem;}
+
     /* ── Nhãn mục ── */
     .section-label {
         font-size: 0.63rem; font-weight: 800; color: var(--tx3);
@@ -2153,7 +2198,8 @@ if not st.session_state.get("_app_scripts_injected"):
     /* ── Thẻ HERO (ảnh mèo làm nền, phủ tối dần để chữ luôn nổi) ── */
     .tan-hero {
         position: relative; overflow: hidden; color: #fff;
-        border-radius: var(--r-lg); padding: 1.15rem 1.35rem; margin-bottom: 0.9rem;
+        border-radius: var(--r-lg); padding: 1.15rem 1.35rem;
+        min-height: 186px; display: flex; flex-direction: column; justify-content: center;
         background-image: linear-gradient(100deg, rgba(22,18,48,.95) 0%, rgba(34,26,66,.74) 46%, rgba(48,36,84,.26) 100%),
                            url("__LIGHT_BG_DATA_URI__");
         background-size: cover, cover; background-position: center, center right;
@@ -2540,6 +2586,9 @@ if st.session_state.get('progress_date') != today_vn().isoformat():
     st.session_state.nav_log = list(st.session_state.progress.get('nav_sequence', []))
     st.session_state.handover = {'entries': list(st.session_state.progress.get('handover_entries', []))}
 
+def set_theme_mode(mode):
+    st.session_state.theme_mode = mode
+
 def go_menu(name):
     st.session_state.menu = name
     # Ghi lại TRÌNH TỰ chuyển màn hình (chỉ tên công cụ + giờ) để nhận diện quy
@@ -2606,36 +2655,37 @@ with st.sidebar:
                   on_click=go_menu, args=("recon",))
 
     st.markdown('<div class="sb-section">Giao diện</div>', unsafe_allow_html=True)
-    _theme_opts = {'auto': '🕐 Tự động (theo giờ)', 'light': '☀️ Sáng', 'dark': '🌙 Tối'}
-    st.selectbox("Chế độ giao diện", options=list(_theme_opts.keys()),
-                 format_func=lambda k: _theme_opts[k], key="theme_mode",
-                 label_visibility="collapsed")
+    # Nút gạt 3 trạng thái (segmented) thay cho ô chọn — nhìn gọn và bấm 1 lần
+    _tcols = st.columns(3, gap="small")
+    for _tci, (_tk, _tlbl) in enumerate([('auto', 'Tự động'), ('light', 'Sáng'), ('dark', 'Tối')]):
+        _tcols[_tci].button(_tlbl, key=f"theme_btn_{_tk}", use_container_width=True,
+                            type="primary" if st.session_state.get('theme_mode') == _tk else "secondary",
+                            on_click=set_theme_mode, args=(_tk,))
 
-    st.markdown('<div class="sb-status"><span class="sb-dot"></span>Sẵn sàng</div>', unsafe_allow_html=True)
+    _sb_shift = ('Ca sáng · 06:00–14:00' if 6 <= now_vn().hour < 14
+                 else 'Ca chiều · 14:00–22:00' if 14 <= now_vn().hour < 22 else 'Ca đêm · 22:00–06:00')
+    _sb_store = 'Supabase đã kết nối' if db_available() else 'Lưu tạm trên máy chủ'
+    st.markdown(
+        f'<div class="sb-user"><div class="sb-av">T</div>'
+        f'<div><div class="sb-un">Tân</div><div class="sb-ur">{_sb_shift}</div></div></div>'
+        f'<div class="sb-status"><span class="sb-dot"></span>{_sb_store}</div>',
+        unsafe_allow_html=True)
 
-st.markdown('''
-<div class="welcome-banner">
-    <div class="welcome-emoji">
-        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            <g>
-                <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd"/>
-                <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffb3d1" transform="rotate(72 50 50)"/>
-                <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd" transform="rotate(144 50 50)"/>
-                <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffb3d1" transform="rotate(216 50 50)"/>
-                <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd" transform="rotate(288 50 50)"/>
-                <circle cx="50" cy="50" r="7" fill="#fff6ee"/>
-                <circle cx="47" cy="47" r="1.3" fill="#ffcf6b"/>
-                <circle cx="53" cy="47" r="1.3" fill="#ffcf6b"/>
-                <circle cx="50" cy="52.5" r="1.3" fill="#ffcf6b"/>
-            </g>
-        </svg>
-    </div>
-    <div>
-        <div class="welcome-title">Welcome, Tân</div>
-        <div class="welcome-sub">Front Office toolkit · Tân Hotel</div>
-    </div>
-</div>
-''', unsafe_allow_html=True)
+# ── Thanh top bar: breadcrumb + trạng thái + lối tắt (thay banner "Welcome") ──
+_page_name = MENU_LABELS.get(st.session_state.menu, 'Tổng quan ca trực')
+_tb_now = now_vn()
+_tb_chip = ('<span class="tan-chip ok">● Supabase</span>' if db_available()
+            else '<span class="tan-chip">● Lưu tạm trên máy chủ</span>')
+_tbl, _tbr = st.columns([5, 1.4], vertical_alignment="center")
+_tbl.markdown(
+    f'<div class="tan-topbar"><span class="tan-crumb">Tân Hotel</span>'
+    f'<span class="tan-sep">/</span><b>{_page_name}</b>'
+    f'<span class="tan-topbar-r">{_tb_chip}'
+    f'<span class="tan-chip">📅 {_tb_now.strftime("%d/%m/%Y")}</span></span></div>',
+    unsafe_allow_html=True)
+_tbr.button("⚡ Xử lý hàng ngày", key="tb_go_daily", use_container_width=True,
+            type="primary", on_click=go_menu, args=("daily",))
+st.write("")
 
 # ── Tạo file ARR từ file Arrival (Book) Smile ──────────────────────────────
 def build_arr(book_bytes):
@@ -2856,6 +2906,7 @@ def build_arr(book_bytes):
 if st.session_state.menu == "dashboard":
     _now = now_vn()
     _thu = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][_now.weekday()]
+    _shift = ('Ca sáng' if 6 <= _now.hour < 14 else 'Ca chiều' if 14 <= _now.hour < 22 else 'Ca đêm')
 
     _d = st.session_state.get('daily_results')
     _rc = st.session_state.get('rc_results')
@@ -2869,8 +2920,11 @@ if st.session_state.menu == "dashboard":
     _p_rp = _ptasks.get('recon_person', {})
     _p_rr = _ptasks.get('recon_room', {})
 
-    # ── Thẻ HERO: số khách hôm nay đặt trên nền ảnh (phủ tối dần nên chữ
-    # luôn nổi ở cả 2 chế độ sáng/tối) ──
+    st.markdown(f'<div class="tan-h1">Tổng quan ca trực</div>'
+                f'<div class="tan-h1sub">{_thu}, {_now.strftime("%d/%m/%Y")} · {_shift} · '
+                f'cập nhật {_now.strftime("%H:%M")}</div>', unsafe_allow_html=True)
+
+    # Số liệu khách: ưu tiên kết quả phiên hiện tại, dự phòng bản đã lưu trong ngày
     if _d and _d.get('has_xlsx'):
         _iss_d = _d.get('issues')
         _n_red = int((_iss_d['Mức độ'] == '🔴').sum()) if _iss_d is not None and len(_iss_d) else 0
@@ -2882,94 +2936,142 @@ if st.session_state.menu == "dashboard":
     else:
         _hero = None
 
-    if _hero:
-        _stale_txt = (f" · số liệu lúc {_hero['stale']} (phiên trước trong ngày)"
-                      if _hero['stale'] else " · cập nhật trong phiên này")
-        _red_html = (f'<div><div class="tan-hero-k">⚠️ Lỗi dữ liệu</div>'
-                     f'<div class="tan-hero-v">{_hero["red"]}</div></div>') if _hero['red'] else (
-                    '<div><div class="tan-hero-k">✅ Kiểm tra dữ liệu</div>'
-                    '<div class="tan-hero-v">Sạch</div></div>')
-        st.markdown(
-            '<div class="tan-hero">'
-            '<div class="tan-hero-lab">🛏️ Tổng khách lưu trú hôm nay</div>'
-            f'<div class="tan-hero-val">{_hero["total"]}</div>'
-            f'<div class="tan-hero-sub">{_thu}, {_now.strftime("%d/%m/%Y")}{_stale_txt}</div>'
-            '<div class="tan-hero-split">'
-            f'<div><div class="tan-hero-k">🌍 Quốc tế</div><div class="tan-hero-v">{_hero["intl"]}</div></div>'
-            f'<div><div class="tan-hero-k">🇻🇳 Việt Nam</div><div class="tan-hero-v">{_hero["vn"]}</div></div>'
-            f'{_red_html}'
-            '</div></div>', unsafe_allow_html=True)
-    else:
-        st.markdown(
-            '<div class="tan-hero">'
-            '<div class="tan-hero-lab">👋 Chào ca trực</div>'
-            '<div class="tan-hero-val" style="font-size:1.5rem">Chưa có số liệu hôm nay</div>'
-            f'<div class="tan-hero-sub">{_thu}, {_now.strftime("%d/%m/%Y")} · bắt đầu bằng '
-            '<b>Xử lý hàng ngày</b> hoặc <b>Regcard + ARR</b> ở sidebar</div>'
-            '</div>', unsafe_allow_html=True)
+    # ── HÀNG 1: thẻ HERO (ảnh mèo) + 2 thẻ số liệu ──
+    _r1a, _r1b, _r1c = st.columns([2, 1, 1], gap="small")
+    with _r1a:
+        if _hero:
+            _stale_txt = (f"số liệu lúc {_hero['stale']} (phiên trước trong ngày)"
+                          if _hero['stale'] else "cập nhật trong phiên này")
+            st.markdown(
+                '<div class="tan-hero">'
+                '<div class="tan-hero-lab">🛏️ Tổng khách lưu trú hôm nay</div>'
+                f'<div class="tan-hero-val">{_hero["total"]}</div>'
+                f'<div class="tan-hero-sub">{_stale_txt}</div>'
+                '<div class="tan-hero-split">'
+                f'<div><div class="tan-hero-k">🌍 Quốc tế</div><div class="tan-hero-v">{_hero["intl"]}</div></div>'
+                f'<div><div class="tan-hero-k">🇻🇳 Việt Nam</div><div class="tan-hero-v">{_hero["vn"]}</div></div>'
+                f'<div><div class="tan-hero-k">🚪 Phòng</div><div class="tan-hero-v">'
+                f'{(_rc or {}).get("arr_stats", {}).get("rooms", "—")}</div></div>'
+                '</div></div>', unsafe_allow_html=True)
+        else:
+            st.markdown(
+                '<div class="tan-hero">'
+                '<div class="tan-hero-lab">👋 Chào ca trực</div>'
+                '<div class="tan-hero-val" style="font-size:1.45rem">Chưa có số liệu hôm nay</div>'
+                '<div class="tan-hero-sub">Bắt đầu bằng <b>Xử lý hàng ngày</b> hoặc '
+                '<b>Regcard + ARR</b> ở sidebar — số liệu sẽ tự lên đây.</div>'
+                '<div class="tan-hero-split">'
+                '<div><div class="tan-hero-k">🌍 Quốc tế</div><div class="tan-hero-v">—</div></div>'
+                '<div><div class="tan-hero-k">🇻🇳 Việt Nam</div><div class="tan-hero-v">—</div></div>'
+                '<div><div class="tan-hero-k">🚪 Phòng</div><div class="tan-hero-v">—</div></div>'
+                '</div></div>', unsafe_allow_html=True)
 
-    # ── Checklist tiến độ công việc trong ca (còn nguyên dù tải lại trang) ──
+    with _r1b:
+        with st.container(border=True, height=186):
+            _red_n = _hero['red'] if _hero else None
+            _cls = 'err' if _red_n else 'ok'
+            st.markdown(
+                f'<div class="kpi-lab"><span class="kpi-ic {_cls}">⚠️</span>Lỗi dữ liệu</div>'
+                f'<div class="kpi-val {"err" if _red_n else ""}">{_red_n if _hero else "—"}</div>'
+                f'<div class="kpi-sub">{"cần sửa trước khi nộp" if _red_n else ("dữ liệu sạch" if _hero else "chưa có dữ liệu")}</div>',
+                unsafe_allow_html=True)
+
+    with _r1c:
+        with st.container(border=True, height=186):
+            _rate = st.session_state.get('rate_input') or (_d or {}).get('rate')
+            st.markdown(
+                '<div class="kpi-lab"><span class="kpi-ic acc">💱</span>Tỷ giá VCB</div>'
+                f'<div class="kpi-val" style="font-size:1.5rem">{f"{_rate:,.0f}" if _rate else "—"}</div>'
+                f'<div class="kpi-sub">{"USD → VNĐ (chuyển khoản)" if _rate else "lấy tỷ giá ở Xử lý hàng ngày"}</div>',
+                unsafe_allow_html=True)
+
+    st.write("")
+
+    # ── HÀNG 2: tiến độ công việc + bàn giao gần nhất + booking ──
     _TICK_ON = ('<span style="display:inline-block;width:15px;height:15px;border-radius:5px;'
                 'background:linear-gradient(135deg,#34d399,#059669);color:#fff;font-size:9px;'
                 'line-height:15px;text-align:center;vertical-align:-2px;">✓</span>')
     _TICK_OFF = ('<span style="display:inline-block;width:15px;height:15px;border-radius:5px;'
                  'border:1.5px solid var(--line);vertical-align:-2px;"></span>')
-    with st.container(border=True):
-        if db_available():
-            _handover_n = len(db_load_entries(today_vn()))
-        else:
-            _handover_n = len((st.session_state.get('handover') or {}).get('entries', []))
-        _tasks = [
-            ("Xử lý hàng ngày (KBTT · VNM · ĐK14)", _d is not None or _p_daily.get('done'),
-             "daily", None if _d else _p_daily.get('time')),
-            ("Regcard + file ARR", _rc is not None or _p_regcard.get('done'),
-             "regcard", None if _rc else _p_regcard.get('time')),
-            ("Đối chiếu người nước ngoài", _re_p is not None or _p_rp.get('done'),
-             "recon_person" if st.session_state.get("recon_ok") else "recon",
-             None if _re_p else _p_rp.get('time')),
-            ("Đối chiếu hệ thống phòng", _re_r is not None or _p_rr.get('done'),
-             "recon_room" if st.session_state.get("recon_ok") else "recon",
-             None if _re_r else _p_rr.get('time')),
-            (f"Sổ giao ca ({_handover_n} ghi chú)", _handover_n > 0, "handover", None),
-        ]
-        _done_n = sum(1 for _t in _tasks if _t[1])
-        st.markdown(f'**Tiến độ công việc trong ca** &nbsp;<span class="tan-chip">{_done_n}/{len(_tasks)}</span>'
-                    '<br><span style="font-size:0.74rem;opacity:.65">theo dõi trong ngày, không mất khi tải lại trang</span>',
-                    unsafe_allow_html=True)
-        st.write("")
-        for _ti, (_label, _done, _target, _stale_time) in enumerate(_tasks):
-            tc1, tc2 = st.columns([6, 1])
-            _chip = ('<span class="tan-chip ok">Xong</span>' if _done
-                     else '<span class="tan-chip">Chưa chạy</span>')
-            _suffix = (f' <span style="font-size:0.72rem;opacity:.6">· lúc {_stale_time} '
-                       '(phiên trước — mở lại để xem chi tiết/tải file)</span>') if _stale_time else ''
-            tc1.markdown(f'{_TICK_ON if _done else _TICK_OFF} &nbsp;{_label} &nbsp;{_chip}{_suffix}',
-                         unsafe_allow_html=True)
-            tc2.button("Mở →", key=f"dash_go_{_ti}", use_container_width=True,
-                       on_click=go_menu, args=(_target,))
+    _r2a, _r2b, _r2c = st.columns([2, 1, 1], gap="small")
 
-    # ── Số liệu booking & thanh toán (từ Regcard + ARR) ──
-    if _rc and _rc.get('arr_stats'):
-        st.write("")
-        st.markdown('<div class="section-label">💰 Booking đến & thanh toán</div>', unsafe_allow_html=True)
-        _as = _rc['arr_stats']
-        b1, b2, b3, b4, b5 = st.columns(5)
-        b1.metric("📦 Booking", _as['bookings'])
-        b2.metric("🚪 Phòng", _as['rooms'])
-        b3.metric("💳 Cà thẻ", _as['ca_the'])
-        b4.metric("💵 Thu tiền", _as['thu_tien'])
-        b5.metric("⚠️ Xem lại BU", _as['xem_lai_bu'])
-    elif _p_regcard.get('summary'):
-        st.write("")
-        st.markdown('<div class="section-label">💰 Booking đến & thanh toán</div>', unsafe_allow_html=True)
-        st.caption(f"Số liệu lúc {_p_regcard['time']} (phiên trước trong ngày) — chạy lại để tải file.")
-        _as = _p_regcard['summary']
-        b1, b2, b3, b4, b5 = st.columns(5)
-        b1.metric("📦 Booking", _as.get('bookings'))
-        b2.metric("🚪 Phòng", _as.get('rooms'))
-        b3.metric("💳 Cà thẻ", _as.get('ca_the'))
-        b4.metric("💵 Thu tiền", _as.get('thu_tien'))
-        b5.metric("⚠️ Xem lại BU", _as.get('xem_lai_bu'))
+    with _r2a:
+        with st.container(border=True, height=352):
+            if db_available():
+                _ho_rows = db_load_entries(today_vn())
+                _handover_n = len(_ho_rows)
+            else:
+                _ho_rows = None
+                _handover_n = len((st.session_state.get('handover') or {}).get('entries', []))
+            _tasks = [
+                ("Xử lý hàng ngày (KBTT · VNM · ĐK14)", _d is not None or _p_daily.get('done'),
+                 "daily", None if _d else _p_daily.get('time')),
+                ("Regcard + file ARR", _rc is not None or _p_regcard.get('done'),
+                 "regcard", None if _rc else _p_regcard.get('time')),
+                ("Đối chiếu người nước ngoài", _re_p is not None or _p_rp.get('done'),
+                 "recon_person" if st.session_state.get("recon_ok") else "recon",
+                 None if _re_p else _p_rp.get('time')),
+                ("Đối chiếu hệ thống phòng", _re_r is not None or _p_rr.get('done'),
+                 "recon_room" if st.session_state.get("recon_ok") else "recon",
+                 None if _re_r else _p_rr.get('time')),
+                (f"Sổ giao ca ({_handover_n} ghi chú)", _handover_n > 0, "handover", None),
+            ]
+            _done_n = sum(1 for _t in _tasks if _t[1])
+            st.markdown(f'<div class="pan-h"><span class="pan-t">Tiến độ công việc trong ca</span>'
+                        f'<span class="tan-chip">{_done_n}/{len(_tasks)}</span></div>',
+                        unsafe_allow_html=True)
+            for _ti, (_label, _done, _target, _stale_time) in enumerate(_tasks):
+                tc1, tc2 = st.columns([5, 1.15], vertical_alignment="center")
+                _chip = ('<span class="tan-chip ok">Xong</span>' if _done
+                         else '<span class="tan-chip">Chưa chạy</span>')
+                _suffix = (f' <span class="pan-mut">· {_stale_time}</span>') if _stale_time else ''
+                tc1.markdown(f'<div class="pan-row">{_TICK_ON if _done else _TICK_OFF}'
+                             f'<span class="pan-rt">{_label}</span>{_chip}{_suffix}</div>',
+                             unsafe_allow_html=True)
+                tc2.button("Mở →", key=f"dash_go_{_ti}", use_container_width=True,
+                           on_click=go_menu, args=(_target,))
+
+    with _r2b:
+        with st.container(border=True, height=352):
+            st.markdown('<div class="pan-h"><span class="pan-t">Bàn giao gần nhất</span></div>',
+                        unsafe_allow_html=True)
+            _recent = []
+            if _ho_rows is not None and len(_ho_rows):
+                for _, _r in _ho_rows.head(5).iterrows():
+                    _room = f" · P.{_r['room']}" if _r['room'] else ""
+                    _recent.append((_r['entry_time'], f"{_r['category']}{_room}"))
+            elif not db_available():
+                for _e in reversed((st.session_state.get('handover') or {}).get('entries', [])[-5:]):
+                    _room = f" · P.{_e['room']}" if _e.get('room') else ""
+                    _recent.append((_e['time'], f"{_e['cat']}{_room}"))
+            if _recent:
+                st.markdown(''.join(
+                    f'<div class="pan-line"><span>🏷 {_t}</span><span class="pan-mut">{_tm}</span></div>'
+                    for _tm, _t in _recent), unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="pan-empty">Chưa có ghi chú nào trong ca này.</div>',
+                            unsafe_allow_html=True)
+            st.button("Mở sổ giao ca →", key="dash_go_ho", use_container_width=True,
+                      on_click=go_menu, args=("handover",))
+
+    with _r2c:
+        with st.container(border=True, height=352):
+            _as = (_rc or {}).get('arr_stats') or _p_regcard.get('summary')
+            st.markdown('<div class="pan-h"><span class="pan-t">Booking & thanh toán</span></div>',
+                        unsafe_allow_html=True)
+            if _as:
+                st.markdown(''.join(
+                    f'<div class="pan-line"><span>{_lb}</span><span class="pan-v">{_as.get(_k, "—")}</span></div>'
+                    for _lb, _k in [('📦 Booking', 'bookings'), ('🚪 Phòng', 'rooms'),
+                                    ('💳 Cà thẻ', 'ca_the'), ('💵 Thu tiền', 'thu_tien'),
+                                    ('⚠️ Xem lại BU', 'xem_lai_bu')]), unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="pan-empty">Chạy <b>Regcard + ARR</b> để có số liệu booking '
+                            'và thanh toán trong ngày.</div>', unsafe_allow_html=True)
+                st.button("Mở Regcard + ARR →", key="dash_go_rc", use_container_width=True,
+                          on_click=go_menu, args=("regcard",))
+
+    st.write("")
 
     # ── Báo cáo ngày 1 trang cho quản lý ──
     st.write("")
