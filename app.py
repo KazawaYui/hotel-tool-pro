@@ -31,6 +31,136 @@ def _compute_effective_theme():
     h = now_vn().hour
     return 'light' if THEME_DAY_START_HOUR <= h < THEME_NIGHT_START_HOUR else 'dark'
 
+# ── Âm lịch Việt Nam ──────────────────────────────────────────────────────
+# Dùng để biết hôm nay có phải Tết hay Trung Thu — 2 mốc này theo âm lịch nên
+# KHÔNG thể suy ra từ ngày dương. Thuật toán thiên văn tiêu chuẩn (Hồ Ngọc Đức),
+# múi giờ +7; tính thẳng nên không cần bảng tra ngày lễ phải cập nhật hằng năm.
+def _jd_from_date(dd, mm, yy):
+    a = (14 - mm) // 12
+    y, m = yy + 4800 - a, mm + 12 * a - 3
+    jd = dd + (153 * m + 2) // 5 + 365 * y + y // 4 - y // 100 + y // 400 - 32045
+    if jd < 2299161:
+        jd = dd + (153 * m + 2) // 5 + 365 * y + y // 4 - 32083
+    return jd
+
+def _new_moon_jd(k):
+    import math
+    T = k / 1236.85
+    T2, dr = T * T, math.pi / 180
+    T3 = T2 * T
+    jd1 = 2415020.75933 + 29.53058868 * k + 0.0001178 * T2 - 0.000000155 * T3
+    jd1 += 0.00033 * math.sin((166.56 + 132.87 * T - 0.009173 * T2) * dr)
+    M = 359.2242 + 29.10535608 * k - 0.0000333 * T2 - 0.00000347 * T3
+    Mpr = 306.0253 + 385.81691806 * k + 0.0107306 * T2 + 0.00001236 * T3
+    F = 21.2964 + 390.67050646 * k - 0.0016528 * T2 - 0.00000239 * T3
+    c1 = (0.1734 - 0.000393 * T) * math.sin(M * dr) + 0.0021 * math.sin(2 * dr * M)
+    c1 -= 0.4068 * math.sin(Mpr * dr) + 0.0161 * math.sin(dr * 2 * Mpr)
+    c1 -= 0.0004 * math.sin(dr * 3 * Mpr)
+    c1 += 0.0104 * math.sin(dr * 2 * F) - 0.0051 * math.sin(dr * (M + Mpr))
+    c1 -= 0.0074 * math.sin(dr * (M - Mpr)) + 0.0004 * math.sin(dr * (2 * F + M))
+    c1 -= 0.0004 * math.sin(dr * (2 * F - M)) - 0.0006 * math.sin(dr * (2 * F + Mpr))
+    c1 += 0.0010 * math.sin(dr * (2 * F - Mpr)) + 0.0005 * math.sin(dr * (2 * Mpr + M))
+    if T < -11:
+        dt = (0.001 + 0.000839 * T + 0.0002261 * T2
+              - 0.00000845 * T3 - 0.000000081 * T * T3)
+    else:
+        dt = -0.000278 + 0.000265 * T + 0.000262 * T2
+    return jd1 + c1 - dt
+
+def _new_moon_day(k, tz=7):
+    return int(_new_moon_jd(k) + 0.5 + tz / 24)
+
+def _sun_longitude_deg6(jdn, tz=7):
+    import math
+    t = (jdn - 0.5 - tz / 24 - 2451545.0) / 36525
+    t2, dr = t * t, math.pi / 180
+    M = 357.52910 + 35999.05030 * t - 0.0001559 * t2 - 0.00000048 * t * t2
+    L0 = 280.46645 + 36000.76983 * t + 0.0003032 * t2
+    dl = (1.914600 - 0.004817 * t - 0.000014 * t2) * math.sin(dr * M)
+    dl += (0.019993 - 0.000101 * t) * math.sin(dr * 2 * M) + 0.000290 * math.sin(dr * 3 * M)
+    L = (L0 + dl) * dr
+    L -= math.pi * 2 * int(L / (math.pi * 2))
+    return int(L / math.pi * 6)
+
+def _lunar_month11(yy, tz=7):
+    off = _jd_from_date(31, 12, yy) - 2415021
+    k = int(off / 29.530588853)
+    nm = _new_moon_day(k, tz)
+    return _new_moon_day(k - 1, tz) if _sun_longitude_deg6(nm, tz) >= 9 else nm
+
+def _leap_month_offset(a11, tz=7):
+    k = int((a11 - 2415021.076998695) / 29.530588853 + 0.5)
+    i = 1
+    arc = _sun_longitude_deg6(_new_moon_day(k + i, tz), tz)
+    while True:
+        last, i = arc, i + 1
+        arc = _sun_longitude_deg6(_new_moon_day(k + i, tz), tz)
+        if arc == last or i >= 14:
+            break
+    return i - 1
+
+def solar_to_lunar(d, tz=7):
+    """Ngày dương (datetime.date) -> (ngày, tháng, năm, có_nhuận) âm lịch."""
+    day_number = _jd_from_date(d.day, d.month, d.year)
+    k = int((day_number - 2415021.076998695) / 29.530588853)
+    month_start = _new_moon_day(k + 1, tz)
+    if month_start > day_number:
+        month_start = _new_moon_day(k, tz)
+    a11 = _lunar_month11(d.year, tz)
+    b11 = a11
+    if a11 >= month_start:
+        lunar_year = d.year
+        a11 = _lunar_month11(d.year - 1, tz)
+    else:
+        lunar_year = d.year + 1
+        b11 = _lunar_month11(d.year + 1, tz)
+    lunar_day = day_number - month_start + 1
+    diff = int((month_start - a11) / 29)
+    lunar_leap, lunar_month = 0, diff + 11
+    if b11 - a11 > 365:
+        leap_off = _leap_month_offset(a11, tz)
+        if diff >= leap_off:
+            lunar_month = diff + 10
+            if diff == leap_off:
+                lunar_leap = 1
+    if lunar_month > 12:
+        lunar_month -= 12
+    if lunar_month >= 11 and diff < 4:
+        lunar_year -= 1
+    return lunar_day, lunar_month, lunar_year, lunar_leap
+
+# ── Mùa / dịp lễ của màn chào ─────────────────────────────────────────────
+# Ngày lễ (theo âm lịch hoặc ngày cố định) được ưu tiên ĐÈ LÊN mùa.
+SEASON_LABEL = {
+    'spring':   '🌸 TIẾT XUÂN',   'summer': '🌊 TIẾT HẠ',
+    'autumn':   '🍂 TIẾT THU',    'winter': '🌧️ TIẾT ĐÔNG',
+    'tet':      '🎋 TẾT NGUYÊN ĐÁN',
+    'trungthu': '🏮 TRUNG THU',   'noel':   '🎄 GIÁNG SINH',
+}
+
+def _season_key(d=None):
+    d = d or today_vn()
+    if d.month == 12 and 20 <= d.day <= 26:
+        return 'noel'
+    try:
+        ld, lm, _, leap = solar_to_lunar(d)
+        if not leap:
+            if lm == 1 and ld <= 7:          # mùng 1 -> mùng 7 Tết
+                return 'tet'
+            if lm == 12 and ld >= 28:        # 28, 29, 30 Tết
+                return 'tet'
+            if lm == 8 and 14 <= ld <= 16:   # rằm tháng 8
+                return 'trungthu'
+    except Exception:
+        pass                                  # lỗi lịch không được làm hỏng màn chào
+    return ('spring' if d.month <= 3 else 'summer' if d.month <= 6
+            else 'autumn' if d.month <= 9 else 'winter')
+
+def _hour_key(h=None):
+    h = now_vn().hour if h is None else h
+    return ('dawn' if 5 <= h < 8 else 'day' if 8 <= h < 16
+            else 'dusk' if 16 <= h < 19 else 'night')
+
 # ── Tiến độ ca làm việc — lưu trên đĩa server để SỐNG SÓT qua việc tải lại
 # trang (F5) trong ngày. LƯU Ý: file này KHÔNG bền vững qua các lần deploy lại
 # app (Streamlit Cloud xóa filesystem mỗi lần deploy) — chỉ chống việc mất dữ
@@ -230,6 +360,19 @@ def _light_bg_data_uri():
     path = os.path.join(os.path.dirname(__file__), 'bg_light.b64')
     with open(path, 'r') as f:
         return 'data:image/jpeg;base64,' + f.read().strip()
+
+@st.cache_resource
+def _season_bg_data_uri(key, theme):
+    """Ảnh nền màn chào theo mùa/dịp lễ (bg_<key>.b64). Mùa nào CHƯA có ảnh
+    riêng thì dùng lại ảnh nền sáng/tối sẵn có — không bao giờ để trống."""
+    path = os.path.join(os.path.dirname(__file__), f'bg_{key}.b64')
+    if os.path.exists(path):
+        try:
+            with open(path, 'r') as f:
+                return 'data:image/jpeg;base64,' + f.read().strip()
+        except Exception:
+            pass
+    return _dark_bg_data_uri() if theme == 'dark' else _light_bg_data_uri()
 
 # ── Lookup tables ─────────────────────────────────────────────────────────
 # Full nationality mapping (normalized keys → "CODE - Name") — 350 entries
@@ -2421,15 +2564,16 @@ if not st.session_state.get("_app_scripts_injected"):
     }
 
     @media (prefers-reduced-motion: reduce) {
-        .sb-mascot, .sb-dot::after,
-        #bg-sakura-layer .petal, #boot-splash .sakura, #boot-splash .bs-sparkle {
+        .sb-mascot, .sb-dot::after, #bg-sakura-layer .petal,
+        #boot-splash .bs-pt, #boot-splash .bs-bg, #boot-splash .bs-moon,
+        #boot-splash .bs-blink {
             animation: none !important;
         }
-        .tan-rv,
-        #boot-splash .bs-logo-wrap, #boot-splash .bs-text, #boot-splash .bs-sub,
-        #boot-splash .bs-chips, #boot-splash .bs-enter {
+        .tan-rv, #boot-splash .bs-card, #boot-splash .bs-corner,
+        #boot-splash .bs-strip, #boot-splash .bs-enter, #boot-splash .bs-hint2 {
             animation: none !important; opacity: 1 !important; transform: none !important;
         }
+        #boot-splash .bs-card { transform: translateY(-50%) !important; }
         .stApp *, #boot-splash {transition-duration: 0.01ms !important;}
     }
     `;
@@ -2472,10 +2616,12 @@ if not st.session_state.get("_app_scripts_injected"):
         doc.body.insertBefore(layer, doc.body.firstChild);
     }
 
-    // ── Màn chào ca trực: hiện thông tin ca + số liệu thật, rồi DỪNG chờ người
-    // dùng bấm Enter (hoặc chạm màn hình) mới vào app — giống màn khoá của
-    // Windows. Chỉ hiện lần đầu mỗi phiên tab; refresh trong cùng tab không
-    // phải chào lại. Sau khi tan, nội dung app hiện dần so le.
+    // ── Màn chào ca trực (bản phối B+C) ──────────────────────────────────
+    // Ảnh nền tràn màn hình đổi theo MÙA và DỊP LỄ, ám sắc trời đổi theo GIỜ,
+    // hạt rơi theo mùa; lời chào nằm trong thẻ kính bên trái, đồng hồ góc phải,
+    // thanh số liệu ở đáy. Sau 2 giây thì DỪNG chờ người dùng bấm Enter (hoặc
+    // chạm màn hình) mới vào app — giống màn khoá Windows. Chỉ chào lần đầu
+    // mỗi phiên tab; refresh trong cùng tab không phải chào lại.
     var _bsSeen = false;
     try { _bsSeen = window.parent.sessionStorage.getItem('tanBootSplashSeen') === '1'; } catch (e) {}
     if (!_bsSeen && !doc.getElementById('boot-splash')) {
@@ -2484,157 +2630,228 @@ if not st.session_state.get("_app_scripts_injected"):
         css3.id = 'boot-splash-style';
         css3.textContent = `
           #boot-splash {
-            --bs-bg: linear-gradient(160deg, #f7f8fc 0%, #efecfa 55%, #e8e2f7 100%);
-            --bs-photo: url('__LIGHT_BG_DATA_URI__'); --bs-op: 0.30;
-            --bs-tx: #171c2b; --bs-tx2: rgba(23,28,43,.62);
-            --bs-chip: rgba(255,255,255,.72); --bs-chipbd: rgba(23,28,43,.10);
-            --bs-ring: rgba(255,255,255,.75); --bs-key: rgba(255,255,255,.9);
-            position: fixed; inset: 0; z-index: 999999;
-            background: var(--bs-bg);
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            position: fixed; inset: 0; z-index: 999999; overflow: hidden;
+            background: #07090f; cursor: pointer; user-select: none;
             transition: opacity 0.5s ease;
             font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-            cursor: pointer; user-select: none;
-          }
-          html[data-theme="dark"] #boot-splash {
-            --bs-bg: linear-gradient(160deg, #12151d 0%, #1b1930 55%, #241d3d 100%);
-            --bs-photo: url('__DARK_BG_DATA_URI__'); --bs-op: 0.16;
-            --bs-tx: #ffffff; --bs-tx2: rgba(255,255,255,.72);
-            --bs-chip: rgba(255,255,255,.12); --bs-chipbd: rgba(255,255,255,.18);
-            --bs-ring: rgba(255,255,255,.10); --bs-key: rgba(255,255,255,.16);
-          }
-          #boot-splash::after {
-            content: ""; position: absolute; inset: 0; pointer-events: none;
-            opacity: var(--bs-op);
-            background: var(--bs-photo) center/cover no-repeat;
           }
           #boot-splash.bs-hide { opacity: 0; pointer-events: none; }
-          #boot-splash .bs-in {
-            position: relative; z-index: 2;
-            display: flex; flex-direction: column; align-items: center;
+
+          /* Lớp 1 — ảnh nền theo mùa, phóng rất chậm cho đỡ tĩnh */
+          #boot-splash .bs-bg {
+            position: absolute; inset: 0; background-size: cover; background-position: center 55%;
+            background-image: url('__GREET_PHOTO__');
+            animation: bsKen 34s ease-in-out infinite alternate;
           }
-          #boot-splash .bs-logo-wrap {
-            position: relative; width: 86px; height: 86px;
-            opacity: 0; transform: scale(0.6);
-            animation: bsLogoIn 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.05s forwards;
+          @keyframes bsKen {
+            from { transform: scale(1.02) translate(0.6%, 0); }
+            to   { transform: scale(1.09) translate(-1.2%, -1.2%); }
           }
-          #boot-splash .bs-logo-wrap::before {
-            content: ""; position: absolute; inset: -12px; border-radius: 50%;
-            background: var(--bs-ring);
-            box-shadow: 0 14px 34px rgba(120,90,180,.22);
+          /* Lớp 2 — ám sắc trời theo giờ (soft-light nên ảnh giữ nguyên chi tiết) */
+          #boot-splash .bs-hour { position: absolute; inset: 0; mix-blend-mode: soft-light; }
+          #boot-splash[data-h="dawn"]  .bs-hour { background: linear-gradient(180deg,#2a3d6b,#ff9d5c 68%,#ffd9a8); }
+          #boot-splash[data-h="day"]   .bs-hour { background: linear-gradient(180deg,#4e97dc,#cfe6f7); }
+          #boot-splash[data-h="dusk"]  .bs-hour { background: linear-gradient(180deg,#3a1c58,#e0724a 62%,#ffb066); }
+          #boot-splash[data-h="night"] .bs-hour { background: linear-gradient(180deg,#070c1e,#1c2352 68%,#2c2f60); }
+          /* Lớp 3 — ám sắc mùa */
+          #boot-splash .bs-season { position: absolute; inset: 0; mix-blend-mode: overlay; opacity: .5; }
+          #boot-splash[data-s="spring"]   .bs-season { background: linear-gradient(120deg,#ffb3d9,#c9a8ff); }
+          #boot-splash[data-s="summer"]   .bs-season { background: linear-gradient(120deg,#7fd4ff,#b9f0e0); }
+          #boot-splash[data-s="autumn"]   .bs-season { background: linear-gradient(120deg,#e09a4a,#c96a2b); }
+          #boot-splash[data-s="winter"]   .bs-season { background: linear-gradient(120deg,#8fb8e0,#cfe2f5); }
+          #boot-splash[data-s="tet"]      .bs-season { background: linear-gradient(120deg,#e03a3a,#ffc93a); opacity: .34; }
+          #boot-splash[data-s="trungthu"] .bs-season { background: linear-gradient(120deg,#ffb347,#ff7a45); opacity: .40; }
+          #boot-splash[data-s="noel"]     .bs-season { background: linear-gradient(120deg,#4a8fd4,#e05a5a); opacity: .42; }
+          /* Lớp 4 — scrim giữ chữ luôn đọc được trên mọi ảnh */
+          #boot-splash .bs-scrim {
+            position: absolute; inset: 0;
+            background: linear-gradient(96deg,rgba(6,8,14,.76) 0%,rgba(6,8,14,.40) 40%,rgba(6,8,14,.06) 66%,rgba(6,8,14,.34) 100%),
+                        linear-gradient(0deg,rgba(6,8,14,.88) 0%,rgba(6,8,14,.18) 34%,transparent 52%);
           }
-          #boot-splash .bs-logo-wrap svg { position: relative; width: 100%; height: 100%; }
-          #boot-splash .bs-sparkle {
-            position: absolute; color: #f293bc; opacity: 0;
-            animation: bsTwinkle 1.6s ease-in-out infinite;
+          /* Lớp 5 — trăng rằm, chỉ dịp Trung Thu */
+          #boot-splash .bs-moon {
+            position: absolute; z-index: 3; right: 31%; top: 15%; display: none;
+            width: 132px; height: 132px; border-radius: 50%;
+            background: radial-gradient(circle at 60% 36%, #fffdf0 58%, #f2e2b8);
+            animation: bsMoon 6s ease-in-out infinite;
           }
-          #boot-splash .bs-sparkle.s1 { top: -12px;  left: -22px; font-size: 1.1rem; animation-delay: 0.7s; }
-          #boot-splash .bs-sparkle.s2 { top: 8px;  right: -26px; font-size: 0.85rem; animation-delay: 1.2s; }
-          #boot-splash .bs-sparkle.s3 { bottom: -8px; left: -12px; font-size: 0.7rem; animation-delay: 1.6s; }
-          @keyframes bsTwinkle {
-            0%, 100% {opacity: 0; transform: scale(0.6) rotate(0deg);}
-            50%      {opacity: 1; transform: scale(1.15) rotate(20deg);}
+          #boot-splash[data-s="trungthu"] .bs-moon { display: block; }
+          @keyframes bsMoon {
+            0%,100% { box-shadow: 0 0 110px 38px rgba(255,225,150,.36); }
+            50%     { box-shadow: 0 0 140px 54px rgba(255,225,150,.52); }
           }
-          #boot-splash .bs-text {
-            margin-top: 22px; font-size: 1.75rem; font-weight: 820; letter-spacing: -.035em;
-            color: var(--bs-tx); text-align: center;
-            opacity: 0; transform: translateY(12px);
-            animation: bsUp 0.5s cubic-bezier(0.34,1.4,0.64,1) 0.32s forwards;
+          /* Lớp 6 — hạt rơi theo mùa */
+          #boot-splash .bs-pt { position: absolute; z-index: 2; will-change: transform; pointer-events: none; }
+          @keyframes bsFall { to { transform: translate(var(--dx), 118vh) rotate(700deg); } }
+          @keyframes bsRise { to { transform: translate(var(--dx), -118vh) rotate(24deg); } }
+
+          /* Thẻ kính chứa lời chào */
+          #boot-splash .bs-card {
+            position: absolute; left: 80px; top: calc(50% - 44px); transform: translateY(-50%); z-index: 6;
+            width: 498px; max-width: calc(100vw - 48px); padding: 32px 34px 28px; border-radius: 24px;
+            background: rgba(255,255,255,.10); backdrop-filter: blur(26px) saturate(150%);
+            border: 1px solid rgba(255,255,255,.20);
+            box-shadow: 0 30px 90px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.24);
+            animation: bsCard .75s cubic-bezier(.34,1.32,.64,1) both;
           }
-          #boot-splash .bs-sub {
-            margin-top: 6px; font-size: 0.87rem; font-weight: 600; color: var(--bs-tx2);
-            opacity: 0; transform: translateY(12px);
-            animation: bsUp 0.5s cubic-bezier(0.34,1.4,0.64,1) 0.44s forwards;
+          @keyframes bsCard {
+            from { opacity: 0; transform: translateY(-50%) translateX(-30px); }
+            to   { opacity: 1; transform: translateY(-50%); }
           }
-          #boot-splash .bs-chips {
-            display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; justify-content: center;
-            opacity: 0; transform: translateY(12px);
-            animation: bsUp 0.5s cubic-bezier(0.34,1.4,0.64,1) 0.56s forwards;
+          #boot-splash .bs-top { display: flex; align-items: center; gap: 12px; }
+          #boot-splash .bs-logo {
+            width: 42px; height: 42px; border-radius: 14px; flex-shrink: 0;
+            background: linear-gradient(140deg,#ff8fb1,#a78bfa);
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 10px 24px rgba(190,110,220,.45);
           }
-          #boot-splash .bs-chip {
-            font-size: 0.76rem; font-weight: 700; padding: 5px 13px; border-radius: 999px;
-            background: var(--bs-chip); color: var(--bs-tx); border: 1px solid var(--bs-chipbd);
+          #boot-splash .bs-logo svg { width: 27px; height: 27px; }
+          #boot-splash .bs-bn { font-size: .9rem; font-weight: 760; color: #fff; }
+          #boot-splash .bs-bs { font-size: .7rem; color: rgba(255,255,255,.58); }
+          #boot-splash .bs-kick {
+            margin-left: auto; font-size: .68rem; font-weight: 750; letter-spacing: .06em; color: #fff;
+            padding: 5px 11px; border-radius: 999px; white-space: nowrap;
+            background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.2);
           }
-          #boot-splash .bs-chip.warn { background: rgba(245,158,11,.22); border-color: rgba(217,150,40,.4); }
-          #boot-splash .bs-chip.ok   { background: rgba(16,185,129,.18); border-color: rgba(16,185,129,.34); }
-          @keyframes bsLogoIn { to {opacity: 1; transform: scale(1);} }
-          @keyframes bsUp     { to {opacity: 1; transform: translateY(0);} }
-          /* Lời mời bấm Enter — chỉ hiện SAU khi hiệu ứng chào chạy xong */
+          #boot-splash .bs-hi {
+            margin-top: 22px; font-size: 2.05rem; font-weight: 840; letter-spacing: -.04em;
+            color: #fff; line-height: 1.1;
+          }
+          #boot-splash .bs-hi em {
+            font-style: normal; background: linear-gradient(100deg,#ffc9de,#c4b5fd 55%,#93c5fd);
+            -webkit-background-clip: text; background-clip: text; color: transparent;
+          }
+          #boot-splash .bs-sub { margin-top: 9px; font-size: .815rem; font-weight: 600; color: rgba(255,255,255,.7); }
           #boot-splash .bs-enter {
-            margin-top: 30px; font-size: 0.82rem; font-weight: 600; color: var(--bs-tx2);
-            display: flex; align-items: center; gap: 8px;
-            opacity: 0; animation: bsEnterIn 0.45s ease 2s forwards;
+            margin-top: 26px; display: flex; align-items: center; gap: 9px;
+            font-size: .82rem; font-weight: 600; color: rgba(255,255,255,.78);
+            opacity: 0; animation: bsFade .45s ease 2s forwards;
           }
           #boot-splash .bs-enter kbd {
-            font-family: inherit; font-size: 0.78rem; font-weight: 800; color: var(--bs-tx);
-            background: var(--bs-key); border: 1px solid var(--bs-chipbd);
-            border-radius: 7px; padding: 3px 10px; box-shadow: 0 2px 0 var(--bs-chipbd);
+            font: inherit; font-weight: 800; color: #fff; background: rgba(255,255,255,.2);
+            border: 1px solid rgba(255,255,255,.3); border-radius: 8px; padding: 4px 12px;
           }
-          @keyframes bsEnterIn { to {opacity: 1;} }
-          #boot-splash .bs-enter .bs-blink { animation: bsBlink 1.6s ease-in-out infinite; }
-          @keyframes bsBlink { 0%,100% {opacity: .45;} 50% {opacity: 1;} }
           #boot-splash .bs-hint2 {
-            margin-top: 9px; font-size: 0.72rem; color: var(--bs-tx2); opacity: 0;
-            animation: bsEnterIn 0.45s ease 2.3s forwards;
+            margin-top: 9px; font-size: .72rem; color: rgba(255,255,255,.6);
+            opacity: 0; animation: bsFade .45s ease 2.3s forwards;
           }
-          #boot-splash .sakura {
-            position: absolute; top: -24px; will-change: transform, opacity; z-index: 1;
-            animation-name: sakuraFall; animation-timing-function: linear; animation-fill-mode: forwards;
-            animation-iteration-count: infinite;
+          @keyframes bsFade { to { opacity: 1; } }
+          #boot-splash .bs-blink { animation: bsBlink 1.6s ease-in-out infinite; }
+          @keyframes bsBlink { 0%,100% { opacity: .4; } 50% { opacity: 1; } }
+
+          /* Đồng hồ + ngày, góc phải trên */
+          #boot-splash .bs-corner {
+            position: absolute; right: 74px; top: 60px; z-index: 6; text-align: right;
+            animation: bsRight .8s cubic-bezier(.34,1.3,.64,1) .18s both;
           }
-          @keyframes sakuraFall {
-            0%   {transform: translate(0,0) rotate(0deg);   opacity: 0.95;}
-            85%  {opacity: 0.9;}
-            100% {transform: translate(var(--drift), 100vh) rotate(360deg); opacity: 0;}
+          @keyframes bsRight { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: none; } }
+          #boot-splash .bs-clock {
+            font-size: 3.9rem; font-weight: 250; color: #fff; letter-spacing: -.04em; line-height: 1;
+            font-variant-numeric: tabular-nums; text-shadow: 0 6px 40px rgba(0,0,0,.5);
+          }
+          #boot-splash .bs-date { margin-top: 7px; font-size: .85rem; font-weight: 600; color: rgba(255,255,255,.7); }
+
+          /* Thanh số liệu ở đáy */
+          #boot-splash .bs-strip {
+            position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; height: 84px;
+            display: flex; align-items: center; padding: 0 80px;
+            background: linear-gradient(0deg,rgba(6,8,14,.72),rgba(6,8,14,.14));
+            border-top: 1px solid rgba(255,255,255,.13); backdrop-filter: blur(14px);
+            animation: bsUp .6s ease .45s both;
+          }
+          @keyframes bsUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+          #boot-splash .bs-cell { flex: 1; display: flex; flex-direction: column; gap: 3px; position: relative; }
+          #boot-splash .bs-cell + .bs-cell { padding-left: 32px; }
+          #boot-splash .bs-cell + .bs-cell::before {
+            content: ""; position: absolute; left: 0; top: 5px; bottom: 5px; width: 1px;
+            background: rgba(255,255,255,.14);
+          }
+          #boot-splash .bs-k { font-size: .7rem; font-weight: 640; letter-spacing: .05em; color: rgba(255,255,255,.55); }
+          #boot-splash .bs-v {
+            font-size: 1.36rem; font-weight: 800; color: #fff;
+            font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+          }
+          #boot-splash .bs-v.warn { color: #ffd07a; }
+          #boot-splash .bs-v.mut { color: rgba(255,255,255,.4); font-weight: 600; }
+
+          /* Màn hẹp (điện thoại): bỏ đồng hồ, thẻ kính tràn ngang, thanh số liệu gọn lại */
+          @media (max-width: 820px) {
+            #boot-splash .bs-corner { display: none; }
+            #boot-splash .bs-card { left: 24px; right: 24px; width: auto; padding: 24px 22px 22px; }
+            #boot-splash .bs-hi { font-size: 1.6rem; }
+            #boot-splash .bs-strip { padding: 0 22px; height: 74px; }
+            #boot-splash .bs-cell:nth-child(n+4) { display: none; }
+            #boot-splash .bs-cell + .bs-cell { padding-left: 18px; }
+            #boot-splash .bs-k {
+                font-size: .61rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            }
+            #boot-splash .bs-v { font-size: 1.15rem; }
           }
         `;
         doc.head.appendChild(css3);
 
         var el = doc.createElement('div');
         el.id = 'boot-splash';
+        el.setAttribute('data-h', '__GREET_HOUR__');
+        el.setAttribute('data-s', '__GREET_SEASON__');
         el.innerHTML =
-            '<div class="bs-in">' +
-              '<div class="bs-logo-wrap">' +
-                '<span class="bs-sparkle s1">&#10022;</span>' +
-                '<span class="bs-sparkle s2">&#10022;</span>' +
-                '<span class="bs-sparkle s3">&#10022;</span>' +
-                '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
-                  '<g>' +
-                    '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f6a8c9"/>' +
-                    '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f293bc" transform="rotate(72 50 50)"/>' +
-                    '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f6a8c9" transform="rotate(144 50 50)"/>' +
-                    '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f293bc" transform="rotate(216 50 50)"/>' +
-                    '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f6a8c9" transform="rotate(288 50 50)"/>' +
-                    '<circle cx="50" cy="50" r="7" fill="#fff6ee"/>' +
-                    '<circle cx="47" cy="47" r="1.3" fill="#ffcf6b"/>' +
-                    '<circle cx="53" cy="47" r="1.3" fill="#ffcf6b"/>' +
-                    '<circle cx="50" cy="52.5" r="1.3" fill="#ffcf6b"/>' +
-                  '</g>' +
-                '</svg>' +
+            '<div class="bs-bg"></div><div class="bs-hour"></div><div class="bs-season"></div>' +
+            '<div class="bs-scrim"></div><div class="bs-moon"></div>' +
+            '<div class="bs-card">' +
+              '<div class="bs-top">' +
+                '<div class="bs-logo"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><g>' +
+                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#fff"/>' +
+                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffe8f1" transform="rotate(72 50 50)"/>' +
+                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#fff" transform="rotate(144 50 50)"/>' +
+                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffe8f1" transform="rotate(216 50 50)"/>' +
+                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#fff" transform="rotate(288 50 50)"/>' +
+                  '<circle cx="50" cy="50" r="7" fill="#ffd6e6"/>' +
+                '</g></svg></div>' +
+                '<div><div class="bs-bn">Tân Hotel</div><div class="bs-bs">Front Office toolkit</div></div>' +
+                '<span class="bs-kick">__GREET_SEASON_LABEL__</span>' +
               '</div>' +
-              '<div class="bs-text">__GREET_HI__</div>' +
+              '<div class="bs-hi">Chào <em>__GREET_SHIFT__</em>, Tân __GREET_EMOJI__</div>' +
               '<div class="bs-sub">__GREET_SUB__</div>' +
-              '<div class="bs-chips">__GREET_CHIPS__</div>' +
               '<div class="bs-enter"><span class="bs-blink">&#9654;</span> Nhấn <kbd>Enter</kbd> để vào</div>' +
               '<div class="bs-hint2">hoặc chạm/bấm chuột vào màn hình</div>' +
-            '</div>';
+            '</div>' +
+            '<div class="bs-corner">' +
+              '<div class="bs-clock">__GREET_CLOCK__</div>' +
+              '<div class="bs-date">__GREET_DATE__</div>' +
+            '</div>' +
+            '<div class="bs-strip">__GREET_CELLS__</div>';
         doc.body.appendChild(el);
 
-        var petalColors = ['#f6a8c9','#f293bc','#f9c1d9'];
-        for (var j = 0; j < 18; j++) {
-            var pt = doc.createElement('div');
-            pt.className = 'sakura';
-            var psize = 9 + Math.random()*8;
-            var pdur = 4 + Math.random()*3.5;
-            pt.style.left = (Math.random()*100) + 'vw';
-            pt.style.width = psize + 'px';
-            pt.style.height = psize + 'px';
-            pt.style.background = 'radial-gradient(circle at 30% 30%, #fff, ' + petalColors[j % 3] + ' 70%)';
-            pt.style.borderRadius = '0 60% 0 60%';
-            pt.style.setProperty('--drift', (Math.random()*140 - 70) + 'px');
-            pt.style.animationDuration = pdur + 's';
-            pt.style.animationDelay = (Math.random()*2.5) + 's';
-            el.appendChild(pt);
+        // ── Hạt rơi theo mùa — thuần transform/opacity, chạy trên GPU ──
+        var BS_PT = {
+          spring:   {n: 26, col: ['#f6a8c9','#f293bc','#f9c1d9'], r: '0 60% 0 60%', sz: [10,18],  dur: [5,9],   a: 'bsFall'},
+          summer:   {n: 32, col: ['#fff4c0','#ffffff','#bff0ff'], r: '50%',         sz: [3,8],    dur: [6,11],  a: 'bsRise'},
+          autumn:   {n: 24, col: ['#e0913f','#c96a2b','#e8b45a'], r: '0 70% 0 70%', sz: [11,19],  dur: [6,10],  a: 'bsFall'},
+          winter:   {n: 70, col: ['rgba(200,225,250,.85)'],       r: '2px',         sz: [1.6,2.8],dur: [1.0,1.9],a: 'bsFall', tall: 9},
+          tet:      {n: 26, col: ['#ffd24a','#ffc107','#ffe27a'], r: '0 60% 0 60%', sz: [10,17],  dur: [5,9],   a: 'bsFall'},
+          trungthu: {n: 13, col: ['#ff9f43','#ffb86b','#ff7f50'], r: '34% 34% 42% 42%', sz: [16,26], dur: [11,18], a: 'bsRise', glow: true},
+          noel:     {n: 80, col: ['#ffffff','#eaf4ff'],           r: '50%',         sz: [3,7],    dur: [6,12],  a: 'bsFall'}
+        }['__GREET_SEASON__'];
+        if (BS_PT) {
+            for (var j = 0; j < BS_PT.n; j++) {
+                var pt = doc.createElement('div');
+                pt.className = 'bs-pt';
+                var sz = BS_PT.sz[0] + Math.random() * (BS_PT.sz[1] - BS_PT.sz[0]);
+                var du = BS_PT.dur[0] + Math.random() * (BS_PT.dur[1] - BS_PT.dur[0]);
+                var col = BS_PT.col[j % BS_PT.col.length];
+                var fill = (BS_PT.r === '50%')
+                    ? 'radial-gradient(circle,' + col + ',transparent 72%)'
+                    : 'radial-gradient(circle at 30% 30%,#fff,' + col + ' 72%)';
+                if (BS_PT.glow) fill = 'radial-gradient(circle at 50% 38%,#fff2c0,' + col + ' 72%)';
+                pt.style.cssText = (BS_PT.a === 'bsRise' ? 'top:112vh;' : 'top:-42px;') +
+                    'left:' + (Math.random() * 100) + 'vw;' +
+                    'width:' + sz + 'px;height:' + (BS_PT.tall ? sz * BS_PT.tall : sz * (BS_PT.glow ? 1.3 : 1)) + 'px;' +
+                    'background:' + fill + ';border-radius:' + BS_PT.r + ';' +
+                    (BS_PT.glow ? 'box-shadow:0 0 18px 4px rgba(255,170,80,.55);' : '') +
+                    '--dx:' + (Math.random() * 180 - 90) + 'px;' +
+                    'animation:' + BS_PT.a + ' ' + du + 's linear ' + (-Math.random() * du) + 's infinite';
+                el.appendChild(pt);
+            }
         }
 
         // ── Nội dung app hiện dần so le sau khi màn chào tan ──
@@ -2662,7 +2879,7 @@ if not st.session_state.get("_app_scripts_injected"):
             }, 2200);
         }
 
-        // ── Cổng Enter: chỉ mở khi người dùng bấm phím / chạm màn hình ──
+        // ── Cổng Enter: chỉ mở sau 2 giây, bấm sớm hơn không có tác dụng ──
         var bsArmed = false, bsDone = false;
         window.parent.setTimeout(function(){ bsArmed = true; }, 2000);
 
@@ -2697,27 +2914,50 @@ if not st.session_state.get("_app_scripts_injected"):
     _boot_script = _boot_script.replace('__LIGHT_BG_DATA_URI__', _light_bg_data_uri())
 
     # ── Nội dung màn chào: lấy từ SỐ LIỆU THẬT đã lưu trong ngày. Chưa chạy
-    # công cụ nào thì chỉ chào + ngày/ca, KHÔNG hiện con số suy đoán. ──
+    # công cụ nào thì ô số liệu hiện dấu "—", KHÔNG bịa con số. ──
     _g_now = now_vn()
+    _g_theme = _compute_effective_theme()
+    _g_season, _g_hourkey = _season_key(), _hour_key()
     _g_thu = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][_g_now.weekday()]
     if THEME_DAY_START_HOUR <= _g_now.hour < 14:
-        _g_shift, _g_hours = 'ca sáng', '06:00–14:00'
+        _g_shift, _g_hours, _g_emo = 'ca sáng', '06:00 – 14:00', '🌅'
     elif 14 <= _g_now.hour < 22:
-        _g_shift, _g_hours = 'ca chiều', '14:00–22:00'
+        _g_shift, _g_hours, _g_emo = 'ca chiều', '14:00 – 22:00', '☀️' if _g_hourkey == 'day' else '🌇'
     else:
-        _g_shift, _g_hours = 'ca đêm', '22:00–06:00'
+        _g_shift, _g_hours, _g_emo = 'ca đêm', '22:00 – 06:00', '🌙'
+
     _g_tasks = (_load_progress().get('tasks') or {})
-    _g_total = ((_g_tasks.get('daily') or {}).get('summary') or {}).get('total')
+    _g_sum = ((_g_tasks.get('daily') or {}).get('summary') or {})
     _g_todo = sum(1 for _k in ('daily', 'regcard', 'recon_person', 'recon_room')
                   if not (_g_tasks.get(_k) or {}).get('done'))
-    _g_chips = f'<span class="bs-chip">🛏️ {_g_total} khách lưu trú</span>' if _g_total is not None else ''
-    _g_chips += (f'<span class="bs-chip warn">⏳ Còn {_g_todo} việc chưa xong</span>' if _g_todo
-                 else '<span class="bs-chip ok">✓ Đã xong các việc trong ngày</span>')
-    _boot_script = _boot_script.replace('__GREET_HI__', f'Chào {_g_shift}, Tân 👋')
-    _boot_script = _boot_script.replace(
-        '__GREET_SUB__', f'{_g_thu}, {_g_now.strftime("%d/%m/%Y")} · {_g_hours}')
-    _boot_script = _boot_script.replace('__GREET_CHIPS__', _g_chips)
-    _boot_script = _boot_script.replace('__GREET_THEME__', _compute_effective_theme())
+    _g_todo_txt = (f'còn {_g_todo} việc chưa xong' if _g_todo
+                   else 'đã xong các việc trong ngày')
+
+    def _g_cell(label, value, cls=''):
+        _mut = ' mut' if value is None else (f' {cls}' if cls else '')
+        return (f'<div class="bs-cell"><div class="bs-k">{label}</div>'
+                f'<div class="bs-v{_mut}">{"—" if value is None else value}</div></div>')
+
+    _g_cells = (_g_cell('KHÁCH LƯU TRÚ', _g_sum.get('total'))
+                + _g_cell('QUỐC TẾ', _g_sum.get('intl'))
+                + _g_cell('VIỆT NAM', _g_sum.get('vn'))
+                + _g_cell('CHECK-IN HÔM NAY', _g_sum.get('checkin_n'))
+                + _g_cell('VIỆC CHƯA XONG', _g_todo, 'warn' if _g_todo else ''))
+
+    for _ph, _val in (
+        ('__GREET_PHOTO__', _season_bg_data_uri(_g_season, _g_theme)),
+        ('__GREET_HOUR__', _g_hourkey),
+        ('__GREET_SEASON_LABEL__', SEASON_LABEL[_g_season]),
+        ('__GREET_SEASON__', _g_season),
+        ('__GREET_SHIFT__', _g_shift),
+        ('__GREET_EMOJI__', _g_emo),
+        ('__GREET_SUB__', f'{_g_thu}, {_g_now.strftime("%d/%m/%Y")} · {_g_hours} · {_g_todo_txt}'),
+        ('__GREET_CLOCK__', _g_now.strftime('%H:%M')),
+        ('__GREET_DATE__', f'{_g_thu}, {_g_now.strftime("%d/%m/%Y")}'),
+        ('__GREET_CELLS__', _g_cells),
+        ('__GREET_THEME__', _g_theme),
+    ):
+        _boot_script = _boot_script.replace(_ph, _val)
     st.iframe(_boot_script, height=1)
 
 # ── Chế độ giao diện: áp dụng data-theme lên <html> mỗi lần rerun (khác khối
