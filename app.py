@@ -2078,7 +2078,35 @@ if not st.session_state.get("_app_scripts_injected"):
         color: var(--tx) !important; font-weight: 700;
         border-color: rgba(120,110,250,.28) !important; box-shadow: none !important;
     }
+    /* Icon mỗi mục nav nằm trong ô chip; mục đang mở thì chip đổi sang gradient */
+    section[data-testid="stSidebar"] .stButton button [data-testid="stIconMaterial"] {
+        background: var(--chip); border-radius: 7px; padding: 4px;
+        width: 23px; height: 23px; display: inline-flex; align-items: center;
+        justify-content: center; font-size: 15px !important; margin-right: 2px;
+    }
+    section[data-testid="stSidebar"] .stButton button[kind="primary"] [data-testid="stIconMaterial"] {
+        background: linear-gradient(135deg, var(--acc), var(--acc2)); color: #fff;
+    }
+    /* Badge số bên phải mục nav (số điền động ở khối style tiêm mỗi lần rerun) */
+    section[data-testid="stSidebar"] .stButton button::after {
+        margin-left: auto; font-size: 0.62rem; font-weight: 800; color: var(--tx2);
+        background: var(--chip); padding: 1px 7px; border-radius: var(--r-pill);
+    }
+    /* Khung nền cho cụm nút gạt giao diện (hàng cột duy nhất trong sidebar) */
+    section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] {
+        background: var(--chip); border-radius: 10px; padding: 3px; gap: 3px !important;
+    }
+    section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] .stButton button {
+        justify-content: center; text-align: center; padding: 0.36rem 0.2rem;
+        font-size: 0.72rem; font-weight: 680; border: none;
+    }
+    section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] .stButton button[kind="primary"] {
+        background: var(--surf) !important; color: var(--tx) !important;
+        border-color: transparent !important; box-shadow: 0 1px 3px rgba(15,23,42,.16) !important;
+    }
     .sb-brand {padding: 0.1rem 0.3rem 0.9rem; border-bottom: 1px solid var(--line2); margin-bottom: 0.5rem;}
+    .sb-mascot {background: linear-gradient(140deg,#ff8fb1,#c084fc); border-radius: 9px;
+        padding: 4px; box-shadow: 0 4px 12px rgba(200,120,220,.35);}
     .sb-brand-title {color: var(--tx); font-weight: 730; font-size: 0.92rem; letter-spacing: -.015em;}
     .sb-mascot {display:inline-block; width:22px; height:22px; vertical-align:-5px; margin-right:5px;
         animation: flowerSway 3.4s ease-in-out infinite;}
@@ -2143,6 +2171,24 @@ if not st.session_state.get("_app_scripts_injected"):
         display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
         font-size: 0.82rem; color: var(--tx); padding: 0.15rem 0 0.15rem;
     }
+    /* Thanh top bar: nền liền khối + viền dưới, tràn ra sát 2 mép khung nội dung */
+    /* Khung nội dung có padding 96px trên / 80px hai bên — kéo âm đúng bằng đó
+       để thanh chạy sát mép, cộng width bù lại phần margin âm hai bên. */
+    .st-key-tan_topbar {
+        background: var(--surf); border-bottom: 1px solid var(--line);
+        margin: -6rem -5rem 1.2rem !important; width: calc(100% + 10rem) !important;
+        max-width: none !important; padding: 0.5rem 5rem !important;
+    }
+    /* Nút "Xuất báo cáo" trên thanh là nút phụ (nút chính là Xử lý hàng ngày) */
+    .st-key-tb_report_dl button, .st-key-tb_report_off button {
+        background: var(--surf) !important; color: var(--tx) !important;
+        border: 1px solid var(--line) !important; box-shadow: none !important;
+        font-weight: 640;
+    }
+    /* Thanh progress mảnh trong thẻ số liệu */
+    .kpi-bar {height: 3px; border-radius: 3px; background: var(--chip); margin-top: .7rem; overflow: hidden;}
+    .kpi-bar i {display: block; height: 100%; border-radius: 3px; background: var(--acc);}
+    .kpi-bar i.err {background: var(--err);}
     .tan-crumb {color: var(--tx3);}
     .tan-sep {color: var(--tx3); opacity: .6;}
     .tan-topbar-r {margin-left: auto; display: flex; align-items: center; gap: 7px;}
@@ -2167,6 +2213,11 @@ if not st.session_state.get("_app_scripts_injected"):
         margin-bottom: .5rem; border-bottom: 1px solid var(--line2);}
     .pan-t {font-size: 0.85rem; font-weight: 730; letter-spacing: -.015em; color: var(--tx);}
     .pan-row {display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.82rem;}
+    .pan-task {display: flex; align-items: center; gap: 9px; padding: .62rem .1rem;
+        font-size: 0.82rem; border-bottom: 1px solid var(--line2);}
+    .pan-task:last-of-type {border-bottom: 0;}
+    .pan-time {margin-left: auto; font-size: 0.7rem; color: var(--tx3); font-weight: 650;
+        font-variant-numeric: tabular-nums;}
     .pan-rt {color: var(--tx); font-weight: 560;}
     .pan-mut {font-size: 0.7rem; color: var(--tx3); font-weight: 620;}
     .pan-line {display: flex; align-items: center; justify-content: space-between;
@@ -2343,6 +2394,7 @@ if not st.session_state.get("_app_scripts_injected"):
 
     @media (max-width: 768px) {
         div[data-testid="stMainBlockContainer"] {padding-left: 1rem; padding-right: 1rem;}
+        .st-key-tan_topbar {margin: -2rem -1rem 0.9rem; width: calc(100% + 2rem); padding: 0.45rem 1rem;}
         .welcome-banner {padding: 0.7rem 0.9rem; gap: 9px; margin-bottom: 0.9rem;}
         .welcome-title {font-size: 0.95rem;}
         .welcome-emoji {width: 30px; height: 30px;}
@@ -2560,9 +2612,30 @@ if not st.session_state.get("_app_scripts_injected"):
 if 'theme_mode' not in st.session_state:
     st.session_state.theme_mode = 'auto'
 _effective_theme = _compute_effective_theme()
+# Badge số bên phải mục nav (số khách đã xử lý / số ghi chú sổ giao ca): số thay
+# đổi mỗi lần rerun nên tiêm qua CSS ::after ở đây, không nhét vào khối CSS tĩnh.
+_bd = st.session_state.get('daily_results') or {}
+_bd_n = _bd.get('total') or (st.session_state.get('progress', {})
+                             .get('tasks', {}).get('daily', {}).get('summary', {}) or {}).get('total')
+try:
+    _ho_n = len(db_load_entries(today_vn())) if db_available() else len(
+        (st.session_state.get('handover') or {}).get('entries', []))
+except Exception:
+    _ho_n = 0
+_badge_css = ''
+if _bd_n:
+    _badge_css += f'.st-key-nav_daily button::after{{content:"{_bd_n}";}}'
+if _ho_n:
+    _badge_css += f'.st-key-nav_handover button::after{{content:"{_ho_n}";}}'
 st.iframe(f"""
 <script>
-window.parent.document.documentElement.setAttribute('data-theme', '{_effective_theme}');
+(function(){{
+  var doc = window.parent.document;
+  doc.documentElement.setAttribute('data-theme', '{_effective_theme}');
+  var s = doc.getElementById('tan-badge-style');
+  if (!s) {{ s = doc.createElement('style'); s.id = 'tan-badge-style'; doc.head.appendChild(s); }}
+  s.textContent = {_badge_css!r};
+}})();
 </script>
 """, height=1)
 
@@ -2671,21 +2744,41 @@ with st.sidebar:
         f'<div class="sb-status"><span class="sb-dot"></span>{_sb_store}</div>',
         unsafe_allow_html=True)
 
-# ── Thanh top bar: breadcrumb + trạng thái + lối tắt (thay banner "Welcome") ──
+# ── Thanh top bar: breadcrumb + trạng thái + hành động (thay banner "Welcome") ──
 _page_name = MENU_LABELS.get(st.session_state.menu, 'Tổng quan ca trực')
 _tb_now = now_vn()
-_tb_chip = ('<span class="tan-chip ok">● Supabase</span>' if db_available()
+_tb_chip = ('<span class="tan-chip ok">● Supabase đã kết nối</span>' if db_available()
             else '<span class="tan-chip">● Lưu tạm trên máy chủ</span>')
-_tbl, _tbr = st.columns([5, 1.4], vertical_alignment="center")
-_tbl.markdown(
-    f'<div class="tan-topbar"><span class="tan-crumb">Tân Hotel</span>'
-    f'<span class="tan-sep">/</span><b>{_page_name}</b>'
-    f'<span class="tan-topbar-r">{_tb_chip}'
-    f'<span class="tan-chip">📅 {_tb_now.strftime("%d/%m/%Y")}</span></span></div>',
-    unsafe_allow_html=True)
-_tbr.button("⚡ Xử lý hàng ngày", key="tb_go_daily", use_container_width=True,
-            type="primary", on_click=go_menu, args=("daily",))
-st.write("")
+_tb_d = st.session_state.get('daily_results')
+_tb_rc = st.session_state.get('rc_results')
+_tb_rp = st.session_state.get('recon_results')
+_tb_rr = st.session_state.get('reconr_results')
+# Báo cáo ngày chỉ dựng khi đang ở Tổng quan VÀ đã có ít nhất 1 công cụ chạy
+# xong — tránh dựng workbook thừa ở mọi trang, mọi lần rerun.
+_tb_report = bool(_tb_d or _tb_rc or _tb_rp or _tb_rr) and st.session_state.menu == "dashboard"
+
+with st.container(key="tan_topbar"):
+    _tbl, _tbm, _tbr = st.columns([4.6, 1.25, 1.35], vertical_alignment="center")
+    _tbl.markdown(
+        f'<div class="tan-topbar"><span class="tan-crumb">Tân Hotel</span>'
+        f'<span class="tan-sep">/</span><b>{_page_name}</b>'
+        f'<span class="tan-topbar-r">{_tb_chip}'
+        f'<span class="tan-chip">📅 {_tb_now.strftime("%d/%m/%Y")}</span></span></div>',
+        unsafe_allow_html=True)
+    if _tb_report:
+        _tb_rp_date = (_tb_d or {}).get('date_str') or today_vn().strftime('%d_%m')
+        _tb_wb = build_daily_report(_tb_rp_date.replace('_', '/'),
+                                    _tb_d if _tb_d and _tb_d.get('has_xlsx') else None,
+                                    (_tb_rc or {}).get('arr_stats'), _tb_rp, _tb_rr)
+        _tbm.download_button("⇩ Xuất báo cáo", wb_to_bytes(_tb_wb),
+                             file_name=f"bao_cao_ngay_{_tb_rp_date}.xlsx",
+                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             use_container_width=True, key="tb_report_dl")
+    else:
+        _tbm.button("⇩ Xuất báo cáo", key="tb_report_off", use_container_width=True, disabled=True,
+                    help="Mở Tổng quan ca trực và chạy ít nhất một công cụ để xuất báo cáo ngày")
+    _tbr.button("⚡ Xử lý hàng ngày", key="tb_go_daily", use_container_width=True,
+                type="primary", on_click=go_menu, args=("daily",))
 
 # ── Tạo file ARR từ file Arrival (Book) Smile ──────────────────────────────
 def build_arr(book_bytes):
@@ -2970,10 +3063,12 @@ if st.session_state.menu == "dashboard":
         with st.container(border=True, height=186):
             _red_n = _hero['red'] if _hero else None
             _cls = 'err' if _red_n else 'ok'
+            _red_pct = round(100 * _red_n / _hero['total']) if (_hero and _hero.get('total') and _red_n) else 0
             st.markdown(
                 f'<div class="kpi-lab"><span class="kpi-ic {_cls}">⚠️</span>Lỗi dữ liệu</div>'
                 f'<div class="kpi-val {"err" if _red_n else ""}">{_red_n if _hero else "—"}</div>'
-                f'<div class="kpi-sub">{"cần sửa trước khi nộp" if _red_n else ("dữ liệu sạch" if _hero else "chưa có dữ liệu")}</div>',
+                f'<div class="kpi-sub">{"cần sửa trước khi nộp" if _red_n else ("dữ liệu sạch" if _hero else "chưa có dữ liệu")}</div>'
+                f'<div class="kpi-bar"><i class="err" style="width:{min(_red_pct, 100)}%"></i></div>',
                 unsafe_allow_html=True)
 
     with _r1c:
@@ -2982,7 +3077,8 @@ if st.session_state.menu == "dashboard":
             st.markdown(
                 '<div class="kpi-lab"><span class="kpi-ic acc">💱</span>Tỷ giá VCB</div>'
                 f'<div class="kpi-val" style="font-size:1.5rem">{f"{_rate:,.0f}" if _rate else "—"}</div>'
-                f'<div class="kpi-sub">{"USD → VNĐ (chuyển khoản)" if _rate else "lấy tỷ giá ở Xử lý hàng ngày"}</div>',
+                f'<div class="kpi-sub">{"USD → VNĐ (chuyển khoản)" if _rate else "lấy tỷ giá ở Xử lý hàng ngày"}</div>'
+                f'<div class="kpi-bar"><i style="width:{100 if _rate else 0}%"></i></div>',
                 unsafe_allow_html=True)
 
     st.write("")
@@ -3020,16 +3116,25 @@ if st.session_state.menu == "dashboard":
             st.markdown(f'<div class="pan-h"><span class="pan-t">Tiến độ công việc trong ca</span>'
                         f'<span class="tan-chip">{_done_n}/{len(_tasks)}</span></div>',
                         unsafe_allow_html=True)
-            for _ti, (_label, _done, _target, _stale_time) in enumerate(_tasks):
-                tc1, tc2 = st.columns([5, 1.15], vertical_alignment="center")
+            _row_html = []
+            for _label, _done, _target, _stale_time in _tasks:
                 _chip = ('<span class="tan-chip ok">Xong</span>' if _done
                          else '<span class="tan-chip">Chưa chạy</span>')
-                _suffix = (f' <span class="pan-mut">· {_stale_time}</span>') if _stale_time else ''
-                tc1.markdown(f'<div class="pan-row">{_TICK_ON if _done else _TICK_OFF}'
-                             f'<span class="pan-rt">{_label}</span>{_chip}{_suffix}</div>',
-                             unsafe_allow_html=True)
-                tc2.button("Mở →", key=f"dash_go_{_ti}", use_container_width=True,
-                           on_click=go_menu, args=(_target,))
+                _tm = _stale_time or ('✓' if _done else '—')
+                _row_html.append(
+                    f'<div class="pan-task">{_TICK_ON if _done else _TICK_OFF}'
+                    f'<span class="pan-rt">{_label}</span>{_chip}'
+                    f'<span class="pan-time">{_tm}</span></div>')
+            st.markdown(''.join(_row_html), unsafe_allow_html=True)
+            # 2 dòng tóm tắt cuối panel (chỉ hiện khi Regcard + ARR đã chạy)
+            _sum_as = (_rc or {}).get('arr_stats') or _p_regcard.get('summary')
+            if _sum_as:
+                st.markdown(
+                    f'<div class="pan-line"><span>Phòng đến trong ngày</span>'
+                    f'<span class="pan-v">{_sum_as.get("rooms", "—")}</span></div>'
+                    f'<div class="pan-line"><span>Booking đã xử lý</span>'
+                    f'<span class="pan-v">{_sum_as.get("bookings", "—")}</span></div>',
+                    unsafe_allow_html=True)
 
     with _r2b:
         with st.container(border=True, height=352):
@@ -3072,24 +3177,6 @@ if st.session_state.menu == "dashboard":
                           on_click=go_menu, args=("regcard",))
 
     st.write("")
-
-    # ── Báo cáo ngày 1 trang cho quản lý ──
-    st.write("")
-    st.markdown('<div class="section-label">📈 Báo cáo ngày cho quản lý</div>', unsafe_allow_html=True)
-    if _d or _rc or _re_p or _re_r:
-        _rp_date = (_d or {}).get('date_str') or today_vn().strftime('%d_%m')
-        _wb_rp = build_daily_report(_rp_date.replace('_', '/'),
-                                    _d if _d and _d.get('has_xlsx') else None,
-                                    (_rc or {}).get('arr_stats'), _re_p, _re_r)
-        st.download_button("⬇️ Tải báo cáo ngày (Excel, 1 trang)", wb_to_bytes(_wb_rp),
-                           file_name=f"bao_cao_ngay_{_rp_date}.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                           use_container_width=True, type="primary", key="dl_report")
-        st.caption("Tổng hợp khách lưu trú, top quốc tịch, booking & thanh toán, kết quả đối chiếu "
-                   "— từ các công cụ đã chạy trong phiên.")
-    else:
-        st.caption("Báo cáo khả dụng sau khi chạy ít nhất một công cụ "
-                   "(Xử lý hàng ngày / Regcard + ARR / Đối chiếu).")
 
     # ── Nhật ký hoạt động ca (ẩn danh) — phục vụ phân tích quy trình làm việc ──
     st.write("")
