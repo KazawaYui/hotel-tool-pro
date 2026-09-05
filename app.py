@@ -2563,7 +2563,7 @@ if not st.session_state.get("_app_scripts_injected"):
           #boot-splash .bs-enter {
             margin-top: 30px; font-size: 0.82rem; font-weight: 600; color: var(--bs-tx2);
             display: flex; align-items: center; gap: 8px;
-            opacity: 0; animation: bsEnterIn 0.45s ease 1.05s forwards;
+            opacity: 0; animation: bsEnterIn 0.45s ease 2s forwards;
           }
           #boot-splash .bs-enter kbd {
             font-family: inherit; font-size: 0.78rem; font-weight: 800; color: var(--bs-tx);
@@ -2575,7 +2575,7 @@ if not st.session_state.get("_app_scripts_injected"):
           @keyframes bsBlink { 0%,100% {opacity: .45;} 50% {opacity: 1;} }
           #boot-splash .bs-hint2 {
             margin-top: 9px; font-size: 0.72rem; color: var(--bs-tx2); opacity: 0;
-            animation: bsEnterIn 0.45s ease 1.35s forwards;
+            animation: bsEnterIn 0.45s ease 2.3s forwards;
           }
           #boot-splash .sakura {
             position: absolute; top: -24px; will-change: transform, opacity; z-index: 1;
@@ -2664,7 +2664,7 @@ if not st.session_state.get("_app_scripts_injected"):
 
         // ── Cổng Enter: chỉ mở khi người dùng bấm phím / chạm màn hình ──
         var bsArmed = false, bsDone = false;
-        window.parent.setTimeout(function(){ bsArmed = true; }, 1050);
+        window.parent.setTimeout(function(){ bsArmed = true; }, 2000);
 
         function bsDismiss() {
             if (bsDone || !bsArmed) return;
