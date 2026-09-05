@@ -2029,6 +2029,9 @@ if not st.session_state.get("_app_scripts_injected"):
 <script>
 (function(){
     var doc = window.parent.document;
+    // Đặt theme NGAY từ khối này để màn chào không bị chớp sáng khi đang ở
+    // chế độ tối (khối gán data-theme mỗi lần rerun chạy sau khối này)
+    doc.documentElement.setAttribute('data-theme', '__GREET_THEME__');
     if (doc.getElementById('main-app-style')) return;
     var css = doc.createElement('style');
     css.id = 'main-app-style';
@@ -2150,35 +2153,12 @@ if not st.session_state.get("_app_scripts_injected"):
         50%      {transform: rotate(8deg);}
     }
 
-    /* ── Thanh chào (header) ── */
-    .welcome-banner {
-        position: relative; display: flex; align-items: center; gap: 12px;
-        background: var(--surf); border: 1px solid var(--line); border-radius: var(--r-lg);
-        padding: 0.85rem 1.15rem; margin-bottom: 1.1rem; box-shadow: var(--sh);
+    /* ── Nội dung hiện dần so le sau khi màn chào tan ── */
+    @keyframes tanReveal {
+        from {opacity: 0; transform: translateY(10px);}
+        to   {opacity: 1; transform: none;}
     }
-    .welcome-emoji {width: 34px; height: 34px; flex-shrink: 0; animation: flowerSway 3.4s ease-in-out infinite;}
-    .welcome-emoji svg {width: 100%; height: 100%;}
-    .welcome-title {
-        position: relative; overflow: hidden;
-        font-weight: 760; font-size: 1.02rem; letter-spacing: -.025em; color: var(--tx);
-    }
-    .welcome-title span {display: inline-block; color: inherit; will-change: transform, opacity;}
-    @keyframes wtLetterIn {
-        from {opacity: 0; transform: scale(0.9);}
-        to   {opacity: 1; transform: scale(1);}
-    }
-    .welcome-title::after {
-        content: ""; position: absolute; top: 0; left: -30%; width: 24%; height: 100%;
-        background: linear-gradient(100deg, transparent, rgba(255,255,255,0.75), transparent);
-        transform: skewX(-20deg); opacity: 0; pointer-events: none;
-    }
-    .welcome-title.wt-shimmer::after {animation: wtShimmer 1.1s ease-out forwards;}
-    @keyframes wtShimmer {
-        0%   {left: -30%; opacity: 0;}
-        12%  {opacity: 1;}
-        100% {left: 130%; opacity: 0;}
-    }
-    .welcome-sub {color: var(--tx3); font-size: 0.76rem; margin-top: 2px;}
+    .tan-rv {opacity: 0; animation: tanReveal 0.42s var(--ease) forwards;}
 
     /* ── Top bar: breadcrumb + trạng thái ── */
     .tan-topbar {
@@ -2435,21 +2415,19 @@ if not st.session_state.get("_app_scripts_injected"):
     @media (max-width: 768px) {
         div[data-testid="stMainBlockContainer"] {padding-left: 1rem; padding-right: 1rem;}
         .st-key-tan_topbar {margin: -2rem -1rem 0.9rem; width: calc(100% + 2rem); padding: 0.45rem 1rem;}
-        .welcome-banner {padding: 0.7rem 0.9rem; gap: 9px; margin-bottom: 0.9rem;}
-        .welcome-title {font-size: 0.95rem;}
-        .welcome-emoji {width: 30px; height: 30px;}
         .tan-hero-val {font-size: 2rem;}
         .tan-hero-split {gap: 1.1rem;}
         div[data-testid="stMetric"] {padding: 0.6rem 0.7rem 0.55rem;}
     }
 
     @media (prefers-reduced-motion: reduce) {
-        .sb-mascot, .welcome-emoji, .sb-dot::after, .welcome-title::after,
+        .sb-mascot, .sb-dot::after,
         #bg-sakura-layer .petal, #boot-splash .sakura, #boot-splash .bs-sparkle {
             animation: none !important;
         }
-        .welcome-title span,
-        #boot-splash .bs-logo-wrap, #boot-splash .bs-text, #boot-splash .bs-sub {
+        .tan-rv,
+        #boot-splash .bs-logo-wrap, #boot-splash .bs-text, #boot-splash .bs-sub,
+        #boot-splash .bs-chips, #boot-splash .bs-enter {
             animation: none !important; opacity: 1 !important; transform: none !important;
         }
         .stApp *, #boot-splash {transition-duration: 0.01ms !important;}
@@ -2494,39 +2472,10 @@ if not st.session_state.get("_app_scripts_injected"):
         doc.body.insertBefore(layer, doc.body.firstChild);
     }
 
-    // ── Chữ "Welcome, Tân" hiện từng ký tự + vệt sáng lướt (chạy 1 lần khi mở web) ──
-    (function(){
-        function reveal(){
-            var el = doc.querySelector('.welcome-title');
-            if (!el) return false;
-            if (el.dataset.revealed) return true;
-            el.dataset.revealed = '1';
-            var text = el.textContent;
-            el.textContent = '';
-            var frag = doc.createDocumentFragment();
-            var n = text.length;
-            text.split('').forEach(function(ch, i){
-                var span = doc.createElement('span');
-                span.textContent = (ch === ' ') ? '\\u00A0' : ch;
-                span.style.opacity = '0';
-                span.style.animation = 'wtLetterIn 0.7s ease-out forwards';
-                span.style.animationDelay = (i * 0.08) + 's';
-                frag.appendChild(span);
-            });
-            el.appendChild(frag);
-            var totalMs = (n * 80) + 700 + 150;
-            window.parent.setTimeout(function(){ el.classList.add('wt-shimmer'); }, totalMs);
-            return true;
-        }
-        // Dừng polling ngay khi hiệu ứng đã chạy — không chờ hết 3s
-        var settleUntil = Date.now() + 3000;
-        var iv = window.parent.setInterval(function(){
-            if (reveal() || Date.now() > settleUntil) window.parent.clearInterval(iv);
-        }, 150);
-    })();
-
-    // ── Màn hình khởi động: nền sáng, hoa anh đào + "Welcome, Tân" chữ ký ──
-    // Chỉ hiện lần đầu mỗi phiên tab — refresh/mở lại không phải chờ 1.9s nữa
+    // ── Màn chào ca trực: hiện thông tin ca + số liệu thật, rồi DỪNG chờ người
+    // dùng bấm Enter (hoặc chạm màn hình) mới vào app — giống màn khoá của
+    // Windows. Chỉ hiện lần đầu mỗi phiên tab; refresh trong cùng tab không
+    // phải chào lại. Sau khi tan, nội dung app hiện dần so le.
     var _bsSeen = false;
     try { _bsSeen = window.parent.sessionStorage.getItem('tanBootSplashSeen') === '1'; } catch (e) {}
     if (!_bsSeen && !doc.getElementById('boot-splash')) {
@@ -2534,23 +2483,45 @@ if not st.session_state.get("_app_scripts_injected"):
         var css3 = doc.createElement('style');
         css3.id = 'boot-splash-style';
         css3.textContent = `
-          @import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap');
           #boot-splash {
+            --bs-bg: linear-gradient(160deg, #f7f8fc 0%, #efecfa 55%, #e8e2f7 100%);
+            --bs-photo: url('__LIGHT_BG_DATA_URI__'); --bs-op: 0.30;
+            --bs-tx: #171c2b; --bs-tx2: rgba(23,28,43,.62);
+            --bs-chip: rgba(255,255,255,.72); --bs-chipbd: rgba(23,28,43,.10);
+            --bs-ring: rgba(255,255,255,.75); --bs-key: rgba(255,255,255,.9);
             position: fixed; inset: 0; z-index: 999999;
-            background: #e6e9ef;
+            background: var(--bs-bg);
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            transition: opacity 0.55s ease;
+            transition: opacity 0.5s ease;
+            font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+            cursor: pointer; user-select: none;
+          }
+          html[data-theme="dark"] #boot-splash {
+            --bs-bg: linear-gradient(160deg, #12151d 0%, #1b1930 55%, #241d3d 100%);
+            --bs-photo: url('__DARK_BG_DATA_URI__'); --bs-op: 0.16;
+            --bs-tx: #ffffff; --bs-tx2: rgba(255,255,255,.72);
+            --bs-chip: rgba(255,255,255,.12); --bs-chipbd: rgba(255,255,255,.18);
+            --bs-ring: rgba(255,255,255,.10); --bs-key: rgba(255,255,255,.16);
+          }
+          #boot-splash::after {
+            content: ""; position: absolute; inset: 0; pointer-events: none;
+            opacity: var(--bs-op);
+            background: var(--bs-photo) center/cover no-repeat;
           }
           #boot-splash.bs-hide { opacity: 0; pointer-events: none; }
+          #boot-splash .bs-in {
+            position: relative; z-index: 2;
+            display: flex; flex-direction: column; align-items: center;
+          }
           #boot-splash .bs-logo-wrap {
-            position: relative; width: 104px; height: 104px;
-            opacity: 0; transform: scale(0.5);
-            animation: bsLogoIn 0.55s cubic-bezier(0.34,1.56,0.64,1) 0.15s forwards;
+            position: relative; width: 86px; height: 86px;
+            opacity: 0; transform: scale(0.6);
+            animation: bsLogoIn 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.05s forwards;
           }
           #boot-splash .bs-logo-wrap::before {
-            content: ""; position: absolute; inset: -14px; border-radius: 50%;
-            background: #e6e9ef;
-            box-shadow: -8px -8px 18px rgba(255,255,255,0.85), 8px 8px 18px rgba(163,177,198,0.55);
+            content: ""; position: absolute; inset: -12px; border-radius: 50%;
+            background: var(--bs-ring);
+            box-shadow: 0 14px 34px rgba(120,90,180,.22);
           }
           #boot-splash .bs-logo-wrap svg { position: relative; width: 100%; height: 100%; }
           #boot-splash .bs-sparkle {
@@ -2565,24 +2536,51 @@ if not st.session_state.get("_app_scripts_injected"):
             50%      {opacity: 1; transform: scale(1.15) rotate(20deg);}
           }
           #boot-splash .bs-text {
-            margin-top: 30px;
-            font-family: 'ChocoCooky', 'Choco Cooky', 'Patrick Hand', cursive;
-            font-size: 3.2rem; font-weight: 700; color: #6c7ce0;
-            transform: translateY(10px) rotate(-2deg); transform-origin: center;
-            opacity: 0;
-            animation: bsTextIn 0.5s ease 0.55s forwards;
+            margin-top: 22px; font-size: 1.75rem; font-weight: 820; letter-spacing: -.035em;
+            color: var(--bs-tx); text-align: center;
+            opacity: 0; transform: translateY(12px);
+            animation: bsUp 0.5s cubic-bezier(0.34,1.4,0.64,1) 0.32s forwards;
           }
           #boot-splash .bs-sub {
-            margin-top: 8px; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
-            font-size: 1rem; color: #8b93a3;
-            opacity: 0;
-            animation: bsTextIn 0.5s ease 0.85s forwards;
+            margin-top: 6px; font-size: 0.87rem; font-weight: 600; color: var(--bs-tx2);
+            opacity: 0; transform: translateY(12px);
+            animation: bsUp 0.5s cubic-bezier(0.34,1.4,0.64,1) 0.44s forwards;
           }
+          #boot-splash .bs-chips {
+            display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; justify-content: center;
+            opacity: 0; transform: translateY(12px);
+            animation: bsUp 0.5s cubic-bezier(0.34,1.4,0.64,1) 0.56s forwards;
+          }
+          #boot-splash .bs-chip {
+            font-size: 0.76rem; font-weight: 700; padding: 5px 13px; border-radius: 999px;
+            background: var(--bs-chip); color: var(--bs-tx); border: 1px solid var(--bs-chipbd);
+          }
+          #boot-splash .bs-chip.warn { background: rgba(245,158,11,.22); border-color: rgba(217,150,40,.4); }
+          #boot-splash .bs-chip.ok   { background: rgba(16,185,129,.18); border-color: rgba(16,185,129,.34); }
           @keyframes bsLogoIn { to {opacity: 1; transform: scale(1);} }
-          @keyframes bsTextIn { to {opacity: 1; transform: translateY(0) rotate(-2deg);} }
+          @keyframes bsUp     { to {opacity: 1; transform: translateY(0);} }
+          /* Lời mời bấm Enter — chỉ hiện SAU khi hiệu ứng chào chạy xong */
+          #boot-splash .bs-enter {
+            margin-top: 30px; font-size: 0.82rem; font-weight: 600; color: var(--bs-tx2);
+            display: flex; align-items: center; gap: 8px;
+            opacity: 0; animation: bsEnterIn 0.45s ease 2s forwards;
+          }
+          #boot-splash .bs-enter kbd {
+            font-family: inherit; font-size: 0.78rem; font-weight: 800; color: var(--bs-tx);
+            background: var(--bs-key); border: 1px solid var(--bs-chipbd);
+            border-radius: 7px; padding: 3px 10px; box-shadow: 0 2px 0 var(--bs-chipbd);
+          }
+          @keyframes bsEnterIn { to {opacity: 1;} }
+          #boot-splash .bs-enter .bs-blink { animation: bsBlink 1.6s ease-in-out infinite; }
+          @keyframes bsBlink { 0%,100% {opacity: .45;} 50% {opacity: 1;} }
+          #boot-splash .bs-hint2 {
+            margin-top: 9px; font-size: 0.72rem; color: var(--bs-tx2); opacity: 0;
+            animation: bsEnterIn 0.45s ease 2.3s forwards;
+          }
           #boot-splash .sakura {
-            position: absolute; top: -24px; will-change: transform, opacity;
+            position: absolute; top: -24px; will-change: transform, opacity; z-index: 1;
             animation-name: sakuraFall; animation-timing-function: linear; animation-fill-mode: forwards;
+            animation-iteration-count: infinite;
           }
           @keyframes sakuraFall {
             0%   {transform: translate(0,0) rotate(0deg);   opacity: 0.95;}
@@ -2595,26 +2593,31 @@ if not st.session_state.get("_app_scripts_injected"):
         var el = doc.createElement('div');
         el.id = 'boot-splash';
         el.innerHTML =
-            '<div class="bs-logo-wrap">' +
-              '<span class="bs-sparkle s1">&#10022;</span>' +
-              '<span class="bs-sparkle s2">&#10022;</span>' +
-              '<span class="bs-sparkle s3">&#10022;</span>' +
-              '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
-                '<g>' +
-                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f6a8c9"/>' +
-                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f293bc" transform="rotate(72 50 50)"/>' +
-                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f6a8c9" transform="rotate(144 50 50)"/>' +
-                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f293bc" transform="rotate(216 50 50)"/>' +
-                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f6a8c9" transform="rotate(288 50 50)"/>' +
-                  '<circle cx="50" cy="50" r="7" fill="#fff6ee"/>' +
-                  '<circle cx="47" cy="47" r="1.3" fill="#ffcf6b"/>' +
-                  '<circle cx="53" cy="47" r="1.3" fill="#ffcf6b"/>' +
-                  '<circle cx="50" cy="52.5" r="1.3" fill="#ffcf6b"/>' +
-                '</g>' +
-              '</svg>' +
-            '</div>' +
-            '<div class="bs-text">Welcome, Tân</div>' +
-            '<div class="bs-sub">Tân Hotel &middot; Front Office toolkit</div>';
+            '<div class="bs-in">' +
+              '<div class="bs-logo-wrap">' +
+                '<span class="bs-sparkle s1">&#10022;</span>' +
+                '<span class="bs-sparkle s2">&#10022;</span>' +
+                '<span class="bs-sparkle s3">&#10022;</span>' +
+                '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">' +
+                  '<g>' +
+                    '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f6a8c9"/>' +
+                    '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f293bc" transform="rotate(72 50 50)"/>' +
+                    '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f6a8c9" transform="rotate(144 50 50)"/>' +
+                    '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f293bc" transform="rotate(216 50 50)"/>' +
+                    '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#f6a8c9" transform="rotate(288 50 50)"/>' +
+                    '<circle cx="50" cy="50" r="7" fill="#fff6ee"/>' +
+                    '<circle cx="47" cy="47" r="1.3" fill="#ffcf6b"/>' +
+                    '<circle cx="53" cy="47" r="1.3" fill="#ffcf6b"/>' +
+                    '<circle cx="50" cy="52.5" r="1.3" fill="#ffcf6b"/>' +
+                  '</g>' +
+                '</svg>' +
+              '</div>' +
+              '<div class="bs-text">__GREET_HI__</div>' +
+              '<div class="bs-sub">__GREET_SUB__</div>' +
+              '<div class="bs-chips">__GREET_CHIPS__</div>' +
+              '<div class="bs-enter"><span class="bs-blink">&#9654;</span> Nhấn <kbd>Enter</kbd> để vào</div>' +
+              '<div class="bs-hint2">hoặc chạm/bấm chuột vào màn hình</div>' +
+            '</div>';
         doc.body.appendChild(el);
 
         var petalColors = ['#f6a8c9','#f293bc','#f9c1d9'];
@@ -2634,16 +2637,87 @@ if not st.session_state.get("_app_scripts_injected"):
             el.appendChild(pt);
         }
 
-        setTimeout(function(){
+        // ── Nội dung app hiện dần so le sau khi màn chào tan ──
+        function bsRevealApp() {
+            var seq = [];
+            var sb = doc.querySelector('section[data-testid="stSidebar"]');
+            if (sb) seq.push(sb);
+            var blk = doc.querySelector('div[data-testid="stMainBlockContainer"] > div[data-testid="stVerticalBlock"]');
+            if (blk && blk.children.length) {
+                Array.prototype.forEach.call(blk.children, function(c){ seq.push(c); });
+            } else {
+                var m = doc.querySelector('[data-testid="stMain"]');
+                if (m) seq.push(m);
+            }
+            seq.forEach(function(node, i){
+                node.style.animationDelay = (i * 0.06) + 's';
+                node.classList.add('tan-rv');
+            });
+            // Gỡ lớp hiệu ứng sau khi chạy xong để không ảnh hưởng các lần rerun sau
+            window.parent.setTimeout(function(){
+                seq.forEach(function(node){
+                    node.classList.remove('tan-rv');
+                    node.style.animationDelay = '';
+                });
+            }, 2200);
+        }
+
+        // ── Cổng Enter: chỉ mở khi người dùng bấm phím / chạm màn hình ──
+        var bsArmed = false, bsDone = false;
+        window.parent.setTimeout(function(){ bsArmed = true; }, 2000);
+
+        function bsDismiss() {
+            if (bsDone || !bsArmed) return;
+            bsDone = true;
+            doc.removeEventListener('keydown', bsKey, true);
+            document.removeEventListener('keydown', bsKey, true);
             el.classList.add('bs-hide');
-            setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 600);
-        }, 1900);
+            bsRevealApp();
+            window.parent.setTimeout(function(){
+                if (el.parentNode) el.parentNode.removeChild(el);
+            }, 600);
+        }
+        function bsKey(ev) {
+            if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar' || ev.key === 'Escape') {
+                ev.preventDefault();
+                bsDismiss();
+            }
+        }
+        // Bắt phím ở CẢ tài liệu cha lẫn iframe này — tuỳ nơi con trỏ đang focus
+        doc.addEventListener('keydown', bsKey, true);
+        document.addEventListener('keydown', bsKey, true);
+        el.addEventListener('click', bsDismiss);
+        el.addEventListener('touchstart', bsDismiss, {passive: true});
+        try { window.parent.focus(); } catch (e) {}
     }
 })();
 </script>
 """
     _boot_script = _boot_script.replace('__DARK_BG_DATA_URI__', _dark_bg_data_uri())
     _boot_script = _boot_script.replace('__LIGHT_BG_DATA_URI__', _light_bg_data_uri())
+
+    # ── Nội dung màn chào: lấy từ SỐ LIỆU THẬT đã lưu trong ngày. Chưa chạy
+    # công cụ nào thì chỉ chào + ngày/ca, KHÔNG hiện con số suy đoán. ──
+    _g_now = now_vn()
+    _g_thu = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][_g_now.weekday()]
+    if THEME_DAY_START_HOUR <= _g_now.hour < 14:
+        _g_shift, _g_hours = 'ca sáng', '06:00–14:00'
+    elif 14 <= _g_now.hour < 22:
+        _g_shift, _g_hours = 'ca chiều', '14:00–22:00'
+    else:
+        _g_shift, _g_hours = 'ca đêm', '22:00–06:00'
+    _g_tasks = (_load_progress().get('tasks') or {})
+    _g_total = ((_g_tasks.get('daily') or {}).get('summary') or {}).get('total')
+    _g_todo = sum(1 for _k in ('daily', 'regcard', 'recon_person', 'recon_room')
+                  if not (_g_tasks.get(_k) or {}).get('done'))
+    _g_chips = f'<span class="bs-chip">🛏️ {_g_total} khách lưu trú</span>' if _g_total is not None else ''
+    _g_chips += (f'<span class="bs-chip warn">⏳ Còn {_g_todo} việc chưa xong</span>' if _g_todo
+                 else '<span class="bs-chip ok">✓ Đã xong các việc trong ngày</span>')
+    _boot_script = _boot_script.replace('__GREET_HI__', f'Chào {_g_shift}, Tân 👋')
+    _boot_script = _boot_script.replace(
+        '__GREET_SUB__', f'{_g_thu}, {_g_now.strftime("%d/%m/%Y")} · {_g_hours}')
+    _boot_script = _boot_script.replace('__GREET_CHIPS__', _g_chips)
+    _boot_script = _boot_script.replace('__GREET_THEME__', _compute_effective_theme())
     st.iframe(_boot_script, height=1)
 
 # ── Chế độ giao diện: áp dụng data-theme lên <html> mỗi lần rerun (khác khối
