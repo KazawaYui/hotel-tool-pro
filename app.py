@@ -59,6 +59,20 @@ def _load_progress():
             pass
     return _default_progress()
 
+def _yesterday_total():
+    """Tổng khách HÔM QUA đọc từ file tiến độ ngày hôm trước — dùng để so sánh
+    trên thẻ tổng quan. Không có file (hoặc hôm qua chưa chạy công cụ) thì trả
+    None và thẻ sẽ không hiện dòng so sánh, KHÔNG suy đoán số."""
+    try:
+        p = _progress_path((today_vn() - datetime.timedelta(days=1)).isoformat())
+        if os.path.exists(p):
+            with open(p, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return ((data.get('tasks', {}) or {}).get('daily', {}) or {}).get('summary', {}).get('total')
+    except Exception:
+        pass
+    return None
+
 def _atomic_write_json(path, data):
     tmp = path + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
@@ -2023,68 +2037,108 @@ if not st.session_state.get("_app_scripts_injected"):
     footer {visibility: hidden;}
     header[data-testid="stHeader"] {background: transparent;}
 
-    .stApp {
+    /* ── Hệ màu (light mặc định) — khai báo ở html để lớp popover/dropdown
+       render NGOÀI .stApp cũng kế thừa được, và khai báo lại ở .stApp vì
+       khai báo trực tiếp trên phần tử luôn thắng giá trị kế thừa. ── */
+    html, .stApp {
         --ease: cubic-bezier(0.4, 0, 0.2, 1);
-        --neu-bg: #e6e9ef; --neu-text: #3d4451; --neu-text2: #8b93a3;
-        --neu-muted: #a6adba; --neu-accent: #6c7ce0;
-        --neu-sl: rgba(255,255,255,0.85); --neu-sd: rgba(163,177,198,0.55);
-        --r-lg: 22px; --r-md: 16px; --r-pill: 999px;
-        background: var(--neu-bg);
+        --bg: #f6f7fa; --surf: #ffffff; --surf2: #fafbfc;
+        --line: #e7e9ef; --line2: #f0f2f6; --chip: #f2f4f8;
+        --tx: #0f172a; --tx2: #5b6478; --tx3: #98a1b3;
+        --acc: #4f46e5; --acc2: #7c3aed;
+        --ok: #0d9668; --warn: #d97706; --err: #dc2626;
+        --sh: 0 1px 2px rgba(15,23,42,.05), 0 8px 24px rgba(15,23,42,.05);
+        --sh-lg: 0 2px 6px rgba(15,23,42,.06), 0 14px 36px rgba(15,23,42,.09);
+        --r-lg: 16px; --r-md: 11px; --r-sm: 9px; --r-pill: 999px;
     }
-    /* Ảnh nền chế độ sáng (mèo con trong túi giấy) — mặc định light mode
-       không có data-theme (chỉ dark mode mới gắn thuộc tính), nên áp dụng
-       khi KHÔNG phải dark; cùng cách phủ gradient nhạt như bản tối để chữ/
-       thẻ nổi vẫn đọc rõ. */
-    html:not([data-theme="dark"]) .stApp {
-        /* Chữ nhãn mục (.section-label) và vài dòng caption màu xám nhạt nổi
-           trực tiếp trên nền (không nằm trong thẻ nền đặc) nên độ mờ ảnh ở
-           chế độ sáng cần giữ cao hơn bản tối 1 chút mới đủ tương phản đọc
-           được — bản tối chữ trắng nên không bị vấn đề này. */
-        background-image: linear-gradient(rgba(230,233,239,0.55), rgba(230,233,239,0.75)),
+    html[data-theme="dark"], html[data-theme="dark"] .stApp {
+        --bg: #12151d; --surf: #1a1f2b; --surf2: #161b25;
+        --line: #262d3b; --line2: #212734; --chip: #242b39;
+        --tx: #eef2fa; --tx2: #a3adc2; --tx3: #727d95;
+        --acc: #8b93f8; --acc2: #a78bfa;
+        --ok: #34d399; --warn: #fbbf24; --err: #f87171;
+        --sh: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.32);
+        --sh-lg: 0 2px 8px rgba(0,0,0,.35), 0 18px 44px rgba(0,0,0,.42);
+    }
+    .stApp {
+        background-color: var(--bg);
+        color: var(--tx);
+        background-image: linear-gradient(rgba(246,247,250,.80), rgba(246,247,250,.93)),
                            url("__LIGHT_BG_DATA_URI__");
-        background-size: cover;
-        background-position: center center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
+        background-size: cover; background-position: center center;
+        background-repeat: no-repeat; background-attachment: fixed;
+    }
+    html[data-theme="dark"] .stApp {
+        background-image: linear-gradient(rgba(18,21,29,.78), rgba(18,21,29,.92)),
+                           url("__DARK_BG_DATA_URI__");
     }
 
-    /* ── Sidebar: hòa cùng nền, nav dạng pill lõm khi active ── */
+    /* ── Sidebar ── */
     section[data-testid="stSidebar"] {
-        background: var(--neu-bg); border-right: none;
-        box-shadow: 6px 0 14px rgba(163,177,198,0.22);
+        background: var(--surf); border-right: 1px solid var(--line); box-shadow: none;
     }
     section[data-testid="stSidebar"] .stButton button {
-        background: var(--neu-bg); border: none;
-        border-radius: var(--r-pill);
-        color: var(--neu-text2); font-weight: 600; text-align: left;
-        justify-content: flex-start; padding: 0.65rem 1rem;
-        box-shadow: none; will-change: transform;
-        transform: translateX(0);
-        transition: color 0.1s var(--ease), transform 0.1s var(--ease), box-shadow 0.12s var(--ease);
+        background: transparent; border: 1px solid transparent;
+        border-radius: var(--r-sm);
+        color: var(--tx2); font-weight: 560; text-align: left;
+        justify-content: flex-start; padding: 0.5rem 0.6rem;
+        box-shadow: none; transition: background 0.12s var(--ease), color 0.12s var(--ease);
     }
     section[data-testid="stSidebar"] .stButton button:hover {
-        color: var(--neu-text); transform: translateX(3px);
+        background: var(--chip); color: var(--tx);
     }
     section[data-testid="stSidebar"] .stButton button[kind="primary"] {
-        background: var(--neu-bg) !important; color: var(--neu-accent) !important;
-        font-weight: 700;
-        box-shadow: inset -4px -4px 8px var(--neu-sl), inset 4px 4px 8px var(--neu-sd) !important;
+        background: linear-gradient(135deg, rgba(99,91,255,.12), rgba(167,139,250,.10)) !important;
+        color: var(--tx) !important; font-weight: 700;
+        border-color: rgba(120,110,250,.28) !important; box-shadow: none !important;
     }
-    section[data-testid="stSidebar"] .stButton button[kind="primary"]:hover {
-        transform: translateX(0);
+    /* Icon mỗi mục nav nằm trong ô chip; mục đang mở thì chip đổi sang gradient */
+    section[data-testid="stSidebar"] .stButton button [data-testid="stIconMaterial"] {
+        background: var(--chip); border-radius: 7px; padding: 4px;
+        width: 23px; height: 23px; display: inline-flex; align-items: center;
+        justify-content: center; font-size: 15px !important; margin-right: 2px;
     }
-    .sb-brand {padding: 0.2rem 0.4rem 1rem;}
-    .sb-brand-title {color: var(--neu-text); font-weight:700; font-size:0.95rem; letter-spacing:-0.01em;}
-    .sb-mascot {display:inline-block; width:20px; height:20px; vertical-align:-5px; margin-right:3px;
+    section[data-testid="stSidebar"] .stButton button[kind="primary"] [data-testid="stIconMaterial"] {
+        background: linear-gradient(135deg, var(--acc), var(--acc2)); color: #fff;
+    }
+    /* Badge số bên phải mục nav (số điền động ở khối style tiêm mỗi lần rerun) */
+    section[data-testid="stSidebar"] .stButton button::after {
+        margin-left: auto; font-size: 0.62rem; font-weight: 800; color: var(--tx2);
+        background: var(--chip); padding: 1px 7px; border-radius: var(--r-pill);
+    }
+    /* Khung nền cho cụm nút gạt giao diện (hàng cột duy nhất trong sidebar) */
+    section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] {
+        background: var(--chip); border-radius: 10px; padding: 3px; gap: 3px !important;
+    }
+    section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] .stButton button {
+        justify-content: center; text-align: center; padding: 0.36rem 0.2rem;
+        font-size: 0.72rem; font-weight: 680; border: none;
+    }
+    section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] .stButton button[kind="primary"] {
+        background: var(--surf) !important; color: var(--tx) !important;
+        border-color: transparent !important; box-shadow: 0 1px 3px rgba(15,23,42,.16) !important;
+    }
+    .sb-brand {padding: 0.1rem 0.3rem 0.9rem; border-bottom: 1px solid var(--line2); margin-bottom: 0.5rem;}
+    .sb-mascot {background: linear-gradient(140deg,#ff8fb1,#c084fc); border-radius: 9px;
+        padding: 4px; box-shadow: 0 4px 12px rgba(200,120,220,.35);}
+    .sb-brand-title {color: var(--tx); font-weight: 730; font-size: 0.92rem; letter-spacing: -.015em;}
+    .sb-mascot {display:inline-block; width:22px; height:22px; vertical-align:-5px; margin-right:5px;
         animation: flowerSway 3.4s ease-in-out infinite;}
     .sb-mascot svg {width:100%; height:100%;}
-    .sb-brand-sub {color: var(--neu-muted); font-size:0.72rem;}
-    .sb-section {color: var(--neu-muted); font-size:0.68rem; font-weight:700;
-        text-transform:uppercase; letter-spacing:0.08em; padding:0.8rem 0.5rem 0.25rem;}
-    .sb-status {display:flex; align-items:center; gap:8px; color: var(--neu-muted);
-        font-size:0.72rem; padding-top:0.8rem; margin-top:0.5rem;}
-    .sb-dot {position:relative; width:7px; height:7px; border-radius:50%; background:#7fd4a8; flex-shrink:0;}
-    .sb-dot::after {content:""; position:absolute; inset:0; border-radius:50%; background:#7fd4a8;
+    .sb-brand-sub {color: var(--tx3); font-size: 0.7rem; margin-top: 1px;}
+    .sb-section {color: var(--tx3); font-size: 0.6rem; font-weight: 800;
+        text-transform: uppercase; letter-spacing: 0.1em; padding: 0.8rem 0.55rem 0.3rem;}
+    .sb-user {display:flex; align-items:center; gap:9px; padding-top:0.8rem;
+        margin-top:0.5rem; border-top: 1px solid var(--line2);}
+    .sb-av {width:28px; height:28px; border-radius:50%; flex-shrink:0; color:#fff;
+        background: linear-gradient(135deg,#818cf8,#c084fc);
+        display:flex; align-items:center; justify-content:center; font-size:0.72rem; font-weight:760;}
+    .sb-un {font-size:0.76rem; font-weight:680; color: var(--tx);}
+    .sb-ur {font-size:0.66rem; color: var(--tx3);}
+    .sb-status {display:flex; align-items:center; gap:7px; color: var(--tx3);
+        font-size:0.68rem; padding-top:0.55rem;}
+    .sb-dot {position:relative; width:7px; height:7px; border-radius:50%; background:#34d399; flex-shrink:0;}
+    .sb-dot::after {content:""; position:absolute; inset:0; border-radius:50%; background:#34d399;
         animation: pulse 2.2s var(--ease) infinite;}
     @keyframes pulse {
         0%   {transform: scale(1);   opacity: 0.5;}
@@ -2096,27 +2150,17 @@ if not st.session_state.get("_app_scripts_injected"):
         50%      {transform: rotate(8deg);}
     }
 
-    /* ── Banner chào mừng: panel nổi + đuôi bong bóng thoại ── */
+    /* ── Thanh chào (header) ── */
     .welcome-banner {
-        position: relative;
-        display: flex; align-items: center; gap: 14px;
-        background: var(--neu-bg);
-        border: none; border-radius: var(--r-lg);
-        padding: 1.05rem 1.4rem; margin-bottom: 1.5rem;
-        box-shadow: -7px -7px 16px var(--neu-sl), 7px 7px 16px var(--neu-sd);
+        position: relative; display: flex; align-items: center; gap: 12px;
+        background: var(--surf); border: 1px solid var(--line); border-radius: var(--r-lg);
+        padding: 0.85rem 1.15rem; margin-bottom: 1.1rem; box-shadow: var(--sh);
     }
-    .welcome-banner::after {
-        content: ""; position: absolute; bottom: -7px; left: 44px;
-        width: 14px; height: 14px; background: var(--neu-bg);
-        transform: rotate(-45deg); border-radius: 0 0 0 4px;
-        box-shadow: -4px 4px 8px var(--neu-sd);
-    }
-    .welcome-emoji {width: 42px; height: 42px; flex-shrink: 0; animation: flowerSway 3.4s ease-in-out infinite;}
+    .welcome-emoji {width: 34px; height: 34px; flex-shrink: 0; animation: flowerSway 3.4s ease-in-out infinite;}
     .welcome-emoji svg {width: 100%; height: 100%;}
     .welcome-title {
         position: relative; overflow: hidden;
-        font-weight: 700; font-size: 1.12rem; letter-spacing: -0.01em;
-        color: var(--neu-accent);
+        font-weight: 760; font-size: 1.02rem; letter-spacing: -.025em; color: var(--tx);
     }
     .welcome-title span {display: inline-block; color: inherit; will-change: transform, opacity;}
     @keyframes wtLetterIn {
@@ -2134,141 +2178,271 @@ if not st.session_state.get("_app_scripts_injected"):
         12%  {opacity: 1;}
         100% {left: 130%; opacity: 0;}
     }
-    .welcome-sub {color: var(--neu-text2); font-size: 0.82rem; margin-top: 2px;}
+    .welcome-sub {color: var(--tx3); font-size: 0.76rem; margin-top: 2px;}
 
-    /* ── Nội dung chính ── */
+    /* ── Top bar: breadcrumb + trạng thái ── */
+    .tan-topbar {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        font-size: 0.82rem; color: var(--tx); padding: 0.15rem 0 0.15rem;
+    }
+    /* Thanh top bar: nền liền khối + viền dưới, tràn ra sát 2 mép khung nội dung */
+    /* Khung nội dung có padding 96px trên / 80px hai bên — kéo âm đúng bằng đó
+       để thanh chạy sát mép, cộng width bù lại phần margin âm hai bên. */
+    .st-key-tan_topbar {
+        background: var(--surf); border-bottom: 1px solid var(--line);
+        margin: -4.6rem -1.6rem 1.1rem !important; width: calc(100% + 3.2rem) !important;
+        max-width: none !important; padding: 0.5rem 1.6rem !important;
+    }
+    /* Nút "Xuất báo cáo" trên thanh là nút phụ (nút chính là Xử lý hàng ngày) */
+    .st-key-tb_report_dl button, .st-key-tb_report_off button {
+        background: var(--surf) !important; color: var(--tx) !important;
+        border: 1px solid var(--line) !important; box-shadow: none !important;
+        font-weight: 640;
+    }
+    /* Thanh progress mảnh trong thẻ số liệu */
+    .kpi-bar {height: 3px; border-radius: 3px; background: var(--chip); margin-top: .7rem; overflow: hidden;}
+    .kpi-bar i {display: block; height: 100%; border-radius: 3px; background: var(--acc);}
+    .kpi-bar i.err {background: var(--err);}
+    .tan-crumb {color: var(--tx3);}
+    .tan-sep {color: var(--tx3); opacity: .6;}
+    .tan-topbar-r {margin-left: auto; display: flex; align-items: center; gap: 7px;}
+    .tan-h1 {font-size: 1.35rem; font-weight: 790; letter-spacing: -.03em; color: var(--tx);}
+    .tan-h1sub {font-size: 0.78rem; color: var(--tx3); margin: 2px 0 0.7rem;}
+
+    /* ── Thẻ số liệu nhỏ (bento) ── */
+    .kpi-lab {font-size: 0.76rem; color: var(--tx2); font-weight: 640;
+        display: flex; align-items: center; gap: 8px;}
+    .kpi-ic {width: 26px; height: 26px; border-radius: 8px; display: inline-flex;
+        align-items: center; justify-content: center; font-size: 0.78rem; background: var(--chip);}
+    .kpi-ic.err {background: rgba(239,68,68,.14);}
+    .kpi-ic.ok {background: rgba(16,185,129,.14);}
+    .kpi-ic.acc {background: rgba(99,91,240,.14);}
+    .kpi-val {font-size: 1.85rem; font-weight: 800; letter-spacing: -.035em;
+        line-height: 1; margin-top: 1.5rem; color: var(--tx); font-variant-numeric: tabular-nums;}
+    .kpi-val.err {color: var(--err);}
+    .kpi-sub {font-size: 0.7rem; color: var(--tx3); font-weight: 620; margin-top: .45rem;}
+
+    /* ── Panel (thẻ có tiêu đề + danh sách dòng) ── */
+    .pan-h {display: flex; align-items: center; gap: 8px; padding-bottom: .55rem;
+        margin-bottom: .5rem; border-bottom: 1px solid var(--line2);}
+    .pan-t {font-size: 0.85rem; font-weight: 730; letter-spacing: -.015em; color: var(--tx);}
+    .pan-row {display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.82rem;}
+    .pan-task {display: flex; align-items: center; gap: 9px; padding: .62rem .1rem;
+        font-size: 0.82rem; border-bottom: 1px solid var(--line2);}
+    .pan-task:last-of-type {border-bottom: 0;}
+    .pan-time {margin-left: auto; font-size: 0.7rem; color: var(--tx3); font-weight: 650;
+        font-variant-numeric: tabular-nums;}
+    .pan-rt {color: var(--tx); font-weight: 560;}
+    .pan-mut {font-size: 0.7rem; color: var(--tx3); font-weight: 620;}
+    .pan-line {display: flex; align-items: center; justify-content: space-between;
+        gap: 10px; padding: .48rem 0; font-size: 0.8rem; color: var(--tx2);
+        border-bottom: 1px solid var(--line2);}
+    .pan-line:last-child {border-bottom: 0;}
+    .pan-v {font-weight: 750; color: var(--tx); font-variant-numeric: tabular-nums;}
+    .pan-empty {font-size: 0.78rem; color: var(--tx3); line-height: 1.55; padding: .3rem 0 .7rem;}
+    .pan-foot {margin-top: auto; padding-top: .35rem;}
+    /* Hộp cảnh báo trong panel (đúng kiểu ô nhắc việc của bản dựng) */
+    .pan-al {display: flex; gap: 9px; padding: .6rem .65rem; border-radius: 11px;
+        margin-bottom: .45rem; border: 1px solid;}
+    .pan-al.r {background: rgba(239,68,68,.10); border-color: rgba(239,68,68,.26);}
+    .pan-al.a {background: rgba(245,158,11,.10); border-color: rgba(245,158,11,.26);}
+    .pan-al-ic {font-size: 0.85rem; line-height: 1.2;}
+    .pan-al-t {font-size: 0.78rem; font-weight: 680; color: var(--tx); line-height: 1.35;}
+    .pan-al-m {font-size: 0.68rem; color: var(--tx3); margin-top: 2px; line-height: 1.35;}
+
+    /* ── Nhãn mục ── */
     .section-label {
-        font-size: 0.7rem; font-weight: 700; color: var(--neu-text2);
-        text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.8rem;
+        font-size: 0.63rem; font-weight: 800; color: var(--tx3);
+        text-transform: uppercase; letter-spacing: 0.09em; margin-bottom: 0.6rem;
     }
+
+    /* ── Thẻ nội dung (st.container(border=True)) ──
+       Bản Streamlit này KHÔNG còn testid "stVerticalBlockBorderWrapper";
+       khối có viền là stVerticalBlock mang thêm thuộc tính overflow (các khối
+       thường không có). Giữ cả selector cũ cho bản Streamlit đời trước. */
+    div[data-testid="stVerticalBlock"][overflow],
     div[data-testid="stVerticalBlockBorderWrapper"] {
-        background: var(--neu-bg); border: none !important;
-        border-radius: var(--r-lg); transform: translateY(0);
-        will-change: transform;
-        box-shadow: -8px -8px 18px var(--neu-sl), 8px 8px 18px var(--neu-sd);
-        transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
+        background: var(--surf); border: 1px solid var(--line) !important;
+        border-radius: 14px !important; box-shadow: var(--sh);
+        transition: box-shadow 0.15s var(--ease);
     }
-    div[data-testid="stVerticalBlockBorderWrapper"]:hover {
-        transform: translateY(-2px);
-        box-shadow: -9px -9px 20px var(--neu-sl), 10px 10px 22px var(--neu-sd);
+    div[data-testid="stVerticalBlock"][overflow]:hover,
+    div[data-testid="stVerticalBlockBorderWrapper"]:hover {box-shadow: var(--sh-lg);}
+
+    /* ── Thẻ HERO (ảnh mèo làm nền, phủ tối dần để chữ luôn nổi) ── */
+    .tan-hero {
+        position: relative; overflow: hidden; color: #fff;
+        border-radius: var(--r-lg); padding: 1.15rem 1.35rem;
+        min-height: 200px; display: flex; flex-direction: column; justify-content: center;
+        background-image: linear-gradient(100deg, rgba(22,18,48,.95) 0%, rgba(34,26,66,.74) 46%, rgba(48,36,84,.26) 100%),
+                           url("__LIGHT_BG_DATA_URI__");
+        background-size: cover, cover; background-position: center, center right;
+        box-shadow: 0 12px 32px rgba(30,25,70,.28);
     }
-    div[data-testid="stFileUploader"] {
-        background: var(--neu-bg);
-        border: none; border-radius: var(--r-md); padding: 0.55rem;
-        box-shadow: inset -5px -5px 10px var(--neu-sl), inset 5px 5px 10px var(--neu-sd);
-        transform: translateY(0); will-change: transform;
-        transition: transform 0.12s var(--ease);
+    html[data-theme="dark"] .tan-hero {
+        background-image: linear-gradient(100deg, rgba(16,14,32,.95) 0%, rgba(26,22,50,.74) 46%, rgba(40,32,72,.24) 100%),
+                           url("__DARK_BG_DATA_URI__");
+        box-shadow: 0 14px 36px rgba(0,0,0,.45);
     }
-    div[data-testid="stFileUploader"]:hover {transform: translateY(-1px);}
-    div[data-testid="stFileUploader"] section {background: transparent; border: none;}
+    .tan-hero-lab {font-size: 0.74rem; font-weight: 640; opacity: .88;}
+    .tan-hero-val {font-size: 2.55rem; font-weight: 820; letter-spacing: -.04em; line-height: 1; margin-top: .35rem;}
+    .tan-hero-sub {font-size: 0.75rem; opacity: .85; font-weight: 600; margin-top: .45rem;}
+    .tan-hero-split {display: flex; gap: 1.6rem; margin-top: .9rem; padding-top: .75rem;
+        border-top: 1px solid rgba(255,255,255,.22); flex-wrap: wrap;}
+    .tan-hero-k {font-size: 0.68rem; opacity: .82; font-weight: 620;}
+    .tan-hero-v {font-size: 1.1rem; font-weight: 790; margin-top: 1px; letter-spacing: -.02em;}
+
+    /* ── Chip trạng thái ── */
+    .tan-chip {display:inline-block; font-size:0.64rem; font-weight:740; padding:2px 8px;
+        border-radius: var(--r-pill); background: var(--chip); color: var(--tx2);}
+    .tan-chip.ok {background: rgba(16,185,129,.14); color: var(--ok);}
+    .tan-chip.warn {background: rgba(245,158,11,.15); color: var(--warn);}
+    .tan-chip.err {background: rgba(239,68,68,.13); color: var(--err);}
+
+    /* ── Ô nhập ── */
+    [data-testid="stTextInputRootElement"],
+    [data-testid="stTextAreaRootElement"],
+    [data-testid="stNumberInputContainer"] {
+        background: var(--surf2) !important; border-radius: var(--r-md) !important;
+    }
     .stTextInput input, .stNumberInput input, .stTextArea textarea {
-        background: var(--neu-bg) !important; border: none !important;
-        border-radius: var(--r-md) !important; color: var(--neu-text) !important;
-        box-shadow: inset -4px -4px 9px var(--neu-sl), inset 4px 4px 9px var(--neu-sd) !important;
-        transition: box-shadow 0.1s var(--ease);
+        background: var(--surf2) !important; border: 1px solid var(--line) !important;
+        border-radius: var(--r-md) !important; color: var(--tx) !important;
+        box-shadow: none !important; transition: border-color 0.12s var(--ease), box-shadow 0.12s var(--ease);
     }
     .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {
-        box-shadow: inset -4px -4px 9px var(--neu-sl), inset 4px 4px 9px var(--neu-sd),
-                    0 0 0 2px rgba(108,124,224,0.35) !important;
+        border-color: var(--acc) !important;
+        box-shadow: 0 0 0 3px rgba(99,91,240,.16) !important;
     }
-    div[data-testid="stNumberInput"] button {border: none; background: var(--neu-bg);}
-    .stCheckbox {transition: opacity 0.15s var(--ease);}
-    .stCheckbox:hover {opacity: 0.85;}
+    div[data-testid="stNumberInput"] button {border: none; background: transparent; color: var(--tx2) !important;}
+    [data-testid="stNumberInputStepDown"], [data-testid="stNumberInputStepUp"],
+    button[aria-label="Open"], button[aria-label="Show password"], button[aria-label="Hide password"] {
+        color: var(--tx2) !important;
+    }
+    div[data-testid="stSelectbox"] [role="group"] {
+        background: var(--surf2) !important; border-radius: var(--r-md) !important;
+    }
+    div[data-testid="stSelectbox"] input[role="combobox"] {color: var(--tx) !important;}
+    div:has(> [role="listbox"]) {background: var(--surf) !important;}
+    [role="option"] {color: var(--tx) !important;}
+    [role="option"][aria-selected="true"], [role="option"]:hover {background: var(--chip) !important;}
+    [data-testid="stWidgetLabel"] p {color: var(--tx2) !important; font-weight: 600; font-size: 0.8rem;}
 
-    /* ── Nút: chính = gradient accent nổi khối; phụ = pill nổi trung tính ── */
+    /* ── Tải file ── */
+    div[data-testid="stFileUploader"] {
+        background: var(--surf2); border: 1px dashed var(--line); border-radius: var(--r-md);
+        padding: 0.5rem; box-shadow: none;
+        transition: border-color 0.12s var(--ease);
+    }
+    div[data-testid="stFileUploader"]:hover {border-color: var(--acc);}
+    div[data-testid="stFileUploader"] section {background: transparent; border: none;}
+    div[data-testid="stFileUploader"] button {
+        background: var(--surf) !important; color: var(--tx) !important;
+        border: 1px solid var(--line) !important; box-shadow: none !important;
+        border-radius: var(--r-sm) !important; font-weight: 640;
+    }
+
+    /* ── Nút ── */
     div[data-testid="stMainBlockContainer"] .stButton button, .stDownloadButton button {
-        border-radius: var(--r-md); font-weight: 700; border: none;
-        will-change: transform; transform: translateY(0);
-        transition: transform 0.12s var(--ease), box-shadow 0.12s var(--ease);
+        border-radius: var(--r-md); font-weight: 660; border: 1px solid var(--line);
+        background: var(--surf); color: var(--tx);
+        box-shadow: none;
+        transition: background 0.12s var(--ease), border-color 0.12s var(--ease), transform 0.1s var(--ease);
     }
     div[data-testid="stMainBlockContainer"] .stButton button:hover, .stDownloadButton button:hover {
-        transform: translateY(-1px);
+        background: var(--chip); border-color: var(--line);
     }
     div[data-testid="stMainBlockContainer"] .stButton button:active, .stDownloadButton button:active {
-        transform: scale(0.98) translateY(0);
-        box-shadow: inset -4px -4px 8px rgba(255,255,255,0.25), inset 4px 4px 8px rgba(0,0,0,0.18) !important;
-    }
-    div[data-testid="stMainBlockContainer"] .stButton button[kind="secondary"] {
-        background: var(--neu-bg); color: var(--neu-text);
-        box-shadow: -5px -5px 12px var(--neu-sl), 5px 5px 12px var(--neu-sd);
+        transform: scale(0.985);
     }
     div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"], .stDownloadButton button {
-        background: linear-gradient(145deg, #7986e6, var(--neu-accent));
-        color: #ffffff;
-        box-shadow: -6px -6px 14px var(--neu-sl), 6px 6px 14px rgba(108,124,224,0.45);
-        position: relative; overflow: hidden;
+        background: linear-gradient(135deg, var(--acc), var(--acc2));
+        color: #ffffff; border: none;
+        box-shadow: 0 6px 18px rgba(99,91,240,.32);
     }
-    div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"]::after, .stDownloadButton button::after {
-        content: ""; position: absolute; top: 0; left: -60%; width: 35%; height: 100%;
-        background: linear-gradient(120deg, transparent, rgba(255,255,255,0.5), transparent);
-        transform: skewX(-20deg) translateX(0);
-        transition: transform 0.65s ease;
-        pointer-events: none; will-change: transform;
-    }
-    div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"]:hover::after, .stDownloadButton button:hover::after {
-        transform: skewX(-20deg) translateX(540%);
+    div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"]:hover, .stDownloadButton button:hover {
+        filter: brightness(1.06); background: linear-gradient(135deg, var(--acc), var(--acc2));
     }
 
-    /* ── Metric: thẻ nổi đơn sắc, giá trị đậm ── */
+    /* ── Metric ── */
     div[data-testid="stMetric"] {
-        background: var(--neu-bg); border: none; border-radius: var(--r-md);
-        padding: 0.95rem 1rem 0.8rem; position: relative; overflow: hidden;
-        will-change: transform; transform: translateY(0) translateZ(0);
-        box-shadow: -6px -6px 13px var(--neu-sl), 6px 6px 13px var(--neu-sd);
-        transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
+        background: var(--surf); border: 1px solid var(--line); border-radius: 13px;
+        padding: 0.85rem 0.95rem 0.75rem; box-shadow: var(--sh);
+        transition: box-shadow 0.15s var(--ease);
     }
-    div[data-testid="stMetric"]:hover {
-        transform: translateY(-3px) translateZ(0);
-        box-shadow: -7px -7px 15px var(--neu-sl), 8px 8px 17px var(--neu-sd);
-    }
+    div[data-testid="stMetric"]:hover {box-shadow: var(--sh-lg);}
     div[data-testid="stMetricValue"], div[data-testid="stMetricValue"] * {
-        font-family: ui-monospace, "SFMono-Regular", Menlo, monospace !important;
-        font-weight: 700 !important; color: var(--neu-text) !important;
+        font-weight: 780 !important; color: var(--tx) !important; letter-spacing: -.03em;
+        font-variant-numeric: tabular-nums;
     }
     div[data-testid="stMetricLabel"], div[data-testid="stMetricLabel"] * {
-        font-size: 0.82rem !important; color: var(--neu-text2) !important; font-weight: 600 !important;
+        font-size: 0.76rem !important; color: var(--tx2) !important; font-weight: 620 !important;
     }
 
-    div[data-testid="stAlert"] {
-        border-radius: var(--r-md);
-        transition: transform 0.1s var(--ease);
-    }
-    div[data-testid="stAlert"]:hover {transform: translateY(-1px);}
+    /* ── Cảnh báo ── */
+    div[data-testid="stAlert"] {border-radius: var(--r-md); border: 1px solid transparent;}
 
-    /* ── Form (cổng mật khẩu): panel nổi đồng bộ Neumorphism ── */
+    /* ── Form / expander / bảng ── */
     div[data-testid="stForm"] {
-        background: var(--neu-bg); border: none;
-        border-radius: var(--r-lg); padding: 1.1rem 1.2rem;
-        box-shadow: -8px -8px 18px var(--neu-sl), 8px 8px 18px var(--neu-sd);
+        background: var(--surf); border: 1px solid var(--line);
+        border-radius: 14px; padding: 1rem 1.1rem; box-shadow: var(--sh);
     }
-
-    /* ── Bảng dữ liệu: bo góc + bóng nổi đồng bộ ── */
+    div[data-testid="stExpander"] {background: var(--surf); border-radius: var(--r-md);}
+    div[data-testid="stExpander"] summary {color: var(--tx) !important;}
     div[data-testid="stDataFrame"] {
-        border-radius: var(--r-md); overflow: hidden;
-        box-shadow: -6px -6px 13px var(--neu-sl), 6px 6px 13px var(--neu-sd);
+        border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--line);
     }
 
-    /* ── Bố cục: giới hạn chiều rộng dễ đọc, ẩn khoảng trống của iframe tiêm script ── */
-    div[data-testid="stMainBlockContainer"] {max-width: 1180px;}
+    /* ── Chữ nền tối: ép màu cho phần Streamlit tự đặt màu tĩnh ── */
+    html[data-theme="dark"] .stApp p, html[data-theme="dark"] .stApp span,
+    html[data-theme="dark"] .stApp label, html[data-theme="dark"] .stApp li,
+    html[data-theme="dark"] .stApp h1, html[data-theme="dark"] .stApp h2,
+    html[data-theme="dark"] .stApp h3, html[data-theme="dark"] .stApp h4,
+    html[data-theme="dark"] [data-testid="stMarkdownContainer"] {color: var(--tx);}
+    html[data-theme="dark"] [data-testid="stCaptionContainer"],
+    html[data-theme="dark"] [data-testid="stCaptionContainer"] * {color: var(--tx3) !important;}
+    html[data-theme="dark"] [data-testid="stCheckbox"] label,
+    html[data-theme="dark"] [data-testid="stRadio"] label {color: var(--tx) !important;}
+    /* Thẻ hero luôn nền tối nên chữ bên trong luôn trắng ở cả 2 chế độ */
+    .tan-hero, .tan-hero * {color: #fff !important;}
+
+    /* ── Bố cục ── */
+    div[data-testid="stMainBlockContainer"] {max-width: 1320px; padding: 4.6rem 1.6rem 2.5rem;}
+    section[data-testid="stSidebar"] {width: 252px !important; min-width: 252px !important;}
+    /* Khe giữa các thẻ = 13px như bản dựng (trừ cụm nút giao diện ở sidebar) */
+    div[data-testid="stMain"] div[data-testid="stHorizontalBlock"] {gap: 0.82rem;}
+    /* Padding trong thẻ có viền: gọn lại cho khớp bản dựng */
+    div[data-testid="stVerticalBlock"][overflow] {
+        padding: 0.85rem 1rem !important; display: flex; flex-direction: column;
+    }
+    /* Link "Xem tất cả" ở đầu panel: nút nhưng nhìn như link, đúng bản dựng */
+    .st-key-dash_seeall button {
+        background: transparent !important; border: none !important; box-shadow: none !important;
+        color: var(--acc) !important; font-size: 0.72rem !important; font-weight: 700 !important;
+        padding: 0 !important; justify-content: flex-end !important; min-height: 0 !important;
+    }
+    .st-key-dash_seeall button:hover {background: transparent !important; text-decoration: underline;}
+    /* Phần tử cuối trong 2 panel này ghim xuống đáy thẻ như bản dựng */
+    .st-key-dash_tasks > div[data-testid="stElementContainer"]:last-child,
+    .st-key-dash_ho > div[data-testid="stElementContainer"]:last-child {margin-top: auto;}
     div[data-testid="stElementContainer"]:has(iframe[height="1"]) {display: none;}
-    div[data-testid="stMainBlockContainer"] hr {border-color: rgba(163,177,198,0.45);}
+    div[data-testid="stMainBlockContainer"] hr {border-color: var(--line);}
 
-    /* ── Focus bàn phím rõ ràng (accessibility) ── */
     .stButton button:focus-visible, .stDownloadButton button:focus-visible {
-        outline: 3px solid rgba(108,124,224,0.45); outline-offset: 2px;
+        outline: 3px solid rgba(99,91,240,.4); outline-offset: 2px;
     }
 
-    /* ── Màn hình nhỏ: thu gọn padding, banner & metric ── */
     @media (max-width: 768px) {
         div[data-testid="stMainBlockContainer"] {padding-left: 1rem; padding-right: 1rem;}
-        .welcome-banner {padding: 0.85rem 1rem; gap: 10px; margin-bottom: 1.1rem;}
-        .welcome-title {font-size: 1rem;}
-        .welcome-emoji {width: 34px; height: 34px;}
-        div[data-testid="stMetric"] {padding: 0.7rem 0.75rem 0.6rem;}
-        div[data-testid="stMetricValue"] {font-size: 1.5rem !important;}
+        .st-key-tan_topbar {margin: -2rem -1rem 0.9rem; width: calc(100% + 2rem); padding: 0.45rem 1rem;}
+        .welcome-banner {padding: 0.7rem 0.9rem; gap: 9px; margin-bottom: 0.9rem;}
+        .welcome-title {font-size: 0.95rem;}
+        .welcome-emoji {width: 30px; height: 30px;}
+        .tan-hero-val {font-size: 2rem;}
+        .tan-hero-split {gap: 1.1rem;}
+        div[data-testid="stMetric"] {padding: 0.6rem 0.7rem 0.55rem;}
     }
 
-    /* ── Tôn trọng cài đặt giảm chuyển động của hệ điều hành ── */
     @media (prefers-reduced-motion: reduce) {
         .sb-mascot, .welcome-emoji, .sb-dot::after, .welcome-title::after,
         #bg-sakura-layer .petal, #boot-splash .sakura, #boot-splash .bs-sparkle {
@@ -2279,124 +2453,6 @@ if not st.session_state.get("_app_scripts_injected"):
             animation: none !important; opacity: 1 !important; transform: none !important;
         }
         .stApp *, #boot-splash {transition-duration: 0.01ms !important;}
-    }
-
-    /* ── Chế độ tối (dark mode) — bật tay hoặc tự động theo giờ (xem hàm
-       _compute_effective_theme trong app.py), chuyển qua thuộc tính
-       data-theme trên thẻ <html> (script riêng, chạy lại mỗi lần rerun vì
-       giờ có thể thay đổi — khác khối CSS này chỉ tiêm 1 lần/phiên). LƯU Ý:
-       widget lõi của Streamlit (dropdown, ô ngày, và đặc biệt bảng dữ liệu
-       st.dataframe vẽ bằng canvas) lấy màu tĩnh từ .streamlit/config.toml
-       lúc server khởi động — CSS không với tới được để đổi màu nền/chữ bên
-       trong canvas đó, chỉ đổi được viền ngoài. ── */
-    html[data-theme="dark"] {
-        --neu-bg: #262a35; --neu-text: #e8eaf1; --neu-text2: #9aa2b6;
-        --neu-muted: #6d7488; --neu-accent: #8b98f5;
-        --neu-sl: #2f3444; --neu-sd: #181b23;
-        color: var(--neu-text);
-    }
-    /* .stApp tự khai báo lại --neu-* của riêng nó (bản sáng, cố định) ở khối
-       CSS phía trên — khai báo trực tiếp trên 1 phần tử luôn thắng giá trị kế
-       thừa từ tổ tiên dù tổ tiên có chọn lọc hơn, nên phải ghi đè lại ở đây
-       thay vì chỉ dựa vào kế thừa từ html. */
-    html[data-theme="dark"] .stApp {
-        --neu-bg: #262a35; --neu-text: #e8eaf1; --neu-text2: #9aa2b6;
-        --neu-muted: #6d7488; --neu-accent: #8b98f5;
-        --neu-sl: #2f3444; --neu-sd: #181b23;
-        /* Ảnh nền mèo con ngủ — phủ thêm lớp gradient tối cùng tông --neu-bg
-           lên trên để chữ/thẻ nổi vẫn đọc rõ (bản thân thẻ/sidebar/nút đã có
-           nền đặc riêng nên luôn đọc được dù độ mờ ảnh nền thế nào — độ mờ ở
-           đây chỉ ảnh hưởng phần khoảng trống giữa các thẻ). */
-        background-image: linear-gradient(rgba(38,42,53,0.35), rgba(38,42,53,0.55)),
-                           url("__DARK_BG_DATA_URI__");
-        background-size: cover;
-        background-position: center center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-    }
-    html[data-theme="dark"] .stApp p,
-    html[data-theme="dark"] .stApp span,
-    html[data-theme="dark"] .stApp label,
-    html[data-theme="dark"] .stApp li,
-    html[data-theme="dark"] .stApp h1,
-    html[data-theme="dark"] .stApp h2,
-    html[data-theme="dark"] .stApp h3,
-    html[data-theme="dark"] .stApp h4,
-    html[data-theme="dark"] [data-testid="stMarkdownContainer"],
-    html[data-theme="dark"] [data-testid="stWidgetLabel"] p {
-        color: var(--neu-text);
-    }
-    html[data-theme="dark"] [data-testid="stCaptionContainer"],
-    html[data-theme="dark"] [data-testid="stCaptionContainer"] * {
-        color: var(--neu-text2) !important;
-    }
-    html[data-theme="dark"] div[data-testid="stMainBlockContainer"] hr {
-        border-color: rgba(255,255,255,0.08);
-    }
-    /* Ô chọn (selectbox/multiselect) — bản Streamlit này dùng React Aria
-       combobox (không còn data-baseweb), phần danh sách mở ra được portal ra
-       ngoài .stApp nên các biến --neu-* phải khai báo ở html (phía trên),
-       không phải .stApp, mới "với" tới được. */
-    html[data-theme="dark"] div[data-testid="stSelectbox"] [role="group"] {
-        background: var(--neu-bg) !important;
-    }
-    html[data-theme="dark"] div[data-testid="stSelectbox"] input[role="combobox"] {
-        color: var(--neu-text) !important;
-    }
-    html[data-theme="dark"] div:has(> [role="listbox"]) {
-        background: var(--neu-bg) !important;
-    }
-    html[data-theme="dark"] [role="option"] {
-        color: var(--neu-text) !important;
-    }
-    html[data-theme="dark"] [role="option"][aria-selected="true"],
-    html[data-theme="dark"] [role="option"]:hover {
-        background: rgba(255,255,255,0.06) !important;
-    }
-    html[data-theme="dark"] [data-testid="stDateInput"] input,
-    html[data-theme="dark"] .stTextInput input,
-    html[data-theme="dark"] .stNumberInput input,
-    html[data-theme="dark"] .stTextArea textarea {
-        color: var(--neu-text) !important;
-    }
-    /* Khung gốc (root) của text input/number input/textarea giữ nguyên nền
-       sáng tĩnh từ config.toml — không lộ ra vì ô input con phủ kín lên trên,
-       TRỪ number input có nút -/+ chừa hở góc, lộ nền sáng ra ngoài. */
-    html[data-theme="dark"] [data-testid="stTextInputRootElement"],
-    html[data-theme="dark"] [data-testid="stTextAreaRootElement"],
-    html[data-theme="dark"] [data-testid="stNumberInputContainer"] {
-        background: var(--neu-bg) !important;
-    }
-    /* Nút -/+ của number input, icon mũi tên mở dropdown (selectbox), icon con
-       mắt hiện/ẩn mật khẩu — đều là icon "currentColor" nhưng bản thân nút
-       chứa nó tự đặt lại màu chữ tĩnh (xám tối) không kế thừa được từ html,
-       khiến icon gần như biến mất trên nền tối. */
-    html[data-theme="dark"] [data-testid="stNumberInputStepDown"],
-    html[data-theme="dark"] [data-testid="stNumberInputStepUp"],
-    html[data-theme="dark"] button[aria-label="Open"],
-    html[data-theme="dark"] button[aria-label="Show password"],
-    html[data-theme="dark"] button[aria-label="Hide password"] {
-        color: var(--neu-text2) !important;
-    }
-    /* Nút "Browse files" của file uploader render trực tiếp ngoài .stButton
-       (không có class .stButton bao ngoài) nên không ăn theo rule nút thường
-       — vẫn giữ nền sáng tĩnh + chữ gần trắng chồng lên nhau, gần như vô hình. */
-    html[data-theme="dark"] div[data-testid="stFileUploader"] button {
-        background: var(--neu-bg) !important; color: var(--neu-text) !important;
-        box-shadow: -4px -4px 9px var(--neu-sl), 4px 4px 9px var(--neu-sd) !important;
-    }
-    html[data-theme="dark"] [data-testid="stCheckbox"] label,
-    html[data-theme="dark"] [data-testid="stRadio"] label {
-        color: var(--neu-text) !important;
-    }
-    html[data-theme="dark"] div[data-testid="stExpander"] {
-        background: var(--neu-bg);
-    }
-    html[data-theme="dark"] div[data-testid="stExpander"] summary {
-        color: var(--neu-text) !important;
-    }
-    html[data-theme="dark"] div[data-testid="stDataFrame"] {
-        border: 1px solid rgba(255,255,255,0.08);
     }
     `;
     doc.head.appendChild(css);
@@ -2596,9 +2652,30 @@ if not st.session_state.get("_app_scripts_injected"):
 if 'theme_mode' not in st.session_state:
     st.session_state.theme_mode = 'auto'
 _effective_theme = _compute_effective_theme()
+# Badge số bên phải mục nav (số khách đã xử lý / số ghi chú sổ giao ca): số thay
+# đổi mỗi lần rerun nên tiêm qua CSS ::after ở đây, không nhét vào khối CSS tĩnh.
+_bd = st.session_state.get('daily_results') or {}
+_bd_n = _bd.get('total') or (st.session_state.get('progress', {})
+                             .get('tasks', {}).get('daily', {}).get('summary', {}) or {}).get('total')
+try:
+    _ho_n = len(db_load_entries(today_vn())) if db_available() else len(
+        (st.session_state.get('handover') or {}).get('entries', []))
+except Exception:
+    _ho_n = 0
+_badge_css = ''
+if _bd_n:
+    _badge_css += f'.st-key-nav_daily button::after{{content:"{_bd_n}";}}'
+if _ho_n:
+    _badge_css += f'.st-key-nav_handover button::after{{content:"{_ho_n}";}}'
 st.iframe(f"""
 <script>
-window.parent.document.documentElement.setAttribute('data-theme', '{_effective_theme}');
+(function(){{
+  var doc = window.parent.document;
+  doc.documentElement.setAttribute('data-theme', '{_effective_theme}');
+  var s = doc.getElementById('tan-badge-style');
+  if (!s) {{ s = doc.createElement('style'); s.id = 'tan-badge-style'; doc.head.appendChild(s); }}
+  s.textContent = {_badge_css!r};
+}})();
 </script>
 """, height=1)
 
@@ -2621,6 +2698,9 @@ if st.session_state.get('progress_date') != today_vn().isoformat():
     st.session_state.progress = _load_progress()
     st.session_state.nav_log = list(st.session_state.progress.get('nav_sequence', []))
     st.session_state.handover = {'entries': list(st.session_state.progress.get('handover_entries', []))}
+
+def set_theme_mode(mode):
+    st.session_state.theme_mode = mode
 
 def go_menu(name):
     st.session_state.menu = name
@@ -2688,36 +2768,57 @@ with st.sidebar:
                   on_click=go_menu, args=("recon",))
 
     st.markdown('<div class="sb-section">Giao diện</div>', unsafe_allow_html=True)
-    _theme_opts = {'auto': '🕐 Tự động (theo giờ)', 'light': '☀️ Sáng', 'dark': '🌙 Tối'}
-    st.selectbox("Chế độ giao diện", options=list(_theme_opts.keys()),
-                 format_func=lambda k: _theme_opts[k], key="theme_mode",
-                 label_visibility="collapsed")
+    # Nút gạt 3 trạng thái (segmented) thay cho ô chọn — nhìn gọn và bấm 1 lần
+    _tcols = st.columns(3, gap="small")
+    for _tci, (_tk, _tlbl) in enumerate([('auto', 'Tự động'), ('light', 'Sáng'), ('dark', 'Tối')]):
+        _tcols[_tci].button(_tlbl, key=f"theme_btn_{_tk}", use_container_width=True,
+                            type="primary" if st.session_state.get('theme_mode') == _tk else "secondary",
+                            on_click=set_theme_mode, args=(_tk,))
 
-    st.markdown('<div class="sb-status"><span class="sb-dot"></span>Sẵn sàng</div>', unsafe_allow_html=True)
+    _sb_shift = ('Ca sáng · 06:00–14:00' if 6 <= now_vn().hour < 14
+                 else 'Ca chiều · 14:00–22:00' if 14 <= now_vn().hour < 22 else 'Ca đêm · 22:00–06:00')
+    _sb_store = 'Supabase đã kết nối' if db_available() else 'Lưu tạm trên máy chủ'
+    st.markdown(
+        f'<div class="sb-user"><div class="sb-av">T</div>'
+        f'<div><div class="sb-un">Tân</div><div class="sb-ur">{_sb_shift}</div></div></div>'
+        f'<div class="sb-status"><span class="sb-dot"></span>{_sb_store}</div>',
+        unsafe_allow_html=True)
 
-st.markdown('''
-<div class="welcome-banner">
-    <div class="welcome-emoji">
-        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            <g>
-                <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd"/>
-                <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffb3d1" transform="rotate(72 50 50)"/>
-                <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd" transform="rotate(144 50 50)"/>
-                <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffb3d1" transform="rotate(216 50 50)"/>
-                <path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffc2dd" transform="rotate(288 50 50)"/>
-                <circle cx="50" cy="50" r="7" fill="#fff6ee"/>
-                <circle cx="47" cy="47" r="1.3" fill="#ffcf6b"/>
-                <circle cx="53" cy="47" r="1.3" fill="#ffcf6b"/>
-                <circle cx="50" cy="52.5" r="1.3" fill="#ffcf6b"/>
-            </g>
-        </svg>
-    </div>
-    <div>
-        <div class="welcome-title">Welcome, Tân</div>
-        <div class="welcome-sub">Front Office toolkit · Tân Hotel</div>
-    </div>
-</div>
-''', unsafe_allow_html=True)
+# ── Thanh top bar: breadcrumb + trạng thái + hành động (thay banner "Welcome") ──
+_page_name = MENU_LABELS.get(st.session_state.menu, 'Tổng quan ca trực')
+_tb_now = now_vn()
+_tb_chip = ('<span class="tan-chip ok">● Supabase đã kết nối</span>' if db_available()
+            else '<span class="tan-chip">● Lưu tạm trên máy chủ</span>')
+_tb_d = st.session_state.get('daily_results')
+_tb_rc = st.session_state.get('rc_results')
+_tb_rp = st.session_state.get('recon_results')
+_tb_rr = st.session_state.get('reconr_results')
+# Báo cáo ngày chỉ dựng khi đang ở Tổng quan VÀ đã có ít nhất 1 công cụ chạy
+# xong — tránh dựng workbook thừa ở mọi trang, mọi lần rerun.
+_tb_report = bool(_tb_d or _tb_rc or _tb_rp or _tb_rr) and st.session_state.menu == "dashboard"
+
+with st.container(key="tan_topbar"):
+    _tbl, _tbm, _tbr = st.columns([4.6, 1.25, 1.35], vertical_alignment="center")
+    _tbl.markdown(
+        f'<div class="tan-topbar"><span class="tan-crumb">Tân Hotel</span>'
+        f'<span class="tan-sep">/</span><b>{_page_name}</b>'
+        f'<span class="tan-topbar-r">{_tb_chip}'
+        f'<span class="tan-chip">📅 {_tb_now.strftime("%d/%m/%Y")}</span></span></div>',
+        unsafe_allow_html=True)
+    if _tb_report:
+        _tb_rp_date = (_tb_d or {}).get('date_str') or today_vn().strftime('%d_%m')
+        _tb_wb = build_daily_report(_tb_rp_date.replace('_', '/'),
+                                    _tb_d if _tb_d and _tb_d.get('has_xlsx') else None,
+                                    (_tb_rc or {}).get('arr_stats'), _tb_rp, _tb_rr)
+        _tbm.download_button("⇩ Xuất báo cáo", wb_to_bytes(_tb_wb),
+                             file_name=f"bao_cao_ngay_{_tb_rp_date}.xlsx",
+                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             use_container_width=True, key="tb_report_dl")
+    else:
+        _tbm.button("⇩ Xuất báo cáo", key="tb_report_off", use_container_width=True, disabled=True,
+                    help="Mở Tổng quan ca trực và chạy ít nhất một công cụ để xuất báo cáo ngày")
+    _tbr.button("⚡ Xử lý hàng ngày", key="tb_go_daily", use_container_width=True,
+                type="primary", on_click=go_menu, args=("daily",))
 
 # ── Tạo file ARR từ file Arrival (Book) Smile ──────────────────────────────
 def build_arr(book_bytes):
@@ -2936,11 +3037,9 @@ def build_arr(book_bytes):
 
 # ── Dashboard ca trực ─────────────────────────────────────────────────────
 if st.session_state.menu == "dashboard":
-    st.write("")
     _now = now_vn()
     _thu = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][_now.weekday()]
-    st.markdown(f'<div class="section-label">📊 Tổng quan ca trực — {_thu}, {_now.strftime("%d/%m/%Y")}</div>',
-                unsafe_allow_html=True)
+    _shift = ('Ca sáng' if 6 <= _now.hour < 14 else 'Ca chiều' if 14 <= _now.hour < 22 else 'Ca đêm')
 
     _d = st.session_state.get('daily_results')
     _rc = st.session_state.get('rc_results')
@@ -2954,100 +3053,212 @@ if st.session_state.menu == "dashboard":
     _p_rp = _ptasks.get('recon_person', {})
     _p_rr = _ptasks.get('recon_room', {})
 
-    # ── Checklist tiến độ công việc trong ca (còn nguyên dù tải lại trang) ──
-    with st.container(border=True):
-        st.markdown("**Tiến độ công việc trong ca** · theo dõi trong ngày, không mất khi tải lại trang")
-        if db_available():
-            _handover_n = len(db_load_entries(today_vn()))
-        else:
-            _handover_n = len((st.session_state.get('handover') or {}).get('entries', []))
-        _tasks = [
-            ("Xử lý hàng ngày (KBTT · VNM · ĐK14)", _d is not None or _p_daily.get('done'),
-             "daily", None if _d else _p_daily.get('time')),
-            ("Regcard + file ARR", _rc is not None or _p_regcard.get('done'),
-             "regcard", None if _rc else _p_regcard.get('time')),
-            ("Đối chiếu người nước ngoài", _re_p is not None or _p_rp.get('done'),
-             "recon_person" if st.session_state.get("recon_ok") else "recon",
-             None if _re_p else _p_rp.get('time')),
-            ("Đối chiếu hệ thống phòng", _re_r is not None or _p_rr.get('done'),
-             "recon_room" if st.session_state.get("recon_ok") else "recon",
-             None if _re_r else _p_rr.get('time')),
-            (f"Sổ giao ca ({_handover_n} ghi chú)", _handover_n > 0, "handover", None),
-        ]
-        for _ti, (_label, _done, _target, _stale_time) in enumerate(_tasks):
-            tc1, tc2 = st.columns([6, 1])
-            _suffix = f" · lúc {_stale_time} (phiên trước — mở lại để xem chi tiết/tải file)" if _stale_time else ""
-            tc1.markdown(("✅ " if _done else "⬜ ") + _label + _suffix)
-            tc2.button("Mở →", key=f"dash_go_{_ti}", use_container_width=True,
-                       on_click=go_menu, args=(_target,))
+    st.markdown(f'<div class="tan-h1">Tổng quan ca trực</div>'
+                f'<div class="tan-h1sub">{_thu}, {_now.strftime("%d/%m/%Y")} · {_shift} · '
+                f'cập nhật {_now.strftime("%H:%M")}</div>', unsafe_allow_html=True)
 
-    # ── Số liệu nhanh từ các công cụ đã chạy (phiên hiện tại hoặc đã lưu trong ngày) ──
+    # Số liệu khách: ưu tiên kết quả phiên hiện tại, dự phòng bản đã lưu trong ngày
     if _d and _d.get('has_xlsx'):
-        st.write("")
-        st.markdown('<div class="section-label">🛏️ Khách lưu trú hôm nay</div>', unsafe_allow_html=True)
         _iss_d = _d.get('issues')
         _n_red = int((_iss_d['Mức độ'] == '🔴').sum()) if _iss_d is not None and len(_iss_d) else 0
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Tổng khách", _d['total'])
-        k2.metric("Quốc tế", _d['intl'])
-        k3.metric("Việt Nam", _d['vn'])
-        k4.metric("Lỗi dữ liệu 🔴", _n_red,
-                  "cần sửa trước khi nộp" if _n_red else "dữ liệu sạch",
-                  delta_color="inverse" if _n_red else "off")
+        _n_yel = int((_iss_d['Mức độ'] == '🟡').sum()) if _iss_d is not None and len(_iss_d) else 0
+        _hero = {'total': _d['total'], 'intl': _d['intl'], 'vn': _d['vn'], 'red': _n_red, 'yellow': _n_yel,
+                 'rooms': _d.get('rooms_cnt'), 'cin': _d.get('checkin_n'), 'cout': _d.get('checkout_n'),
+                 'visa_watch': len(_d.get('visa_watch') or []),
+                 'unknown_nats': len(_d.get('unknown_nats') or []),
+                 'invalid_ids': len(_d.get('kbtt_invalid_ids') or []), 'stale': None}
     elif _p_daily.get('summary'):
-        st.write("")
-        st.markdown('<div class="section-label">🛏️ Khách lưu trú hôm nay</div>', unsafe_allow_html=True)
-        st.caption(f"Số liệu lúc {_p_daily['time']} (phiên trước trong ngày) — chạy lại để xem chi tiết/tải file.")
         _ps = _p_daily['summary']
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Tổng khách", _ps.get('total'))
-        k2.metric("Quốc tế", _ps.get('intl'))
-        k3.metric("Việt Nam", _ps.get('vn'))
-        k4.metric("Lỗi dữ liệu 🔴", _ps.get('red_issues'))
-
-    if _rc and _rc.get('arr_stats'):
-        st.write("")
-        st.markdown('<div class="section-label">💰 Booking đến & thanh toán</div>', unsafe_allow_html=True)
-        _as = _rc['arr_stats']
-        b1, b2, b3, b4, b5 = st.columns(5)
-        b1.metric("📦 Booking", _as['bookings'])
-        b2.metric("🚪 Phòng", _as['rooms'])
-        b3.metric("💳 Cà thẻ", _as['ca_the'])
-        b4.metric("💵 Thu tiền", _as['thu_tien'])
-        b5.metric("⚠️ Xem lại BU", _as['xem_lai_bu'])
-    elif _p_regcard.get('summary'):
-        st.write("")
-        st.markdown('<div class="section-label">💰 Booking đến & thanh toán</div>', unsafe_allow_html=True)
-        st.caption(f"Số liệu lúc {_p_regcard['time']} (phiên trước trong ngày) — chạy lại để tải file.")
-        _as = _p_regcard['summary']
-        b1, b2, b3, b4, b5 = st.columns(5)
-        b1.metric("📦 Booking", _as.get('bookings'))
-        b2.metric("🚪 Phòng", _as.get('rooms'))
-        b3.metric("💳 Cà thẻ", _as.get('ca_the'))
-        b4.metric("💵 Thu tiền", _as.get('thu_tien'))
-        b5.metric("⚠️ Xem lại BU", _as.get('xem_lai_bu'))
-
-    if not _d and not _rc and not _p_daily and not _p_regcard:
-        st.info("Chưa có số liệu trong ngày — bắt đầu bằng **Xử lý hàng ngày** hoặc "
-                "**Regcard + ARR** ở sidebar. Dashboard sẽ tự tổng hợp khi các công cụ chạy xong.")
-
-    # ── Báo cáo ngày 1 trang cho quản lý ──
-    st.write("")
-    st.markdown('<div class="section-label">📈 Báo cáo ngày cho quản lý</div>', unsafe_allow_html=True)
-    if _d or _rc or _re_p or _re_r:
-        _rp_date = (_d or {}).get('date_str') or today_vn().strftime('%d_%m')
-        _wb_rp = build_daily_report(_rp_date.replace('_', '/'),
-                                    _d if _d and _d.get('has_xlsx') else None,
-                                    (_rc or {}).get('arr_stats'), _re_p, _re_r)
-        st.download_button("⬇️ Tải báo cáo ngày (Excel, 1 trang)", wb_to_bytes(_wb_rp),
-                           file_name=f"bao_cao_ngay_{_rp_date}.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                           use_container_width=True, type="primary", key="dl_report")
-        st.caption("Tổng hợp khách lưu trú, top quốc tịch, booking & thanh toán, kết quả đối chiếu "
-                   "— từ các công cụ đã chạy trong phiên.")
+        _hero = {'total': _ps.get('total'), 'intl': _ps.get('intl'), 'vn': _ps.get('vn'),
+                 'red': _ps.get('red_issues') or 0, 'yellow': _ps.get('yellow_issues') or 0,
+                 'rooms': _ps.get('rooms_cnt'), 'cin': _ps.get('checkin_n'), 'cout': _ps.get('checkout_n'),
+                 'visa_watch': _ps.get('visa_watch_count') or 0,
+                 'unknown_nats': 0, 'invalid_ids': 0, 'stale': _p_daily.get('time')}
     else:
-        st.caption("Báo cáo khả dụng sau khi chạy ít nhất một công cụ "
-                   "(Xử lý hàng ngày / Regcard + ARR / Đối chiếu).")
+        _hero = None
+
+    # ── HÀNG 1: thẻ HERO (ảnh mèo) + 2 thẻ số liệu ──
+    _r1a, _r1b, _r1c = st.columns([2, 1, 1], gap="small")
+    with _r1a:
+        if _hero:
+            _yday = _yesterday_total()
+            _cmp = ''
+            if _yday:
+                _delta = (_hero['total'] or 0) - _yday
+                _cmp = (f'▲ {_delta} khách so với hôm qua · ' if _delta > 0 else
+                        f'▼ {abs(_delta)} khách so với hôm qua · ' if _delta < 0 else
+                        'bằng hôm qua · ')
+            _room_txt = f"{_hero['rooms']} phòng có khách · " if _hero.get('rooms') else ''
+            _stale_txt = (f"số liệu lúc {_hero['stale']}" if _hero['stale'] else "cập nhật trong phiên này")
+            st.markdown(
+                '<div class="tan-hero">'
+                '<div class="tan-hero-lab">🛏️ Tổng khách lưu trú hôm nay</div>'
+                f'<div class="tan-hero-val">{_hero["total"]}</div>'
+                f'<div class="tan-hero-sub">{_cmp}{_room_txt}{_stale_txt}</div>'
+                '<div class="tan-hero-split">'
+                f'<div><div class="tan-hero-k">🌍 Quốc tế</div><div class="tan-hero-v">{_hero["intl"]}</div></div>'
+                f'<div><div class="tan-hero-k">🇻🇳 Việt Nam</div><div class="tan-hero-v">{_hero["vn"]}</div></div>'
+                f'<div><div class="tan-hero-k">🔑 Check-in</div><div class="tan-hero-v">'
+                f'{_hero["cin"] if _hero.get("cin") is not None else "—"}</div></div>'
+                f'<div><div class="tan-hero-k">🚪 Check-out</div><div class="tan-hero-v">'
+                f'{_hero["cout"] if _hero.get("cout") is not None else "—"}</div></div>'
+                '</div></div>', unsafe_allow_html=True)
+        else:
+            st.markdown(
+                '<div class="tan-hero">'
+                '<div class="tan-hero-lab">👋 Chào ca trực</div>'
+                '<div class="tan-hero-val" style="font-size:1.45rem">Chưa có số liệu hôm nay</div>'
+                '<div class="tan-hero-sub">Bắt đầu bằng <b>Xử lý hàng ngày</b> hoặc '
+                '<b>Regcard + ARR</b> ở sidebar — số liệu sẽ tự lên đây.</div>'
+                '<div class="tan-hero-split">'
+                '<div><div class="tan-hero-k">🌍 Quốc tế</div><div class="tan-hero-v">—</div></div>'
+                '<div><div class="tan-hero-k">🇻🇳 Việt Nam</div><div class="tan-hero-v">—</div></div>'
+                '<div><div class="tan-hero-k">🔑 Check-in</div><div class="tan-hero-v">—</div></div>'
+                '<div><div class="tan-hero-k">🚪 Check-out</div><div class="tan-hero-v">—</div></div>'
+                '</div></div>', unsafe_allow_html=True)
+
+    with _r1b:
+        with st.container(border=True, height=200):
+            _red_n = _hero['red'] if _hero else None
+            _cls = 'err' if _red_n else 'ok'
+            _red_pct = round(100 * _red_n / _hero['total']) if (_hero and _hero.get('total') and _red_n) else 0
+            st.markdown(
+                f'<div class="kpi-lab"><span class="kpi-ic {_cls}">⚠️</span>Lỗi dữ liệu</div>'
+                f'<div class="kpi-val {"err" if _red_n else ""}">{_red_n if _hero else "—"}</div>'
+                f'<div class="kpi-sub">{"cần sửa trước khi nộp" if _red_n else ("dữ liệu sạch" if _hero else "chưa có dữ liệu")}</div>'
+                f'<div class="kpi-bar"><i class="err" style="width:{min(_red_pct, 100)}%"></i></div>',
+                unsafe_allow_html=True)
+
+    with _r1c:
+        with st.container(border=True, height=200):
+            _rate = st.session_state.get('rate_input') or (_d or {}).get('rate')
+            st.markdown(
+                '<div class="kpi-lab"><span class="kpi-ic acc">💱</span>Tỷ giá VCB</div>'
+                f'<div class="kpi-val" style="font-size:1.5rem">{f"{_rate:,.0f}" if _rate else "—"}</div>'
+                f'<div class="kpi-sub">{"USD → VNĐ (chuyển khoản)" if _rate else "lấy tỷ giá ở Xử lý hàng ngày"}</div>'
+                f'<div class="kpi-bar"><i style="width:{100 if _rate else 0}%"></i></div>',
+                unsafe_allow_html=True)
+
+    st.write("")
+
+    # ── HÀNG 2: tiến độ công việc + cảnh báo + bàn giao gần nhất ──
+    _TICK_ON = ('<span style="display:inline-block;width:15px;height:15px;border-radius:5px;'
+                'background:linear-gradient(135deg,#34d399,#059669);color:#fff;font-size:9px;'
+                'line-height:15px;text-align:center;vertical-align:-2px;">✓</span>')
+    _TICK_OFF = ('<span style="display:inline-block;width:15px;height:15px;border-radius:5px;'
+                 'border:1.5px solid var(--line);vertical-align:-2px;"></span>')
+    _r2a, _r2b, _r2c = st.columns([2, 1, 1], gap="small")
+
+    with _r2a:
+        with st.container(border=True, height=420, key='dash_tasks'):
+            if db_available():
+                _ho_rows = db_load_entries(today_vn())
+                _handover_n = len(_ho_rows)
+            else:
+                _ho_rows = None
+                _handover_n = len((st.session_state.get('handover') or {}).get('entries', []))
+            _tasks = [
+                ("Xử lý hàng ngày (KBTT · VNM · ĐK14)", _d is not None or _p_daily.get('done'),
+                 "daily", None if _d else _p_daily.get('time')),
+                ("Regcard + file ARR", _rc is not None or _p_regcard.get('done'),
+                 "regcard", None if _rc else _p_regcard.get('time')),
+                ("Đối chiếu người nước ngoài", _re_p is not None or _p_rp.get('done'),
+                 "recon_person" if st.session_state.get("recon_ok") else "recon",
+                 None if _re_p else _p_rp.get('time')),
+                ("Đối chiếu hệ thống phòng", _re_r is not None or _p_rr.get('done'),
+                 "recon_room" if st.session_state.get("recon_ok") else "recon",
+                 None if _re_r else _p_rr.get('time')),
+                (f"Sổ giao ca ({_handover_n} ghi chú)", _handover_n > 0, "handover", None),
+            ]
+            _done_n = sum(1 for _t in _tasks if _t[1])
+            _pend = next((_t[2] for _t in _tasks if not _t[1]), None)
+            _hc1, _hc2 = st.columns([2.5, 1], vertical_alignment="center")
+            _hc1.markdown(f'<div class="pan-h" style="border:0;padding-bottom:0;margin-bottom:0">'
+                          f'<span class="pan-t">Tiến độ công việc trong ca</span>'
+                          f'<span class="tan-chip">{_done_n}/{len(_tasks)}</span></div>',
+                          unsafe_allow_html=True)
+            _hc2.button("Xem tất cả →", key="dash_seeall", use_container_width=True,
+                        disabled=_pend is None,
+                        help="Mở công cụ chưa chạy đầu tiên trong ca",
+                        on_click=go_menu, args=(_pend or "daily",))
+            st.markdown('<div style="border-bottom:1px solid var(--line2);margin:0 0 .35rem"></div>',
+                        unsafe_allow_html=True)
+            _row_html = []
+            for _label, _done, _target, _stale_time in _tasks:
+                _chip = ('<span class="tan-chip ok">Xong</span>' if _done
+                         else '<span class="tan-chip">Chưa chạy</span>')
+                _tm = _stale_time or ('✓' if _done else '—')
+                _row_html.append(
+                    f'<div class="pan-task">{_TICK_ON if _done else _TICK_OFF}'
+                    f'<span class="pan-rt">{_label}</span>{_chip}'
+                    f'<span class="pan-time">{_tm}</span></div>')
+            st.markdown(''.join(_row_html), unsafe_allow_html=True)
+            # 2 dòng tóm tắt cuối panel — số booking/phòng đến (khi Regcard + ARR đã chạy)
+            _sum_as = (_rc or {}).get('arr_stats') or _p_regcard.get('summary')
+            st.markdown(
+                f'<div class="pan-foot"><div class="pan-line"><span>Phòng đến trong ngày</span>'
+                f'<span class="pan-v">{(_sum_as or {}).get("rooms", "—")}</span></div>'
+                f'<div class="pan-line"><span>Booking đã xử lý</span>'
+                f'<span class="pan-v">{(_sum_as or {}).get("bookings", "—")}</span></div></div>',
+                unsafe_allow_html=True)
+
+    with _r2b:
+        with st.container(border=True, height=420, key='dash_alerts'):
+            _alerts = []
+            if _hero:
+                if _hero.get('red'):
+                    _alerts.append(('r', '🔴', f"{_hero['red']} vấn đề cần sửa",
+                                    'phải xử lý trước khi nộp hồ sơ công an'))
+                if _hero.get('visa_watch'):
+                    _alerts.append(('a', '🛂', f"{_hero['visa_watch']} khách sắp hết hạn tạm trú",
+                                    'kiểm tra ở Xử lý hàng ngày'))
+                if _hero.get('yellow'):
+                    _alerts.append(('a', '🟡', f"{_hero['yellow']} vấn đề nên kiểm tra",
+                                    'không chặn nộp hồ sơ'))
+                if _hero.get('invalid_ids'):
+                    _alerts.append(('a', '🪪', f"{_hero['invalid_ids']} khách chưa có hộ chiếu thật",
+                                    'đã để trống số giấy tờ trong KBTT'))
+                if _hero.get('unknown_nats'):
+                    _alerts.append(('a', '🌐', f"{_hero['unknown_nats']} quốc tịch chưa có mã",
+                                    'đã giữ nguyên chữ gốc, cần kiểm tra'))
+            st.markdown(f'<div class="pan-h"><span class="pan-t">⚠️ Cảnh báo</span>'
+                        f'<span class="tan-chip">{len(_alerts)}</span></div>', unsafe_allow_html=True)
+            if _alerts:
+                st.markdown(''.join(
+                    f'<div class="pan-al {_k}"><div class="pan-al-ic">{_ic}</div>'
+                    f'<div><div class="pan-al-t">{_t}</div><div class="pan-al-m">{_m}</div></div></div>'
+                    for _k, _ic, _t, _m in _alerts), unsafe_allow_html=True)
+            elif _hero:
+                st.markdown('<div class="pan-empty">✅ Không có cảnh báo nào — dữ liệu hôm nay sạch.</div>',
+                            unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="pan-empty">Cảnh báo sẽ hiện sau khi chạy '
+                            '<b>Xử lý hàng ngày</b>.</div>', unsafe_allow_html=True)
+
+    with _r2c:
+        with st.container(border=True, height=420, key='dash_ho'):
+            st.markdown('<div class="pan-h"><span class="pan-t">Bàn giao gần nhất</span></div>',
+                        unsafe_allow_html=True)
+            _recent = []
+            if _ho_rows is not None and len(_ho_rows):
+                for _, _r in _ho_rows.head(5).iterrows():
+                    _room = f" · P.{_r['room']}" if _r['room'] else ""
+                    _recent.append((_r['entry_time'], f"{_r['category']}{_room}"))
+            elif not db_available():
+                for _e in reversed((st.session_state.get('handover') or {}).get('entries', [])[-5:]):
+                    _room = f" · P.{_e['room']}" if _e.get('room') else ""
+                    _recent.append((_e['time'], f"{_e['cat']}{_room}"))
+            if _recent:
+                st.markdown(''.join(
+                    f'<div class="pan-line"><span>🏷 {_t}</span><span class="pan-mut">{_tm}</span></div>'
+                    for _tm, _t in _recent), unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="pan-empty">Chưa có ghi chú nào trong ca này.</div>',
+                            unsafe_allow_html=True)
+            st.button("Mở sổ giao ca →", key="dash_go_ho", use_container_width=True,
+                      on_click=go_menu, args=("handover",))
+
+    st.write("")
 
     # ── Nhật ký hoạt động ca (ẩn danh) — phục vụ phân tích quy trình làm việc ──
     st.write("")
@@ -3213,9 +3424,18 @@ if st.session_state.menu == "daily":
                             _avg_nights = round(float(_nvals.mean()), 1)
                     _rooms_cnt = int(df.get('SỐ PHÒNG', pd.Series(dtype=str)).dropna().astype(str)
                                      .str.strip().nunique())
+                    # Khách check-in / check-out HÔM NAY — đếm theo ngày đến/đi
+                    # trùng ngày hiện tại (giờ Việt Nam), phục vụ thẻ tổng quan.
+                    _today_ts = pd.Timestamp(today_vn())
+                    _checkin_n = int((_arr_s.dt.normalize() == _today_ts).sum()) if _arr_s is not None else 0
+                    _checkout_n = 0
+                    if _dep_col_d:
+                        _checkout_n = int((pd.to_datetime(df[_dep_col_d], dayfirst=True, errors='coerce')
+                                           .dt.normalize() == _today_ts).sum())
                     _daily.update({'issues': _issues, 'visa_watch': _visa_watch,
                                    'nat_top': [(str(k), int(v)) for k, v in _nat_top.items()],
-                                   'avg_nights': _avg_nights, 'rooms_cnt': _rooms_cnt or None})
+                                   'avg_nights': _avg_nights, 'rooms_cnt': _rooms_cnt or None,
+                                   'checkin_n': _checkin_n, 'checkout_n': _checkout_n})
                     _daily.update({'total': len(df), 'intl': len(df_intl), 'vn': len(df_vn),
                                    'gks': gks_cnt, 'gbl': gbl_cnt, 'conv': conv,
                                    'unknown_nats': unknown_nats,
@@ -3239,6 +3459,8 @@ if st.session_state.menu == "daily":
                             'red_issues': int((iss['Mức độ'] == '🔴').sum()) if iss is not None and len(iss) else 0,
                             'yellow_issues': int((iss['Mức độ'] == '🟡').sum()) if iss is not None and len(iss) else 0,
                             'visa_watch_count': len(_daily.get('visa_watch') or []),
+                            'rooms_cnt': _daily.get('rooms_cnt'),
+                            'checkin_n': _daily.get('checkin_n'), 'checkout_n': _daily.get('checkout_n'),
                         }
                     state.setdefault('tasks', {})['daily'] = task
                 _progress_update(_mark_daily_done)
