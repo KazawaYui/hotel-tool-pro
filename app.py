@@ -1111,31 +1111,34 @@ def build_daily_report(date_str, daily, arr_stats, recon, reconr):
     return wb
 
 # ── Cặp phòng connecting — tự động chia đều ĐƠN GIÁ khi 1 phòng bị bỏ trống ──
-# Danh sách cố định theo sơ đồ tầng khách sạn (nguồn: C_p_CNT.xlsx, tầng 5→12A,
-# mỗi tầng 6 cặp). Đây là kết cấu vật lý của toà nhà, gần như không đổi — để
-# hằng số thay vì nạp file mỗi lần, dễ đối chiếu/sửa khi khách sạn cải tạo.
+# Danh sách cố định theo sơ đồ tầng khách sạn (nguồn: C_p_CNT.xlsx — 13 tầng
+# 5→17, mỗi tầng 6 cặp = 78 cặp; toà nhà không có tầng 13). Đây là kết cấu vật
+# lý của toà nhà, gần như không đổi — để hằng số thay vì nạp file mỗi lần, dễ
+# đối chiếu/sửa khi khách sạn cải tạo.
 # CHỈ áp dụng cho các cặp có TRONG danh sách này — cặp phòng nào phát sinh
 # ngoài danh sách (VD: tầng chưa được liệt kê) thì GIỮ NGUYÊN giá, không đoán.
-#            F5   F6   F7   F8   F9   F10   F11   F12   F12A     F14   F15
+# Mỗi dòng dưới đây = 1 dòng trong file nguồn; 2 dòng liên tiếp là 1 cặp
+# connecting (đúng theo các ô đã gộp A5:A6, A7:A8… trong file).
+#            F5   F6   F7   F8   F9   F10   F11   F12   F12A     F14   F15   F16   F17
 _CNT_FLOOR_ROWS = [
-    (538, 638, 738, 838, 934, 1034, 1134, 1230, '12A30', 1428, 1528),
-    (540, 640, 740, 840, 936, 1036, 1136, 1232, '12A32', 1430, 1530),
-    (542, 642, 742, 842, 938, 1038, 1138, 1234, '12A34', 1432, 1532),
-    (544, 644, 744, 844, 940, 1040, 1140, 1236, '12A36', 1434, 1534),
-    (546, 646, 746, 846, 942, 1042, 1142, 1238, '12A38', 1436, 1536),
-    (548, 648, 748, 848, 944, 1044, 1144, 1240, '12A40', 1438, 1538),
-    (541, 641, 741, 841, 937, 1037, 1137, 1233, '12A33', 1433, 1529),
-    (543, 643, 743, 843, 939, 1039, 1139, 1235, '12A35', 1435, 1531),
-    (545, 645, 745, 845, 941, 1041, 1141, 1237, '12A37', 1437, 1533),
-    (547, 647, 747, 847, 943, 1043, 1143, 1239, '12A39', 1439, 1535),
-    (549, 649, 749, 849, 945, 1045, 1145, 1241, '12A41', 1440, 1537),
-    (550, 650, 750, 850, 946, 1046, 1146, 1242, '12A42', 1441, 1539),
+    (538, 638, 738, 838, 934, 1034, 1134, 1230, '12A30', 1428, 1528, 1628, 1728),
+    (540, 640, 740, 840, 936, 1036, 1136, 1232, '12A32', 1430, 1530, 1630, 1730),
+    (542, 642, 742, 842, 938, 1038, 1138, 1234, '12A34', 1432, 1532, 1632, 1732),
+    (544, 644, 744, 844, 940, 1040, 1140, 1236, '12A36', 1434, 1534, 1634, 1734),
+    (546, 646, 746, 846, 942, 1042, 1142, 1238, '12A38', 1436, 1536, 1636, 1736),
+    (548, 648, 748, 848, 944, 1044, 1144, 1240, '12A40', 1438, 1538, 1638, 1738),
+    (541, 641, 741, 841, 937, 1037, 1137, 1233, '12A33', 1433, 1529, 1629, 1729),
+    (543, 643, 743, 843, 939, 1039, 1139, 1235, '12A35', 1435, 1531, 1631, 1731),
+    (545, 645, 745, 845, 941, 1041, 1141, 1237, '12A37', 1437, 1533, 1633, 1733),
+    (547, 647, 747, 847, 943, 1043, 1143, 1239, '12A39', 1439, 1535, 1635, 1735),
+    (549, 649, 749, 849, 945, 1045, 1145, 1241, '12A41', 1440, 1537, 1637, 1737),
+    (550, 650, 750, 850, 946, 1046, 1146, 1242, '12A42', 1441, 1539, 1639, 1739),
 ]
 # So khớp bằng chữ HOA: PMS xuất số phòng chữ thường ("12a30") còn sơ đồ tầng
 # ghi hoa ("12A30") — không chuẩn hoá thì cặp tầng 12A không bao giờ khớp.
 CONNECTING_ROOM_PAIRS = []
-for _fi in range(11):  # 11 cột tầng: 5,6,7,8,9,10,11,12,12A,14,15
-    for _pi in range(0, 12, 2):  # mỗi 2 dòng liên tiếp là 1 cặp, 6 cặp/tầng
+for _fi in range(len(_CNT_FLOOR_ROWS[0])):  # duyệt hết số cột tầng, không cắt bớt
+    for _pi in range(0, len(_CNT_FLOOR_ROWS), 2):  # 2 dòng liên tiếp = 1 cặp
         CONNECTING_ROOM_PAIRS.append(
             (_fmt_room(_CNT_FLOOR_ROWS[_pi][_fi]).upper(),
              _fmt_room(_CNT_FLOOR_ROWS[_pi + 1][_fi]).upper()))
