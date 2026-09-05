@@ -59,6 +59,20 @@ def _load_progress():
             pass
     return _default_progress()
 
+def _yesterday_total():
+    """Tổng khách HÔM QUA đọc từ file tiến độ ngày hôm trước — dùng để so sánh
+    trên thẻ tổng quan. Không có file (hoặc hôm qua chưa chạy công cụ) thì trả
+    None và thẻ sẽ không hiện dòng so sánh, KHÔNG suy đoán số."""
+    try:
+        p = _progress_path((today_vn() - datetime.timedelta(days=1)).isoformat())
+        if os.path.exists(p):
+            with open(p, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return ((data.get('tasks', {}) or {}).get('daily', {}) or {}).get('summary', {}).get('total')
+    except Exception:
+        pass
+    return None
+
 def _atomic_write_json(path, data):
     tmp = path + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
@@ -2176,8 +2190,8 @@ if not st.session_state.get("_app_scripts_injected"):
        để thanh chạy sát mép, cộng width bù lại phần margin âm hai bên. */
     .st-key-tan_topbar {
         background: var(--surf); border-bottom: 1px solid var(--line);
-        margin: -6rem -5rem 1.2rem !important; width: calc(100% + 10rem) !important;
-        max-width: none !important; padding: 0.5rem 5rem !important;
+        margin: -4.6rem -1.6rem 1.1rem !important; width: calc(100% + 3.2rem) !important;
+        max-width: none !important; padding: 0.5rem 1.6rem !important;
     }
     /* Nút "Xuất báo cáo" trên thanh là nút phụ (nút chính là Xử lý hàng ngày) */
     .st-key-tb_report_dl button, .st-key-tb_report_off button {
@@ -2226,6 +2240,15 @@ if not st.session_state.get("_app_scripts_injected"):
     .pan-line:last-child {border-bottom: 0;}
     .pan-v {font-weight: 750; color: var(--tx); font-variant-numeric: tabular-nums;}
     .pan-empty {font-size: 0.78rem; color: var(--tx3); line-height: 1.55; padding: .3rem 0 .7rem;}
+    .pan-foot {margin-top: auto; padding-top: .35rem;}
+    /* Hộp cảnh báo trong panel (đúng kiểu ô nhắc việc của bản dựng) */
+    .pan-al {display: flex; gap: 9px; padding: .6rem .65rem; border-radius: 11px;
+        margin-bottom: .45rem; border: 1px solid;}
+    .pan-al.r {background: rgba(239,68,68,.10); border-color: rgba(239,68,68,.26);}
+    .pan-al.a {background: rgba(245,158,11,.10); border-color: rgba(245,158,11,.26);}
+    .pan-al-ic {font-size: 0.85rem; line-height: 1.2;}
+    .pan-al-t {font-size: 0.78rem; font-weight: 680; color: var(--tx); line-height: 1.35;}
+    .pan-al-m {font-size: 0.68rem; color: var(--tx3); margin-top: 2px; line-height: 1.35;}
 
     /* ── Nhãn mục ── */
     .section-label {
@@ -2250,7 +2273,7 @@ if not st.session_state.get("_app_scripts_injected"):
     .tan-hero {
         position: relative; overflow: hidden; color: #fff;
         border-radius: var(--r-lg); padding: 1.15rem 1.35rem;
-        min-height: 186px; display: flex; flex-direction: column; justify-content: center;
+        min-height: 200px; display: flex; flex-direction: column; justify-content: center;
         background-image: linear-gradient(100deg, rgba(22,18,48,.95) 0%, rgba(34,26,66,.74) 46%, rgba(48,36,84,.26) 100%),
                            url("__LIGHT_BG_DATA_URI__");
         background-size: cover, cover; background-position: center, center right;
@@ -2384,7 +2407,24 @@ if not st.session_state.get("_app_scripts_injected"):
     .tan-hero, .tan-hero * {color: #fff !important;}
 
     /* ── Bố cục ── */
-    div[data-testid="stMainBlockContainer"] {max-width: 1240px;}
+    div[data-testid="stMainBlockContainer"] {max-width: 1320px; padding: 4.6rem 1.6rem 2.5rem;}
+    section[data-testid="stSidebar"] {width: 252px !important; min-width: 252px !important;}
+    /* Khe giữa các thẻ = 13px như bản dựng (trừ cụm nút giao diện ở sidebar) */
+    div[data-testid="stMain"] div[data-testid="stHorizontalBlock"] {gap: 0.82rem;}
+    /* Padding trong thẻ có viền: gọn lại cho khớp bản dựng */
+    div[data-testid="stVerticalBlock"][overflow] {
+        padding: 0.85rem 1rem !important; display: flex; flex-direction: column;
+    }
+    /* Link "Xem tất cả" ở đầu panel: nút nhưng nhìn như link, đúng bản dựng */
+    .st-key-dash_seeall button {
+        background: transparent !important; border: none !important; box-shadow: none !important;
+        color: var(--acc) !important; font-size: 0.72rem !important; font-weight: 700 !important;
+        padding: 0 !important; justify-content: flex-end !important; min-height: 0 !important;
+    }
+    .st-key-dash_seeall button:hover {background: transparent !important; text-decoration: underline;}
+    /* Phần tử cuối trong 2 panel này ghim xuống đáy thẻ như bản dựng */
+    .st-key-dash_tasks > div[data-testid="stElementContainer"]:last-child,
+    .st-key-dash_ho > div[data-testid="stElementContainer"]:last-child {margin-top: auto;}
     div[data-testid="stElementContainer"]:has(iframe[height="1"]) {display: none;}
     div[data-testid="stMainBlockContainer"] hr {border-color: var(--line);}
 
@@ -3021,11 +3061,19 @@ if st.session_state.menu == "dashboard":
     if _d and _d.get('has_xlsx'):
         _iss_d = _d.get('issues')
         _n_red = int((_iss_d['Mức độ'] == '🔴').sum()) if _iss_d is not None and len(_iss_d) else 0
-        _hero = {'total': _d['total'], 'intl': _d['intl'], 'vn': _d['vn'], 'red': _n_red, 'stale': None}
+        _n_yel = int((_iss_d['Mức độ'] == '🟡').sum()) if _iss_d is not None and len(_iss_d) else 0
+        _hero = {'total': _d['total'], 'intl': _d['intl'], 'vn': _d['vn'], 'red': _n_red, 'yellow': _n_yel,
+                 'rooms': _d.get('rooms_cnt'), 'cin': _d.get('checkin_n'), 'cout': _d.get('checkout_n'),
+                 'visa_watch': len(_d.get('visa_watch') or []),
+                 'unknown_nats': len(_d.get('unknown_nats') or []),
+                 'invalid_ids': len(_d.get('kbtt_invalid_ids') or []), 'stale': None}
     elif _p_daily.get('summary'):
         _ps = _p_daily['summary']
         _hero = {'total': _ps.get('total'), 'intl': _ps.get('intl'), 'vn': _ps.get('vn'),
-                 'red': _ps.get('red_issues') or 0, 'stale': _p_daily.get('time')}
+                 'red': _ps.get('red_issues') or 0, 'yellow': _ps.get('yellow_issues') or 0,
+                 'rooms': _ps.get('rooms_cnt'), 'cin': _ps.get('checkin_n'), 'cout': _ps.get('checkout_n'),
+                 'visa_watch': _ps.get('visa_watch_count') or 0,
+                 'unknown_nats': 0, 'invalid_ids': 0, 'stale': _p_daily.get('time')}
     else:
         _hero = None
 
@@ -3033,18 +3081,27 @@ if st.session_state.menu == "dashboard":
     _r1a, _r1b, _r1c = st.columns([2, 1, 1], gap="small")
     with _r1a:
         if _hero:
-            _stale_txt = (f"số liệu lúc {_hero['stale']} (phiên trước trong ngày)"
-                          if _hero['stale'] else "cập nhật trong phiên này")
+            _yday = _yesterday_total()
+            _cmp = ''
+            if _yday:
+                _delta = (_hero['total'] or 0) - _yday
+                _cmp = (f'▲ {_delta} khách so với hôm qua · ' if _delta > 0 else
+                        f'▼ {abs(_delta)} khách so với hôm qua · ' if _delta < 0 else
+                        'bằng hôm qua · ')
+            _room_txt = f"{_hero['rooms']} phòng có khách · " if _hero.get('rooms') else ''
+            _stale_txt = (f"số liệu lúc {_hero['stale']}" if _hero['stale'] else "cập nhật trong phiên này")
             st.markdown(
                 '<div class="tan-hero">'
                 '<div class="tan-hero-lab">🛏️ Tổng khách lưu trú hôm nay</div>'
                 f'<div class="tan-hero-val">{_hero["total"]}</div>'
-                f'<div class="tan-hero-sub">{_stale_txt}</div>'
+                f'<div class="tan-hero-sub">{_cmp}{_room_txt}{_stale_txt}</div>'
                 '<div class="tan-hero-split">'
                 f'<div><div class="tan-hero-k">🌍 Quốc tế</div><div class="tan-hero-v">{_hero["intl"]}</div></div>'
                 f'<div><div class="tan-hero-k">🇻🇳 Việt Nam</div><div class="tan-hero-v">{_hero["vn"]}</div></div>'
-                f'<div><div class="tan-hero-k">🚪 Phòng</div><div class="tan-hero-v">'
-                f'{(_rc or {}).get("arr_stats", {}).get("rooms", "—")}</div></div>'
+                f'<div><div class="tan-hero-k">🔑 Check-in</div><div class="tan-hero-v">'
+                f'{_hero["cin"] if _hero.get("cin") is not None else "—"}</div></div>'
+                f'<div><div class="tan-hero-k">🚪 Check-out</div><div class="tan-hero-v">'
+                f'{_hero["cout"] if _hero.get("cout") is not None else "—"}</div></div>'
                 '</div></div>', unsafe_allow_html=True)
         else:
             st.markdown(
@@ -3056,11 +3113,12 @@ if st.session_state.menu == "dashboard":
                 '<div class="tan-hero-split">'
                 '<div><div class="tan-hero-k">🌍 Quốc tế</div><div class="tan-hero-v">—</div></div>'
                 '<div><div class="tan-hero-k">🇻🇳 Việt Nam</div><div class="tan-hero-v">—</div></div>'
-                '<div><div class="tan-hero-k">🚪 Phòng</div><div class="tan-hero-v">—</div></div>'
+                '<div><div class="tan-hero-k">🔑 Check-in</div><div class="tan-hero-v">—</div></div>'
+                '<div><div class="tan-hero-k">🚪 Check-out</div><div class="tan-hero-v">—</div></div>'
                 '</div></div>', unsafe_allow_html=True)
 
     with _r1b:
-        with st.container(border=True, height=186):
+        with st.container(border=True, height=200):
             _red_n = _hero['red'] if _hero else None
             _cls = 'err' if _red_n else 'ok'
             _red_pct = round(100 * _red_n / _hero['total']) if (_hero and _hero.get('total') and _red_n) else 0
@@ -3072,7 +3130,7 @@ if st.session_state.menu == "dashboard":
                 unsafe_allow_html=True)
 
     with _r1c:
-        with st.container(border=True, height=186):
+        with st.container(border=True, height=200):
             _rate = st.session_state.get('rate_input') or (_d or {}).get('rate')
             st.markdown(
                 '<div class="kpi-lab"><span class="kpi-ic acc">💱</span>Tỷ giá VCB</div>'
@@ -3083,7 +3141,7 @@ if st.session_state.menu == "dashboard":
 
     st.write("")
 
-    # ── HÀNG 2: tiến độ công việc + bàn giao gần nhất + booking ──
+    # ── HÀNG 2: tiến độ công việc + cảnh báo + bàn giao gần nhất ──
     _TICK_ON = ('<span style="display:inline-block;width:15px;height:15px;border-radius:5px;'
                 'background:linear-gradient(135deg,#34d399,#059669);color:#fff;font-size:9px;'
                 'line-height:15px;text-align:center;vertical-align:-2px;">✓</span>')
@@ -3092,7 +3150,7 @@ if st.session_state.menu == "dashboard":
     _r2a, _r2b, _r2c = st.columns([2, 1, 1], gap="small")
 
     with _r2a:
-        with st.container(border=True, height=352):
+        with st.container(border=True, height=420, key='dash_tasks'):
             if db_available():
                 _ho_rows = db_load_entries(today_vn())
                 _handover_n = len(_ho_rows)
@@ -3113,8 +3171,17 @@ if st.session_state.menu == "dashboard":
                 (f"Sổ giao ca ({_handover_n} ghi chú)", _handover_n > 0, "handover", None),
             ]
             _done_n = sum(1 for _t in _tasks if _t[1])
-            st.markdown(f'<div class="pan-h"><span class="pan-t">Tiến độ công việc trong ca</span>'
-                        f'<span class="tan-chip">{_done_n}/{len(_tasks)}</span></div>',
+            _pend = next((_t[2] for _t in _tasks if not _t[1]), None)
+            _hc1, _hc2 = st.columns([2.5, 1], vertical_alignment="center")
+            _hc1.markdown(f'<div class="pan-h" style="border:0;padding-bottom:0;margin-bottom:0">'
+                          f'<span class="pan-t">Tiến độ công việc trong ca</span>'
+                          f'<span class="tan-chip">{_done_n}/{len(_tasks)}</span></div>',
+                          unsafe_allow_html=True)
+            _hc2.button("Xem tất cả →", key="dash_seeall", use_container_width=True,
+                        disabled=_pend is None,
+                        help="Mở công cụ chưa chạy đầu tiên trong ca",
+                        on_click=go_menu, args=(_pend or "daily",))
+            st.markdown('<div style="border-bottom:1px solid var(--line2);margin:0 0 .35rem"></div>',
                         unsafe_allow_html=True)
             _row_html = []
             for _label, _done, _target, _stale_time in _tasks:
@@ -3126,18 +3193,50 @@ if st.session_state.menu == "dashboard":
                     f'<span class="pan-rt">{_label}</span>{_chip}'
                     f'<span class="pan-time">{_tm}</span></div>')
             st.markdown(''.join(_row_html), unsafe_allow_html=True)
-            # 2 dòng tóm tắt cuối panel (chỉ hiện khi Regcard + ARR đã chạy)
+            # 2 dòng tóm tắt cuối panel — số booking/phòng đến (khi Regcard + ARR đã chạy)
             _sum_as = (_rc or {}).get('arr_stats') or _p_regcard.get('summary')
-            if _sum_as:
-                st.markdown(
-                    f'<div class="pan-line"><span>Phòng đến trong ngày</span>'
-                    f'<span class="pan-v">{_sum_as.get("rooms", "—")}</span></div>'
-                    f'<div class="pan-line"><span>Booking đã xử lý</span>'
-                    f'<span class="pan-v">{_sum_as.get("bookings", "—")}</span></div>',
-                    unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="pan-foot"><div class="pan-line"><span>Phòng đến trong ngày</span>'
+                f'<span class="pan-v">{(_sum_as or {}).get("rooms", "—")}</span></div>'
+                f'<div class="pan-line"><span>Booking đã xử lý</span>'
+                f'<span class="pan-v">{(_sum_as or {}).get("bookings", "—")}</span></div></div>',
+                unsafe_allow_html=True)
 
     with _r2b:
-        with st.container(border=True, height=352):
+        with st.container(border=True, height=420, key='dash_alerts'):
+            _alerts = []
+            if _hero:
+                if _hero.get('red'):
+                    _alerts.append(('r', '🔴', f"{_hero['red']} vấn đề cần sửa",
+                                    'phải xử lý trước khi nộp hồ sơ công an'))
+                if _hero.get('visa_watch'):
+                    _alerts.append(('a', '🛂', f"{_hero['visa_watch']} khách sắp hết hạn tạm trú",
+                                    'kiểm tra ở Xử lý hàng ngày'))
+                if _hero.get('yellow'):
+                    _alerts.append(('a', '🟡', f"{_hero['yellow']} vấn đề nên kiểm tra",
+                                    'không chặn nộp hồ sơ'))
+                if _hero.get('invalid_ids'):
+                    _alerts.append(('a', '🪪', f"{_hero['invalid_ids']} khách chưa có hộ chiếu thật",
+                                    'đã để trống số giấy tờ trong KBTT'))
+                if _hero.get('unknown_nats'):
+                    _alerts.append(('a', '🌐', f"{_hero['unknown_nats']} quốc tịch chưa có mã",
+                                    'đã giữ nguyên chữ gốc, cần kiểm tra'))
+            st.markdown(f'<div class="pan-h"><span class="pan-t">⚠️ Cảnh báo</span>'
+                        f'<span class="tan-chip">{len(_alerts)}</span></div>', unsafe_allow_html=True)
+            if _alerts:
+                st.markdown(''.join(
+                    f'<div class="pan-al {_k}"><div class="pan-al-ic">{_ic}</div>'
+                    f'<div><div class="pan-al-t">{_t}</div><div class="pan-al-m">{_m}</div></div></div>'
+                    for _k, _ic, _t, _m in _alerts), unsafe_allow_html=True)
+            elif _hero:
+                st.markdown('<div class="pan-empty">✅ Không có cảnh báo nào — dữ liệu hôm nay sạch.</div>',
+                            unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="pan-empty">Cảnh báo sẽ hiện sau khi chạy '
+                            '<b>Xử lý hàng ngày</b>.</div>', unsafe_allow_html=True)
+
+    with _r2c:
+        with st.container(border=True, height=420, key='dash_ho'):
             st.markdown('<div class="pan-h"><span class="pan-t">Bàn giao gần nhất</span></div>',
                         unsafe_allow_html=True)
             _recent = []
@@ -3158,23 +3257,6 @@ if st.session_state.menu == "dashboard":
                             unsafe_allow_html=True)
             st.button("Mở sổ giao ca →", key="dash_go_ho", use_container_width=True,
                       on_click=go_menu, args=("handover",))
-
-    with _r2c:
-        with st.container(border=True, height=352):
-            _as = (_rc or {}).get('arr_stats') or _p_regcard.get('summary')
-            st.markdown('<div class="pan-h"><span class="pan-t">Booking & thanh toán</span></div>',
-                        unsafe_allow_html=True)
-            if _as:
-                st.markdown(''.join(
-                    f'<div class="pan-line"><span>{_lb}</span><span class="pan-v">{_as.get(_k, "—")}</span></div>'
-                    for _lb, _k in [('📦 Booking', 'bookings'), ('🚪 Phòng', 'rooms'),
-                                    ('💳 Cà thẻ', 'ca_the'), ('💵 Thu tiền', 'thu_tien'),
-                                    ('⚠️ Xem lại BU', 'xem_lai_bu')]), unsafe_allow_html=True)
-            else:
-                st.markdown('<div class="pan-empty">Chạy <b>Regcard + ARR</b> để có số liệu booking '
-                            'và thanh toán trong ngày.</div>', unsafe_allow_html=True)
-                st.button("Mở Regcard + ARR →", key="dash_go_rc", use_container_width=True,
-                          on_click=go_menu, args=("regcard",))
 
     st.write("")
 
@@ -3342,9 +3424,18 @@ if st.session_state.menu == "daily":
                             _avg_nights = round(float(_nvals.mean()), 1)
                     _rooms_cnt = int(df.get('SỐ PHÒNG', pd.Series(dtype=str)).dropna().astype(str)
                                      .str.strip().nunique())
+                    # Khách check-in / check-out HÔM NAY — đếm theo ngày đến/đi
+                    # trùng ngày hiện tại (giờ Việt Nam), phục vụ thẻ tổng quan.
+                    _today_ts = pd.Timestamp(today_vn())
+                    _checkin_n = int((_arr_s.dt.normalize() == _today_ts).sum()) if _arr_s is not None else 0
+                    _checkout_n = 0
+                    if _dep_col_d:
+                        _checkout_n = int((pd.to_datetime(df[_dep_col_d], dayfirst=True, errors='coerce')
+                                           .dt.normalize() == _today_ts).sum())
                     _daily.update({'issues': _issues, 'visa_watch': _visa_watch,
                                    'nat_top': [(str(k), int(v)) for k, v in _nat_top.items()],
-                                   'avg_nights': _avg_nights, 'rooms_cnt': _rooms_cnt or None})
+                                   'avg_nights': _avg_nights, 'rooms_cnt': _rooms_cnt or None,
+                                   'checkin_n': _checkin_n, 'checkout_n': _checkout_n})
                     _daily.update({'total': len(df), 'intl': len(df_intl), 'vn': len(df_vn),
                                    'gks': gks_cnt, 'gbl': gbl_cnt, 'conv': conv,
                                    'unknown_nats': unknown_nats,
@@ -3368,6 +3459,8 @@ if st.session_state.menu == "daily":
                             'red_issues': int((iss['Mức độ'] == '🔴').sum()) if iss is not None and len(iss) else 0,
                             'yellow_issues': int((iss['Mức độ'] == '🟡').sum()) if iss is not None and len(iss) else 0,
                             'visa_watch_count': len(_daily.get('visa_watch') or []),
+                            'rooms_cnt': _daily.get('rooms_cnt'),
+                            'checkin_n': _daily.get('checkin_n'), 'checkout_n': _daily.get('checkout_n'),
                         }
                     state.setdefault('tasks', {})['daily'] = task
                 _progress_update(_mark_daily_done)
