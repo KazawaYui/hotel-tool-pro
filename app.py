@@ -2713,6 +2713,48 @@ if not st.session_state.get("_app_scripts_injected"):
     [role="option"][aria-selected="true"], [role="option"]:hover {background: var(--chip) !important;}
     [data-testid="stWidgetLabel"] p {color: var(--tx2) !important; font-weight: 600; font-size: 0.8rem;}
 
+    /* ── st.date_input: khung ô nhập của BaseWeb hardcode nền sáng
+       (rgb(237,240,245)), không kế thừa theme — vẫn trắng dù đã bật tối. ── */
+    [data-testid="stDateInput"] [data-baseweb="input"] {
+        background: var(--surf2) !important; border: 1px solid var(--line) !important;
+        border-radius: var(--r-md) !important;
+    }
+    [data-testid="stDateInputField"] {
+        background: transparent !important; color: var(--tx) !important;
+        caret-color: var(--tx) !important;
+    }
+    [data-testid="stDateInputField"]::placeholder {color: var(--tx3) !important;}
+    /* Lịch chọn ngày hiện trong portal NGOÀI .stApp — không kế thừa biến màu
+       của .stApp nên khai báo riêng ở đây (giống khối html[data-theme] khác).
+       Khung popover bọc ngoài lịch cũng hardcode nền sáng — sửa luôn. */
+    [data-baseweb="popover"] {background: var(--surf) !important;}
+    div[data-baseweb="calendar"] {background: var(--surf) !important; color: var(--tx) !important;}
+    /* Thanh "‹ Tháng Năm ›" và hàng tên thứ (Su Mo Tu...) là 2 div thường,
+       không có data-baseweb riêng — cũng bị hardcode nền sáng như trên. */
+    div[data-baseweb="calendar"] div:has(> button[aria-label="Previous month."]),
+    div[data-baseweb="calendar"] div[role="presentation"] {
+        background: var(--surf) !important; color: var(--tx) !important;
+    }
+    div[data-baseweb="calendar"] [role="presentation"] {color: var(--tx2) !important;}
+    div[data-baseweb="calendar"] button {color: var(--tx) !important; background: transparent !important;}
+    div[data-baseweb="calendar"] button[aria-disabled="true"] {color: var(--tx3) !important;}
+    /* Ô trống đầu/cuối lưới (ngày thuộc tháng trước/sau) là gridcell RỖNG
+       (không có div con chứa số) — tự vẽ nền bằng ::after màu sáng hardcode.
+       Chỉ nhắm đúng ô rỗng (:empty) — ô có số (kể cả ô đang chọn, cũng vẽ
+       vòng tròn tô màu bằng ::after) phải giữ nguyên, không bị vạ lây. */
+    div[data-baseweb="calendar"] [role="gridcell"]:empty::after {background: transparent !important;}
+
+    /* ── st.code(): nền pre/code hardcode sáng, không kế thừa theme ── */
+    [data-testid="stCode"] pre {background: var(--surf2) !important; border: 1px solid var(--line) !important;}
+    [data-testid="stCode"] code {color: var(--tx) !important;}
+    /* Nút "Copy to clipboard" nổi góc trên code block: khung bọc nút cũng
+       hardcode nền sáng (nút tự thân trong suốt nên trước đó không thấy). */
+    div:has(> [data-testid="stElementToolbarButton"]) {background: var(--surf2) !important;}
+    [data-testid="stElementToolbarButton"] svg {color: var(--tx2) !important;}
+    div[data-baseweb="calendar"] div[aria-selected="true"] button {
+        background: var(--acc) !important; color: #fff !important;
+    }
+
     /* ── Tải file ── */
     div[data-testid="stFileUploader"] {
         background: var(--surf2); border: 1px dashed var(--line); border-radius: var(--r-md);
