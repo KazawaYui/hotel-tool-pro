@@ -1116,25 +1116,29 @@ def build_daily_report(date_str, daily, arr_stats, recon, reconr):
 # hằng số thay vì nạp file mỗi lần, dễ đối chiếu/sửa khi khách sạn cải tạo.
 # CHỈ áp dụng cho các cặp có TRONG danh sách này — cặp phòng nào phát sinh
 # ngoài danh sách (VD: tầng chưa được liệt kê) thì GIỮ NGUYÊN giá, không đoán.
+#            F5   F6   F7   F8   F9   F10   F11   F12   F12A     F14   F15
 _CNT_FLOOR_ROWS = [
-    (538, 638, 738, 838, 934, 1034, 1134, 1230, '12A30'),
-    (540, 640, 740, 840, 936, 1036, 1136, 1232, '12A32'),
-    (542, 642, 742, 842, 938, 1038, 1138, 1234, '12A34'),
-    (544, 644, 744, 844, 940, 1040, 1140, 1236, '12A36'),
-    (546, 646, 746, 846, 942, 1042, 1142, 1238, '12A38'),
-    (548, 648, 748, 848, 944, 1044, 1144, 1240, '12A40'),
-    (541, 641, 741, 841, 937, 1037, 1137, 1233, '12A33'),
-    (543, 643, 743, 843, 939, 1039, 1139, 1235, '12A35'),
-    (545, 645, 745, 845, 941, 1041, 1141, 1237, '12A37'),
-    (547, 647, 747, 847, 943, 1043, 1143, 1239, '12A39'),
-    (549, 649, 749, 849, 945, 1045, 1145, 1241, '12A41'),
-    (550, 650, 750, 850, 946, 1046, 1146, 1242, '12A42'),
+    (538, 638, 738, 838, 934, 1034, 1134, 1230, '12A30', 1428, 1528),
+    (540, 640, 740, 840, 936, 1036, 1136, 1232, '12A32', 1430, 1530),
+    (542, 642, 742, 842, 938, 1038, 1138, 1234, '12A34', 1432, 1532),
+    (544, 644, 744, 844, 940, 1040, 1140, 1236, '12A36', 1434, 1534),
+    (546, 646, 746, 846, 942, 1042, 1142, 1238, '12A38', 1436, 1536),
+    (548, 648, 748, 848, 944, 1044, 1144, 1240, '12A40', 1438, 1538),
+    (541, 641, 741, 841, 937, 1037, 1137, 1233, '12A33', 1433, 1529),
+    (543, 643, 743, 843, 939, 1039, 1139, 1235, '12A35', 1435, 1531),
+    (545, 645, 745, 845, 941, 1041, 1141, 1237, '12A37', 1437, 1533),
+    (547, 647, 747, 847, 943, 1043, 1143, 1239, '12A39', 1439, 1535),
+    (549, 649, 749, 849, 945, 1045, 1145, 1241, '12A41', 1440, 1537),
+    (550, 650, 750, 850, 946, 1046, 1146, 1242, '12A42', 1441, 1539),
 ]
+# So khớp bằng chữ HOA: PMS xuất số phòng chữ thường ("12a30") còn sơ đồ tầng
+# ghi hoa ("12A30") — không chuẩn hoá thì cặp tầng 12A không bao giờ khớp.
 CONNECTING_ROOM_PAIRS = []
-for _fi in range(9):  # 9 cột tầng: 5,6,7,8,9,10,11,12,12A
+for _fi in range(11):  # 11 cột tầng: 5,6,7,8,9,10,11,12,12A,14,15
     for _pi in range(0, 12, 2):  # mỗi 2 dòng liên tiếp là 1 cặp, 6 cặp/tầng
         CONNECTING_ROOM_PAIRS.append(
-            (_fmt_room(_CNT_FLOOR_ROWS[_pi][_fi]), _fmt_room(_CNT_FLOOR_ROWS[_pi + 1][_fi])))
+            (_fmt_room(_CNT_FLOOR_ROWS[_pi][_fi]).upper(),
+             _fmt_room(_CNT_FLOOR_ROWS[_pi + 1][_fi]).upper()))
 
 def split_connecting_room_prices(xlsx_bytes):
     """Tự động chia đều ĐƠN GIÁ cho cặp phòng connecting khi CHUNG MÃ CHECKIN
@@ -1170,7 +1174,7 @@ def split_connecting_room_prices(xlsx_bytes):
     groups = {}  # (checkin, room) -> list các dòng (row index)
     for r in range(2, ws.max_row + 1):
         checkin = ws.cell(r, ci_checkin).value
-        room = _fmt_room(ws.cell(r, ci_room).value)
+        room = _fmt_room(ws.cell(r, ci_room).value).upper()
         if checkin is None or str(checkin).strip() == '' or not room:
             continue
         checkin = str(checkin).strip()
@@ -4025,11 +4029,8 @@ if st.session_state.menu == "daily":
                 with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
                     # ── Xử lý file XLSX (nếu có) ──
                     if has_xlsx:
-                        progress.progress(8, text="Chia giá phòng connecting...")
-                        xlsx_bytes = xlsx_file.read()
-                        xlsx_bytes, cnt_report = split_connecting_room_prices(xlsx_bytes)
-
                         progress.progress(10, text="Quy đổi tỷ giá...")
+                        xlsx_bytes = xlsx_file.read()
                         wb, conv = process_xlsx(xlsx_bytes, rate)
 
                         # Chia giá phòng connecting SAU khi đã quy đổi tỷ giá — ĐƠN GIÁ
