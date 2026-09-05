@@ -823,7 +823,10 @@ NAT_DK14 = {
     'ROU':'Romania  ( Ru-ma-ni )','RUS':'Russia  (Liên bang Nga)',
     'RWA':'Rwanda  ( Ru-an-đa )','LCA':'Saint Lucia  ( Xanh Lu-xi-a )',
     'SMR':'San Marino  ( Xan Ma-ri-nô )','SAU':'Saudi Arabia  ( A-rập Xau-đi )',
-    'GBR':'United Kingdom  ( Liên hiệp Vương quốc Anh và Bắc Ailen )','SEN':'Senegal  ( Xe-ne-gan )',
+    'GBR':'United Kingdom  ( Liên hiệp Vương quốc Anh và Bắc Ailen )',
+    # Một số hệ thống PMS ghi Vương quốc Anh là GBS thay vì GBR — nhận cả hai
+    'GBS':'United Kingdom  ( Liên hiệp Vương quốc Anh và Bắc Ailen )',
+    'SEN':'Senegal  ( Xe-ne-gan )',
     'SRB':'Serbia  ( Xéc-bi-a )','SYC':'Seychelles  ( Quần đảo Xây-sen )',
     'SGP':'Singapore  ( Xin-ga-po )','SVK':'Slovakia  ( Xlô-va-ki-a )',
     'SVN':'Slovenia  ( Slo-vê-ni-a )','SOM':'Somalia  ( Xô-ma-li )',
@@ -1506,74 +1509,333 @@ def _dk_is_dummy(name, room):
         return True, f'Phòng {room} ≥ 9000 (phòng ảo/posting master)'
     return False, ''
 
-def build_dk14(xls_bytes):
-    wb2=xlrd.open_workbook(file_contents=xls_bytes)
-    ws2=wb2.sheet_by_index(0)
-    data_all=[[ws2.cell_value(r,c) for c in range(ws2.ncols)]
-              for r in range(1,ws2.nrows) if any(ws2.cell_value(r,c) for c in range(ws2.ncols))]
-    data=[]; skipped=[]
-    for row in data_all:
-        _name = row[1] if len(row) > 1 else ''
-        _room = row[9] if len(row) > 9 else ''
-        _is_dummy, _reason = _dk_is_dummy(_name, _room)
-        if _is_dummy:
-            skipped.append((str(_name or '').strip() or '(trống)', _reason))
+# ── ĐK14: chuẩn hoá giá trị đọc từ file nguồn ─────────────────────────────
+# xlrd/openpyxl trả ô ngày về SỐ SERIAL Excel (không phải datetime) khi đọc
+# thô — cố tình đọc thô vì mọi thư viện đọc sẵn kiểu ngày đều có nguy cơ lệch
+# múi giờ; công thức (serial - 25569) * 86400 giây quy đổi thẳng nên không lệch.
+def _dk_cell_str(v):
+    """Ô số nguyên (số giấy tờ, số phòng...) bị đọc thành float — bỏ đuôi '.0'
+    để không ghi '123456789.0' vào sổ nộp công an."""
+    if v is None:
+        return ''
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v).strip()
+
+def _dk_to_date(v):
+    """Mọi kiểu ô ngày (serial Excel, datetime, chuỗi dd/mm/yyyy) → date."""
+    if v is None or v == '':
+        return None
+    if isinstance(v, datetime.datetime):
+        return v.date()
+    if isinstance(v, datetime.date):
+        return v
+    if isinstance(v, (int, float)):
+        try:
+            return (datetime.datetime(1970, 1, 1)
+                    + datetime.timedelta(seconds=round((float(v) - 25569) * 86400))).date()
+        except Exception:
+            return None
+    m = _re.match(r'^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$', str(v).strip())
+    if m:
+        try:
+            return datetime.date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        except ValueError:
+            return None
+    return None
+
+def _dk_fmt_date(v):
+    d = _dk_to_date(v)
+    return d.strftime('%d/%m/%Y') if d else ''
+
+def _dk_is_invalid_id(v):
+    """Mã giấy tờ CHƯA CẤP (không phải số thật) — xoá khỏi sổ. GKS/GBL được xử
+    lý riêng ở nơi gọi vì đó là dữ liệu hợp lệ (giấy khai sinh / giấy bảo lãnh)."""
+    s = str(v or '').strip().upper()
+    return len(s) <= 4 and bool(_re.fullmatch(r'[A-Z]{2,4}', s)) and s in ('GKS', 'GBL', 'GKA', 'GBS')
+
+def _dk_detect_columns(rows):
+    """Tự dò dòng tiêu đề (trong 5 dòng đầu) và vị trí từng cột theo TÊN tiêu
+    đề, thay vì bám chỉ số cột cứng — file IH đổi thứ tự/thêm cột vẫn chạy đúng."""
+    header_row, headers = -1, None
+    for i in range(min(5, len(rows))):
+        r = rows[i] or []
+        has_name = any(c is not None and _re.match(r'^(họ và tên|name|full name)', str(c).strip(), _re.I) for c in r)
+        has_dob = any(c is not None and _re.search(r'(ngày sinh|date of birth|ngày tháng năm sinh|dob)', str(c), _re.I) for c in r)
+        if has_name or has_dob:
+            header_row, headers = i, r
+            break
+    if header_row == -1:
+        header_row, headers = 0, (rows[0] if rows else [])
+    cols = {'headerRow': header_row, 'dataStart': header_row + 1}
+    for idx, cell in enumerate(headers or []):
+        if cell is None:
+            continue
+        s = str(cell).lower().strip()
+        if not s:
+            continue
+        if s in ('stt', 'no', 'no.', 'số tt') or s.startswith('stt '):
+            cols['stt'] = idx
+        elif _re.search(r'họ và tên (khách|kh)', s) or s in ('họ và tên', 'name', 'full name', 'guest name'):
+            cols['name'] = idx
+        elif _re.search(r'(ngày sinh|date of birth|ngày tháng năm sinh|dob)', s) and 'thông báo' not in s:
+            cols['dob'] = idx
+        elif _re.fullmatch(r'(giới tính|gender|sex)', s) or s.startswith('giới tính') or s.startswith('gender'):
+            cols['gender'] = idx
+        elif 'quốc tịch' in s:
+            cols['nationality'] = idx
+        elif 'quốc gia' in s and 'nationality' not in cols:
+            cols['country'] = idx
+        elif _re.search(r'country.*residence|residence.*country|nationality', s):
+            cols['nationality'] = idx
+        elif 'country' in s and 'nationality' not in cols:
+            cols['country'] = idx
+        elif _re.match(r'^(số giấy tờ|passport|cccd|cmnd|id card)', s) or _re.search(r'(passport|id card)', s):
+            cols['id'] = idx
+        elif s.startswith('loại giấy tờ'):
+            cols['docType'] = idx
+        elif s.startswith('tên giấy tờ'):
+            cols['docName'] = idx
+        elif _re.search(r'(số điện thoại|phone|tel|mobile)', s):
+            cols['phone'] = idx
+        elif 'loại cư trú' in s:
+            cols['cuTru'] = idx
+        elif _re.match(r'^(tỉnh|tp|province|city)', s) or s.startswith('tỉnh/'):
+            cols['tinh'] = idx
+        elif _re.match(r'^(quận|huyện|district)', s) or s.startswith('quận/'):
+            cols['quan'] = idx
+        elif _re.match(r'^(phường|xã|ward|commune)', s) or s.startswith('phường/'):
+            cols['phuong'] = idx
+        elif _re.search(r'(địa chỉ chi tiết|address line|^address$)', s):
+            cols['addressDetail'] = idx
+        elif s.startswith('địa chỉ') and 'addressDetail' not in cols:
+            cols['addressDetail'] = idx
+        elif _re.search(r'(arrival|ngày đến|thời gian.*đến|check.in)', s) or s.startswith('đến'):
+            cols['arrival'] = idx
+        elif _re.search(r'(depature|departure|ngày đi|thời gian.*đi|check.out)', s) or s.startswith('đi'):
+            cols['departure'] = idx
+        elif _re.search(r'(số buồng|số phòng|^phòng|room\s*#|^room$|room number)', s) or 'phòng/khoa' in s:
+            cols['room'] = idx
+        elif _re.search(r'(người thông báo|notifier|reporter)', s):
+            cols['notifier'] = idx
+    return cols, (headers or [])
+
+def _dk_addr_from_parts(cu_tru, tinh, quan, phuong, detail, iso):
+    """File IH không có cột địa chỉ gộp thì ghép từ các cột rời. CHỈ ghép cho
+    khách Việt Nam — khách nước ngoài để trống theo đúng mẫu ĐK14."""
+    if iso != 'VNM':
+        return '   '
+    cu_tru = str(cu_tru or '').strip()
+    segs = [str(p or '').strip() for p in (detail, phuong, quan, tinh)]
+    segs = [p for p in segs if p and p not in ('null', 'undefined', 'nan')]
+    addr = ', '.join(segs)
+    if not addr and not cu_tru:
+        return '   '
+    if cu_tru:
+        return f'{cu_tru}: {addr}' if addr else cu_tru
+    return addr
+
+def _dk_read_rows(file_bytes):
+    """Đọc file nguồn IH ở dạng THÔ (ô ngày giữ nguyên số serial). Nhận cả .xls
+    (xlrd) lẫn .xlsx (openpyxl) — nhận diện bằng chữ ký file, không theo đuôi."""
+    if file_bytes[:2] == b'PK':
+        wb = load_workbook(io.BytesIO(file_bytes), data_only=True)
+        ws = wb[wb.sheetnames[0]]
+        rows = [list(r) for r in ws.iter_rows(values_only=True)]
+        wb.close()
+        return rows
+    wb = xlrd.open_workbook(file_contents=file_bytes)
+    ws = wb.sheet_by_index(0)
+    return [[ws.cell_value(r, c) for c in range(ws.ncols)] for r in range(ws.nrows)]
+
+def _dk_transform(rows, default_notifier, default_checkin):
+    """IH → các dòng dữ liệu ĐK14, kèm nhật ký từng dòng đã sửa/bỏ qua."""
+    cols, headers = _dk_detect_columns(rows)
+    issues, skipped, data = [], [], []
+    missing = [k for k in ('name', 'dob') if k not in cols]
+    if missing:
+        issues.append(('warn', cols['headerRow'] + 1, '(tiêu đề)',
+                       'Không tìm thấy cột: ' + ', '.join(missing)))
+
+    def get(row, key):
+        i = cols.get(key)
+        return row[i] if i is not None and i < len(row) else None
+
+    seen_ids, stt = set(), 0
+    for i in range(cols['dataStart'], len(rows)):
+        row = rows[i] or []
+        if all(c is None or str(c).strip() == '' for c in row):
+            continue
+        raw_name = get(row, 'name')
+        name_str = str(raw_name or '')
+        room = _dk_cell_str(get(row, 'room'))
+        is_dummy, reason = _dk_is_dummy(name_str, room)
+        if is_dummy:
+            skipped.append((name_str.strip() or '(trống)', reason))
+            issues.append(('skip', i + 1, name_str.strip() or '(trống)', f'Bỏ qua — {reason}'))
+            continue
+        stt += 1
+        note = []
+        name = name_str.strip()
+        if name_str != name:
+            note.append('Trim khoảng trắng tên')
+        gender = _dk_map_gender(get(row, 'gender'))
+        dob = _dk_fmt_date(get(row, 'dob'))
+        if not dob:
+            note.append('Thiếu ngày sinh')
+        if gender not in ('Nam', 'Nữ'):
+            note.append('Thiếu/không xác định giới tính')
+        iso = _dk_cell_str(get(row, 'nationality') or get(row, 'country')).upper()
+        nat = NAT_DK14.get(iso, iso)
+        if iso and iso not in NAT_DK14:
+            note.append(f'Mã quốc tịch "{iso}" không có trong danh mục')
+
+        id_num = _dk_cell_str(get(row, 'id'))
+        id_up = id_num.upper()
+        if id_up in ('GKS', 'GBL'):
+            # Giấy khai sinh (GKS) / giấy bảo lãnh (GBL) — dữ liệu HỢP LỆ (khách
+            # dùng thay CCCD/hộ chiếu). Giữ nguyên, không xoá, không tính trùng
+            # vì nhiều khách có thể cùng dùng chung 1 mã.
+            pass
+        elif _dk_is_invalid_id(id_num):
+            note.append(f'Số giấy tờ "{id_num}" chưa cấp → xóa')
+            id_num = ''
+        elif not id_num:
+            note.append('Thiếu số giấy tờ')
+        elif id_num in seen_ids:
+            note.append(f'Số giấy tờ "{id_num}" trùng dòng trước')
         else:
-            data.append(row)
-    wb_t=load_workbook(io.BytesIO(load_template('dk14')))
-    ws_t=wb_t.active
-    cw={col:ws_t.column_dimensions[col].width for col in ws_t.column_dimensions}
-    rh={r:ws_t.row_dimensions[r].height for r in ws_t.row_dimensions if r<=17}
-    wb_o=Workbook(); ws_o=wb_o.active
-    for col,w in cw.items(): ws_o.column_dimensions[col].width=w
-    for r,h in rh.items():
-        if h: ws_o.row_dimensions[r].height=h
-    def cc(s,d):
-        d.value=s.value
-        for a in ('font','fill','border','alignment'):
-            v=getattr(s,a)
-            if v: setattr(d,a,copy(v))
-        d.number_format=s.number_format
-    for r in range(1,18):
-        for c in range(1,14): cc(ws_t.cell(r,c),ws_o.cell(r,c))
-    for mc in ws_t.merged_cells.ranges:
-        if mc.min_row<=17:
-            ws_o.merge_cells(start_row=mc.min_row,start_column=mc.min_col,
-                             end_row=mc.max_row,end_column=mc.max_col)
-    wb_t.close()
-    thin=Side(style='thin'); bdr=Border(left=thin,right=thin,top=thin,bottom=thin)
-    fn=Font(name='Times New Roman',size=12)
-    ac=Alignment(horizontal='center',vertical='center',wrap_text=True)
-    al=Alignment(horizontal='left',vertical='center',wrap_text=True)
-    _arrs=[]; _deps=[]
-    for i,row in enumerate(data,1):
-        er=i+17
-        name=str(row[1]).strip() if row[1] else ''
-        gender=_dk_map_gender(row[3] if len(row) > 3 else '')
-        country=NAT_DK14.get(str(row[4]).strip().upper() if row[4] else '',str(row[4] or ''))
-        passport=str(row[5]).strip() if row[5] else ''
-        if passport.endswith('.0'): passport=passport[:-2]
-        address=str(row[6]).strip() if row[6] else '   '
-        dob=serial2date(row[2]); arr=serial2date(row[7]); dep=serial2date(row[8])
-        if arr: _arrs.append(arr)
-        if dep: _deps.append(dep)
-        room=_fmt_room(row[9]) if len(row) > 9 else ''
-        notifier=str(row[10]).strip() if len(row) > 10 and row[10] else ''
-        notify = notifier
-        cols=[(1,i,ac),(2,name,al),(3,dob if gender=='Nam' else None,ac),
-              (4,dob if gender=='Nữ' else None,ac),(5,country,ac),(6,passport,ac),
-              (7,address,al),(8,arr,ac),(9,dep,ac),(10,room,ac),(11,notify,al),(12,'',ac),(13,'',ac)]
-        for ci,val,aln in cols:
-            cell=ws_o.cell(er,ci); cell.value=val; cell.font=fn; cell.border=bdr; cell.alignment=aln
-            if ci in (3,4) and val: cell.number_format='DD/MM/YYYY'
-            elif ci in (8,9) and val: cell.number_format='DD/MM/YYYY'
-    # Mẫu TT30/2026 có 2 ô tóm tắt "Từ ngày:"/"Đến ngày:" ở J11/J12 — bản cũ để
-    # trống nguyên nhãn không có ngày; điền theo khoảng ngày đến/đi thực tế
-    if _arrs:
-        ws_o.cell(11, 10).value = f"Từ ngày: {min(_arrs).strftime('%d/%m/%Y')}"
-    if _deps:
-        ws_o.cell(12, 10).value = f"Đến ngày: {max(_deps).strftime('%d/%m/%Y')}"
-    return wb_o, len(data), skipped
+            seen_ids.add(id_num)
+
+        if 'addressDetail' in cols:
+            addr = _dk_cell_str(get(row, 'addressDetail')).strip() or '   '
+        else:
+            addr = _dk_addr_from_parts(get(row, 'cuTru'), get(row, 'tinh'), get(row, 'quan'),
+                                       get(row, 'phuong'), get(row, 'addressDetail'), iso)
+
+        arr = _dk_to_date(get(row, 'arrival'))
+        if arr is None:
+            arr = default_checkin
+            if 'arrival' in cols:
+                note.append('Thiếu ngày đến → dùng ngày mặc định')
+        dep = _dk_to_date(get(row, 'departure'))
+        if dep is None:
+            note.append('Thiếu ngày đi')
+
+        notifier = _dk_cell_str(get(row, 'notifier')).strip() or default_notifier
+
+        if note:
+            kind = 'fix' if any('→' in x or 'Trim' in x for x in note) else 'warn'
+            issues.append((kind, i + 1, name, ' · '.join(note)))
+        data.append([stt, name,
+                     dob if gender == 'Nam' else '', dob if gender == 'Nữ' else '',
+                     nat, id_num, addr, arr, dep, room, notifier, '', ''])
+    return data, issues, skipped, cols, headers
+
+# ── ĐK14: ghi file bằng cách CHÈN THẲNG XML vào mẫu ──────────────────────
+# Chỉ thay phần <sheetData> từ dòng 18 trở đi, giữ nguyên byte mọi thứ còn lại
+# của file mẫu (kiểu ô, viền, font, gộp ô, khổ giấy, hình vẽ, cấu hình in...).
+# Cách này giữ được nhiều hơn so với dựng lại workbook bằng openpyxl — openpyxl
+# không giữ hình vẽ và cấu hình máy in.
+_DK_COLS = 'ABCDEFGHIJKLM'
+_DK_DEFAULT_STYLES = {'A': '8', 'B': '8', 'C': '19', 'D': '19', 'E': '8', 'F': '13',
+                      'G': '8', 'H': '8', 'I': '8', 'J': '8', 'K': '8', 'L': '8', 'M': '8'}
+_DK_DEFAULT_ROW_ATTRS = 's="4" customFormat="1" ht="14.25" x14ac:dyDescent="0.15"'
+
+def _dk_esc(s):
+    return (str(s).replace('&', '&amp;').replace('<', '&lt;')
+            .replace('>', '&gt;').replace('"', '&quot;'))
+
+def _dk_template_styles(xml):
+    """Lấy kiểu ô/thuộc tính dòng từ chính các dòng dữ liệu mẫu (18–25) để dòng
+    sinh ra trông y hệt mẫu; thiếu thì dùng bộ mặc định của mẫu TT30/2026."""
+    col_styles, row_attrs = {}, ''
+    for test_row in range(18, 26):
+        m = _re.search(r'<row([^>]*\br="%d"[^>]*)>(.*?)</row>' % test_row, xml, _re.S)
+        if not m:
+            continue
+        if not row_attrs:
+            attrs = [f'{k}="{v}"' for k, v in _re.findall(r'(\w+(?::\w+)?)="([^"]*)"', m.group(1))
+                     if k not in ('r', 'spans')]
+            row_attrs = ' '.join(attrs)
+        for col, cattr in _re.findall(r'<c\s+r="([A-Z]+)%d"([^>/]*)' % test_row, m.group(2)):
+            sm = _re.search(r'\ss="(\d+)"', cattr)
+            if sm and col not in col_styles:
+                col_styles[col] = sm.group(1)
+    for col, style in _DK_DEFAULT_STYLES.items():
+        col_styles.setdefault(col, style)
+    return col_styles, (row_attrs or _DK_DEFAULT_ROW_ATTRS)
+
+def _dk_row_xml(row_num, values, col_styles, row_attrs):
+    out = [f'<row r="{row_num}" spans="1:13" {row_attrs}>']
+    for ci, col in enumerate(_DK_COLS):
+        val = values[ci] if ci < len(values) else ''
+        ref = f'{col}{row_num}'
+        s_attr = f' s="{col_styles[col]}"' if col_styles.get(col) else ''
+        if val is None or val == '':
+            out.append(f'<c r="{ref}"{s_attr}/>')
+        elif isinstance(val, (datetime.date, datetime.datetime)):
+            # Ghi ngày dạng CHỮ "dd/mm/yyyy" thay vì số serial: số serial chỉ hiện
+            # đúng khi ô có định dạng ngày, mà mẫu không đảm bảo điều đó.
+            out.append(f'<c r="{ref}"{s_attr} t="inlineStr"><is><t>'
+                       f'{val.strftime("%d/%m/%Y")}</t></is></c>')
+        elif isinstance(val, int) and not isinstance(val, bool):
+            out.append(f'<c r="{ref}"{s_attr}><v>{val}</v></c>')
+        else:
+            sv = str(val)
+            t_attr = ' xml:space="preserve"' if sv != sv.strip() else ''
+            out.append(f'<c r="{ref}"{s_attr} t="inlineStr"><is><t{t_attr}>'
+                       f'{_dk_esc(sv)}</t></is></c>')
+    out.append('</row>')
+    return ''.join(out)
+
+def _dk_set_cell_text(xml, ref, text):
+    """Ghi đè 1 ô của mẫu bằng chuỗi (kể cả ô đang trỏ tới sharedStrings)."""
+    esc = _dk_esc(text)
+    t_attr = ' xml:space="preserve"' if text != text.strip() else ''
+    def _sub(m):
+        attrs = _re.sub(r'\s+t="[^"]*"', '', m.group(1))
+        return f'<c r="{ref}"{attrs} t="inlineStr"><is><t{t_attr}>{esc}</t></is></c>'
+    return _re.sub(r'<c\s+r="%s"([^>/]*?)(?:/>|>.*?</c>)' % ref, _sub, xml, flags=_re.S)
+
+def build_dk14(xls_bytes, default_notifier='', default_checkin=None):
+    """IH → file ĐK14 .xlsx. Trả (bytes file, số khách, danh sách bỏ qua,
+    nhật ký dòng, thông tin cột đã dò được)."""
+    rows = _dk_read_rows(xls_bytes)
+    data, issues, skipped, cols, headers = _dk_transform(rows, default_notifier, default_checkin)
+
+    src = io.BytesIO(load_template('dk14'))
+    out = io.BytesIO()
+    sheet_path = 'xl/worksheets/sheet1.xml'
+    with zipfile.ZipFile(src) as zin:
+        if sheet_path not in zin.namelist():
+            raise ValueError('Mẫu ĐK14 không có xl/worksheets/sheet1.xml')
+        xml = zin.read(sheet_path).decode('utf-8')
+
+        col_styles, row_attrs = _dk_template_styles(xml)
+        deps = [r[8] for r in data if isinstance(r[8], datetime.date)]
+        xml = _dk_set_cell_text(xml, 'J11',
+                                'Từ ngày: ' + (default_checkin.strftime('%d/%m/%Y') if default_checkin else ''))
+        xml = _dk_set_cell_text(xml, 'J12',
+                                'Đến ngày: ' + (max(deps).strftime('%d/%m/%Y') if deps else ''))
+
+        new_rows = ''.join(_dk_row_xml(18 + i, r, col_styles, row_attrs) for i, r in enumerate(data))
+        end = xml.index('</sheetData>')
+        start = -1
+        for m in _re.finditer(r'<row\s+r="(\d+)"[^>]*>', xml):
+            if int(m.group(1)) >= 18:
+                start = m.start()
+                break
+        xml = (xml[:end] if start == -1 else xml[:start]) + new_rows + xml[end:]
+
+        last_row = max(17 + len(data), 18)
+        xml = _re.sub(r'<dimension\s+ref="[^"]*"\s*/>', f'<dimension ref="A1:M{last_row}"/>', xml)
+
+        with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                zout.writestr(item, xml.encode('utf-8') if item.filename == sheet_path
+                              else zin.read(item.filename))
+    return out.getvalue(), len(data), skipped, issues, (cols, headers)
 
 
 # ── Regcard PDF builder ───────────────────────────────────────────────────
@@ -2511,7 +2773,12 @@ if not st.session_state.get("_app_scripts_injected"):
         border-radius: 14px; padding: 1rem 1.1rem; box-shadow: var(--sh);
     }
     div[data-testid="stExpander"] {background: var(--surf); border-radius: var(--r-md);}
-    div[data-testid="stExpander"] summary {color: var(--tx) !important;}
+    /* Streamlit tô nền xám sáng cho summary khi expander ĐANG MỞ — ở chế độ tối
+       thành chữ trắng trên nền sáng, không đọc được. Ép trong suốt cả 2 trạng thái. */
+    div[data-testid="stExpander"] summary,
+    div[data-testid="stExpander"] details[open] > summary {
+        color: var(--tx) !important; background: transparent !important;
+    }
     div[data-testid="stDataFrame"] {
         border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--line);
     }
@@ -3625,13 +3892,26 @@ if st.session_state.menu == "daily":
             date_str = st.text_input("📅 Ngày (dùng cho tên file)", value=f"{today.day}_{today.month:02d}")
 
     st.write("")
+    st.markdown('<div class="section-label">🚔 Cài đặt ĐK14</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        col_n, col_c = st.columns(2)
+        with col_n:
+            dk_notifier = st.text_input(
+                "Người thông báo lưu trú", value="Đỗ Duy Tân", key="dk_notifier",
+                help="Điền vào cột (11) khi file nguồn không có sẵn tên. Đổi được tuỳ ý.")
+        with col_c:
+            dk_checkin = st.date_input(
+                "Ngày check-in mặc định", value=today, key="dk_checkin", format="DD/MM/YYYY",
+                help="Dùng cho ô 'Từ ngày' ở đầu sổ, và cho khách thiếu ngày đến trong file nguồn.")
+
+    st.write("")
     st.markdown('<div class="section-label">📂 Tải file lên</div>', unsafe_allow_html=True)
     with st.container(border=True):
         col_x, col_s = st.columns(2)
         with col_x:
             xlsx_file = st.file_uploader("File XLSX — Dữ liệu khách (bắt buộc)", type=['xlsx'], key="daily_xlsx")
         with col_s:
-            xls_file = st.file_uploader("File XLS — Nguồn ĐK14 (tùy chọn)", type=['xls'], key="daily_xls")
+            xls_file = st.file_uploader("File IH — Nguồn ĐK14 (tùy chọn)", type=['xls', 'xlsx'], key="daily_xls")
 
         visa_file = st.file_uploader(
             "File Visa — dữ liệu thô date visa (tùy chọn, để tự điền cột 'Thời hạn tạm trú tại VN' trong KBTT)",
@@ -3698,12 +3978,13 @@ if st.session_state.menu == "daily":
                         files_made += ["📄 converted (file chung)", "🌍 KhachQuocTe", "🇻🇳 KhachVietNam",
                                        "📝 KBTT NNN", "📑 Thông báo lưu trú VNM"]
 
-                    # ── Xử lý file ĐK14 (độc lập, chỉ cần file XLS) ──
+                    # ── Xử lý file ĐK14 (độc lập, chỉ cần file nguồn IH) ──
                     if xls_file:
                         progress.progress(85, text="Điền mẫu ĐK14...")
                         xls_bytes = xls_file.read()
-                        wb_dk14, dk_count, dk14_skipped = build_dk14(xls_bytes)
-                        out_files[f'dk14_{date_str}.xlsx'] = wb_to_bytes(wb_dk14)
+                        (dk14_bytes, dk_count, dk14_skipped,
+                         dk14_issues, dk14_map) = build_dk14(xls_bytes, dk_notifier, dk_checkin)
+                        out_files[f'dk14_{date_str}.xlsx'] = dk14_bytes
                         has_dk14 = True
                         files_made.append("🚔 ĐK14")
 
@@ -3717,7 +3998,9 @@ if st.session_state.menu == "daily":
                 _daily = {'files_made': files_made, 'zip': zip_buf.getvalue(),
                           'files': out_files, 'rate': rate,
                           'date_str': date_str, 'has_xlsx': has_xlsx, 'has_dk14': has_dk14,
-                          'dk14_count': dk_count if has_dk14 else None, 'dk14_skipped': dk14_skipped}
+                          'dk14_count': dk_count if has_dk14 else None, 'dk14_skipped': dk14_skipped,
+                          'dk14_issues': dk14_issues if has_dk14 else [],
+                          'dk14_map': dk14_map if has_dk14 else None}
                 if has_xlsx:
                     unknown_nats = []
                     for q in df_intl.get('QUỐC TỊCH', pd.Series([], dtype=str)).dropna().unique():
@@ -3856,11 +4139,46 @@ if st.session_state.menu == "daily":
             st.info("ℹ️ Chỉ tạo file ĐK14 (không có file XLSX dữ liệu khách).")
 
         if _dr.get('has_dk14'):
-            st.info(f"🚔 ĐK14: đã điền **{_dr['dk14_count']}** khách.")
-            if _dr.get('dk14_skipped'):
-                _sk = _dr['dk14_skipped']
-                st.caption(f"ℹ️ Đã tự động bỏ qua {len(_sk)} dòng dummy/test (không phải khách lưu trú thật): "
-                           + ", ".join(f"{n} ({r})" for n, r in _sk))
+            _dk_iss = _dr.get('dk14_issues') or []
+            _n_skip = len(_dr.get('dk14_skipped') or [])
+            _n_fix = sum(1 for t, *_ in _dk_iss if t == 'fix')
+            _n_warn = sum(1 for t, *_ in _dk_iss if t == 'warn')
+            _m1, _m2, _m3, _m4 = st.columns(4)
+            _m1.metric("Tổng khách vào sổ", _dr['dk14_count'])
+            _m2.metric("Đã tự sửa", _n_fix)
+            _m3.metric("Cần xem lại", _n_warn)
+            _m4.metric("Bỏ qua", _n_skip)
+
+            if _dr.get('dk14_map'):
+                _dcols, _dheads = _dr['dk14_map']
+                _LBL = [('name', 'B — Họ và tên'), ('dob', 'C/D — Ngày sinh (tách Nam/Nữ)'),
+                        ('gender', '(dùng để tách ngày sinh Nam/Nữ)'), ('nationality', 'E — Quốc tịch'),
+                        ('country', 'E — Quốc tịch (dự phòng)'), ('id', 'F — Số giấy tờ'),
+                        ('cuTru', 'G — Loại cư trú'), ('tinh', 'G — Tỉnh'), ('quan', 'G — Quận'),
+                        ('phuong', 'G — Phường'), ('addressDetail', 'G — Địa chỉ chi tiết'),
+                        ('arrival', 'H — Thời gian đến'), ('departure', 'I — Thời gian đi'),
+                        ('room', 'J — Số phòng'), ('notifier', 'K — Người thông báo')]
+                with st.expander("🔎 Cột đã tự nhận diện trong file nguồn", expanded=False):
+                    for _k, _lb in _LBL:
+                        _i = _dcols.get(_k)
+                        if _i is None:
+                            continue
+                        _h = str(_dheads[_i]).strip() if _i < len(_dheads) and _dheads[_i] is not None else '(?)'
+                        st.markdown(f"- cột **{chr(65 + _i)}** “{_h}” → ĐK14 **{_lb}**")
+                    _miss = [k for k in ('name', 'dob', 'gender', 'id', 'arrival', 'departure', 'room')
+                             if k not in _dcols]
+                    if _miss:
+                        st.warning("⚠️ Không tìm thấy cột: " + ", ".join(_miss))
+
+            if _dk_iss:
+                _ICON = {'fix': '🔧', 'warn': '⚠️', 'skip': '⏭️'}
+                with st.expander(f"📋 Nhật ký {len(_dk_iss)} dòng đã sửa / cần xem lại", expanded=bool(_n_warn)):
+                    st.dataframe(pd.DataFrame(
+                        [{'': _ICON.get(t, ''), 'Dòng': r, 'Tên': n, 'Nội dung': msg}
+                         for t, r, n, msg in _dk_iss]),
+                        use_container_width=True, hide_index=True)
+            else:
+                st.success("✅ ĐK14: không phát hiện vấn đề nào trong dữ liệu nguồn.")
 
         st.markdown("**File đã tạo:** " + " · ".join(_dr['files_made']))
 
