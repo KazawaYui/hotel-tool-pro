@@ -2503,6 +2503,20 @@ if not st.session_state.get("_app_scripts_injected"):
     }
     .tan-rv {opacity: 0; animation: tanReveal 0.42s var(--ease) forwards;}
 
+    /* ── Chuyển màn mượt khi đổi công cụ (sidebar) — TRƯỚC đây đổi công cụ là
+       cắt cứng, không có hiệu ứng gì, khác hẳn màn chào mượt mà lúc mở web.
+       Lớp .tan-page-in được JS thêm vào mỗi khi menu thực sự đổi (xem khối
+       script ở cuối app.py) — chỉ 1 lần mờ+trượt nhẹ, không so le từng khối
+       như màn chào vì lặp lại mỗi cú click sẽ thấy chậm/rườm. */
+    @keyframes tanPageIn {
+        from {opacity: 0; transform: translateY(7px);}
+        to   {opacity: 1; transform: none;}
+    }
+    .tan-page-in {animation: tanPageIn 0.26s var(--ease);}
+    @media (prefers-reduced-motion: reduce) {
+        .tan-page-in {animation: none !important;}
+    }
+
     /* ── Top bar: breadcrumb + trạng thái ── */
     .tan-topbar {
         display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
@@ -4688,5 +4702,34 @@ if st.session_state.menu == "recon_room":
         if n_dup > 0:
             st.warning(f"🟠 {n_dup} phòng bị TRÙNG (xuất hiện nhiều lần) trong file số phòng: "
                        + ", ".join(rr['sys_dup']))
+
+# ── Hiệu ứng mượt khi ĐỔI CÔNG CỤ (sidebar) ─────────────────────────────────
+# Đặt Ở CUỐI file (sau mọi khối `if st.session_state.menu == ...`) — không
+# phải ngẫu nhiên: đây là lệnh cuối cùng được gửi cho mỗi lượt rerun, nên khi
+# JS bên dưới chạy, toàn bộ nội dung trang MỚI (đúng công cụ vừa chuyển sang)
+# chắc chắn đã render xong. Đặt sớm hơn (như khối set data-theme ở trên) sẽ
+# có nguy cơ JS thao tác nhầm lên nội dung TRANG CŨ vẫn còn trên DOM.
+# So sánh menu hiện tại với menu LƯU TRÊN CHÍNH TRANG CHA (không phải session
+# JS nội bộ iframe — iframe bị tạo mới mỗi lượt rerun, không nhớ được gì) để
+# chỉ phát hiệu ứng khi THỰC SỰ đổi công cụ, không phát khi rerun vì lý do
+# khác (gõ chữ, tick ô, mở expander...) — tránh nhấp nháy phiền mỗi thao tác.
+st.iframe(f"""
+<script>
+(function(){{
+    var doc = window.parent.document;
+    var cur = {st.session_state.menu!r};
+    var prev = doc.documentElement.getAttribute('data-tan-menu');
+    if (prev !== null && prev !== cur) {{
+        var main = doc.querySelector('[data-testid="stMainBlockContainer"]');
+        if (main) {{
+            main.classList.remove('tan-page-in');
+            void main.offsetWidth;
+            main.classList.add('tan-page-in');
+        }}
+    }}
+    doc.documentElement.setAttribute('data-tan-menu', cur);
+}})();
+</script>
+""", height=1)
 
 
