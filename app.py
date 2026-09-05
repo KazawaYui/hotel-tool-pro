@@ -1110,6 +1110,122 @@ def build_daily_report(date_str, daily, arr_stats, recon, reconr):
     f.font = Font(name='Times New Roman', size=9, italic=True, color='FF888888')
     return wb
 
+# ── Cặp phòng connecting — tự động chia đều ĐƠN GIÁ khi 1 phòng bị bỏ trống ──
+# Danh sách cố định theo sơ đồ tầng khách sạn (nguồn: C_p_CNT.xlsx, tầng 5→12A,
+# mỗi tầng 6 cặp). Đây là kết cấu vật lý của toà nhà, gần như không đổi — để
+# hằng số thay vì nạp file mỗi lần, dễ đối chiếu/sửa khi khách sạn cải tạo.
+# CHỈ áp dụng cho các cặp có TRONG danh sách này — cặp phòng nào phát sinh
+# ngoài danh sách (VD: tầng chưa được liệt kê) thì GIỮ NGUYÊN giá, không đoán.
+_CNT_FLOOR_ROWS = [
+    (538, 638, 738, 838, 934, 1034, 1134, 1230, '12A30'),
+    (540, 640, 740, 840, 936, 1036, 1136, 1232, '12A32'),
+    (542, 642, 742, 842, 938, 1038, 1138, 1234, '12A34'),
+    (544, 644, 744, 844, 940, 1040, 1140, 1236, '12A36'),
+    (546, 646, 746, 846, 942, 1042, 1142, 1238, '12A38'),
+    (548, 648, 748, 848, 944, 1044, 1144, 1240, '12A40'),
+    (541, 641, 741, 841, 937, 1037, 1137, 1233, '12A33'),
+    (543, 643, 743, 843, 939, 1039, 1139, 1235, '12A35'),
+    (545, 645, 745, 845, 941, 1041, 1141, 1237, '12A37'),
+    (547, 647, 747, 847, 943, 1043, 1143, 1239, '12A39'),
+    (549, 649, 749, 849, 945, 1045, 1145, 1241, '12A41'),
+    (550, 650, 750, 850, 946, 1046, 1146, 1242, '12A42'),
+]
+CONNECTING_ROOM_PAIRS = []
+for _fi in range(9):  # 9 cột tầng: 5,6,7,8,9,10,11,12,12A
+    for _pi in range(0, 12, 2):  # mỗi 2 dòng liên tiếp là 1 cặp, 6 cặp/tầng
+        CONNECTING_ROOM_PAIRS.append(
+            (_fmt_room(_CNT_FLOOR_ROWS[_pi][_fi]), _fmt_room(_CNT_FLOOR_ROWS[_pi + 1][_fi])))
+
+def split_connecting_room_prices(xlsx_bytes):
+    """Tự động chia đều ĐƠN GIÁ cho cặp phòng connecting khi CHUNG MÃ CHECKIN
+    (cùng 1 lượt đặt) mà chỉ 1 phòng được ghi giá, phòng kia bằng 0 — PMS
+    thường gộp giá cả 2 phòng connecting vào 1 phòng khi đặt chung.
+
+    Quy tắc CHỈ áp dụng khi cả 2 điều kiện đúng:
+    1. Cặp (roomA, roomB) có TRONG CONNECTING_ROOM_PAIRS (không đoán ngoài
+       danh sách — cặp phát sinh ngoài ý muốn thì GIỮ NGUYÊN giá).
+    2. Cả 2 phòng CHUNG 1 MÃ CHECKIN, và đúng 1 phòng có tổng giá > 0, phòng
+       còn lại tổng giá = 0.
+
+    Tổng lẻ (không chia hết 2) thì phòng SỐ NHỎ HƠN nhận phần làm tròn XUỐNG,
+    phòng SỐ LỚN HƠN nhận phần làm tròn LÊN — cộng lại đúng bằng tổng ban đầu
+    (đối chiếu đúng theo file QLLT mẫu đã tách tay: VD 8.313.043 → 4.156.521 +
+    4.156.522). Trả về (bytes file đã sửa, danh sách bản ghi đã chia để hiển
+    thị minh bạch cho người dùng kiểm tra lại)."""
+    wb = load_workbook(io.BytesIO(xlsx_bytes))
+    ws = wb.active
+    headers = [c.value for c in ws[1]]
+    headers_norm = [_norm_nat(h) if h else None for h in headers]
+
+    def _col(name):
+        target = _norm_nat(name)
+        return next((i + 1 for i, hn in enumerate(headers_norm) if hn == target), None)
+
+    ci_checkin, ci_room, ci_gia = _col('MÃ CHECKIN'), _col('SỐ PHÒNG'), _col('ĐƠN GIÁ')
+    if not (ci_checkin and ci_room and ci_gia):
+        return xlsx_bytes, []  # thiếu cột cần thiết — không đụng vào file
+
+    # Gom danh sách dòng theo (mã checkin, số phòng) để tính tổng giá mỗi phòng
+    # và biết CHÍNH XÁC dòng nào đang giữ giá trị > 0 cần sửa.
+    groups = {}  # (checkin, room) -> list các dòng (row index)
+    for r in range(2, ws.max_row + 1):
+        checkin = ws.cell(r, ci_checkin).value
+        room = _fmt_room(ws.cell(r, ci_room).value)
+        if checkin is None or str(checkin).strip() == '' or not room:
+            continue
+        checkin = str(checkin).strip()
+        groups.setdefault((checkin, room), []).append(r)
+
+    rooms_by_checkin = {}
+    for (checkin, room) in groups:
+        rooms_by_checkin.setdefault(checkin, set()).add(room)
+
+    report = []
+    for checkin, rooms in rooms_by_checkin.items():
+        for room_a, room_b in CONNECTING_ROOM_PAIRS:
+            if room_a not in rooms or room_b not in rooms:
+                continue
+            rows_a = groups[(checkin, room_a)]
+            rows_b = groups[(checkin, room_b)]
+
+            def _total(rows):
+                s = 0
+                for r in rows:
+                    v = ws.cell(r, ci_gia).value
+                    if isinstance(v, (int, float)) and not pd.isna(v):
+                        s += v
+                return s
+
+            total_a, total_b = _total(rows_a), _total(rows_b)
+            if not ((total_a > 0) != (total_b > 0)):
+                continue  # cả 2 đều có giá, hoặc cả 2 đều 0 — không đụng vào
+            nonzero_room, nonzero_rows, nonzero_total = (
+                (room_a, rows_a, total_a) if total_a > 0 else (room_b, rows_b, total_b))
+            zero_room, zero_rows = (room_b, rows_b) if nonzero_room == room_a else (room_a, rows_a)
+
+            lower, higher = sorted([room_a, room_b])
+            half_floor = int(nonzero_total) // 2
+            half_ceil = int(nonzero_total) - half_floor
+            new_val = {lower: half_floor, higher: half_ceil}
+
+            # Dòng đang giữ giá trị > 0 → sửa thành phần chia của chính phòng đó.
+            # Dòng ĐẦU TIÊN của phòng đang 0 → điền phần chia còn lại. Các dòng
+            # khác (khách đi cùng phòng) giữ nguyên 0 — không đụng.
+            for r in nonzero_rows:
+                v = ws.cell(r, ci_gia).value
+                if isinstance(v, (int, float)) and v == nonzero_total:
+                    ws.cell(r, ci_gia).value = new_val[nonzero_room]
+                    break
+            ws.cell(zero_rows[0], ci_gia).value = new_val[zero_room]
+
+            report.append({'checkin': checkin, 'room_a': room_a, 'room_b': room_b,
+                           'total': int(nonzero_total),
+                           'split_a': new_val[room_a], 'split_b': new_val[room_b]})
+
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue(), report
+
 # ── Processing ────────────────────────────────────────────────────────────
 def process_xlsx(xlsx_bytes, rate):
     """Điền dữ liệu file đầu vào lên FILE MẪU customer (QLLT) — giữ nguyên 100%
@@ -3896,7 +4012,7 @@ if st.session_state.menu == "daily":
                 conv = 0; gks_cnt = 0; gbl_cnt = 0
                 df = None; df_intl = None; df_vn = None
                 visa_map = {}; visa_unmatched = []; visa_source = None
-                kbtt_invalid_ids = []; vnm_ward_unmatched = []; dk14_skipped = []
+                kbtt_invalid_ids = []; vnm_ward_unmatched = []; dk14_skipped = []; cnt_report = []
                 # Đọc file visa (nếu có) → map tên → date visa
                 if visa_file is not None:
                     try:
@@ -3909,8 +4025,11 @@ if st.session_state.menu == "daily":
                 with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
                     # ── Xử lý file XLSX (nếu có) ──
                     if has_xlsx:
-                        progress.progress(10, text="Quy đổi tỷ giá...")
+                        progress.progress(8, text="Chia giá phòng connecting...")
                         xlsx_bytes = xlsx_file.read()
+                        xlsx_bytes, cnt_report = split_connecting_room_prices(xlsx_bytes)
+
+                        progress.progress(10, text="Quy đổi tỷ giá...")
                         wb, conv = process_xlsx(xlsx_bytes, rate)
                         # Ép các cột dạng mã đọc bằng chuỗi — nếu không, pandas tự suy
                         # diễn cột "trông giống số" thành float, làm mất số 0 đứng đầu
@@ -3966,7 +4085,8 @@ if st.session_state.menu == "daily":
                           'date_str': date_str, 'has_xlsx': has_xlsx, 'has_dk14': has_dk14,
                           'dk14_count': dk_count if has_dk14 else None, 'dk14_skipped': dk14_skipped,
                           'dk14_issues': dk14_issues if has_dk14 else [],
-                          'dk14_map': dk14_map if has_dk14 else None}
+                          'dk14_map': dk14_map if has_dk14 else None,
+                          'cnt_report': cnt_report}
                 if has_xlsx:
                     unknown_nats = []
                     for q in df_intl.get('QUỐC TỊCH', pd.Series([], dtype=str)).dropna().unique():
@@ -4042,6 +4162,16 @@ if st.session_state.menu == "daily":
             c3.metric("Việt Nam", _dr['vn'])
             c4.metric("GKS + GBL", f"{_dr['gks']} + {_dr['gbl']}")
             st.info(f"💱 Đã quy đổi tỷ giá cho **{_dr['conv']}** ô (tỷ giá {_dr.get('rate', 0):,.2f})")
+            _cnt_rep = _dr.get('cnt_report') or []
+            if _cnt_rep:
+                with st.expander(f"🚪 Đã tự động chia giá {len(_cnt_rep)} cặp phòng connecting", expanded=False):
+                    st.caption("Phòng connecting chung mã checkin nhưng chỉ 1 phòng có giá — đã chia đều "
+                               "(lệch 1 đồng thì phòng số nhỏ hơn nhận phần làm tròn xuống).")
+                    st.dataframe(pd.DataFrame([
+                        {'Mã checkin': r['checkin'], 'Phòng A': r['room_a'], 'Giá A (mới)': r['split_a'],
+                         'Phòng B': r['room_b'], 'Giá B (mới)': r['split_b'],
+                         'Tổng gốc': r['total']} for r in _cnt_rep]),
+                        use_container_width=True, hide_index=True)
             if _dr['unknown_nats']:
                 st.warning("⚠️ Quốc tịch chưa có mã (giữ nguyên tên, cần kiểm tra): " + ", ".join(_dr['unknown_nats']))
             if _dr.get('visa_used'):
