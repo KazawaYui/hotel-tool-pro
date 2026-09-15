@@ -3728,7 +3728,8 @@ def build_arr(book_bytes):
 
 
 # ── Dashboard ca trực ─────────────────────────────────────────────────────
-if st.session_state.menu == "dashboard":
+@st.fragment
+def _render_dashboard():
     _now = now_vn()
     _thu = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][_now.weekday()]
     _shift = ('Ca sáng' if 6 <= _now.hour < 14 else 'Ca chiều' if 14 <= _now.hour < 22 else 'Ca đêm')
@@ -3952,8 +3953,12 @@ if st.session_state.menu == "dashboard":
 
     st.write("")
 
+if st.session_state.menu == "dashboard":
+    _render_dashboard()
+
 # ── Daily processing screen ───────────────────────────────────────────────
-if st.session_state.menu == "daily":
+@st.fragment
+def _render_daily():
     st.write("")
     st.markdown('<div class="section-label">⚙️ Cài đặt</div>', unsafe_allow_html=True)
     with st.container(border=True):
@@ -4311,8 +4316,12 @@ if st.session_state.menu == "daily":
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True, key=f"dl_single_{_fn}")
 
+if st.session_state.menu == "daily":
+    _render_daily()
+
 # ── Regcard screen ────────────────────────────────────────────────────────
-if st.session_state.menu == "regcard":
+@st.fragment
+def _render_regcard():
     st.write("")
     st.markdown('<div class="section-label">🖨️ Tạo Registration Card + file ARR</div>', unsafe_allow_html=True)
     st.caption("Điền dữ liệu từ file Arrival Smile lên mẫu Regcard PDF gốc, đồng thời tạo file ARR "
@@ -4398,9 +4407,12 @@ if st.session_state.menu == "regcard":
             if _res['arr_err']:
                 st.warning(f"⚠️ Không tạo được file ARR: {_res['arr_err']}")
 
+if st.session_state.menu == "regcard":
+    _render_regcard()
 
 # ── Sổ giao ca ─────────────────────────────────────────────────────────────
-if st.session_state.menu == "handover":
+@st.fragment
+def _render_handover():
     st.write("")
     st.markdown('<div class="section-label">🤝 Sổ giao ca</div>', unsafe_allow_html=True)
 
@@ -4462,7 +4474,7 @@ if st.session_state.menu == "handover":
                         else:
                             db_add_entry(today_vn(), now_vn().strftime('%H:%M'),
                                         h_cat, h_room.strip(), h_note.strip())
-                            st.rerun()
+                            st.rerun(scope="fragment")
 
         st.write("")
         if not _df_e.empty:
@@ -4477,7 +4489,7 @@ if st.session_state.menu == "handover":
                     with ic2:
                         if _is_today and st.button("🗑️", key=f"h_del_{_row['id']}", help="Xóa ghi chú này"):
                             db_delete_entry(_row['id'])
-                            st.rerun()
+                            st.rerun(scope="fragment")
 
             st.write("")
             _entries_for_xlsx = [{'time': r['entry_time'], 'cat': r['category'],
@@ -4511,7 +4523,7 @@ if st.session_state.menu == "handover":
         if st.button("🔄 Thử kết nối lại", key="db_retry",
                     help="Bấm sau khi đã sửa Secrets — không cần Reboot cả app"):
             _db_schema_ready.clear()
-            st.rerun()
+            st.rerun(scope="fragment")
 
         with st.container(border=True):
             hc1, hc2 = st.columns(2)
@@ -4538,7 +4550,7 @@ if st.session_state.menu == "handover":
                                       'cat': h_cat, 'room': h_room.strip(), 'note': h_note.strip()}
                         _progress_update(lambda state: state.setdefault('handover_entries', []).append(_new_entry))
                         st.session_state.handover['entries'].append(_new_entry)
-                        st.rerun()
+                        st.rerun(scope="fragment")
 
         _entries = st.session_state.handover['entries']
         st.write("")
@@ -4562,7 +4574,7 @@ if st.session_state.menu == "handover":
                             _progress_update(_m)
                             st.session_state.handover['entries'] = list(
                                 st.session_state.progress.get('handover_entries', []))
-                            st.rerun()
+                            st.rerun(scope="fragment")
 
             st.write("")
             _wb_ho = build_handover_xlsx(
@@ -4575,6 +4587,8 @@ if st.session_state.menu == "handover":
         else:
             st.info("Chưa có ghi chú nào trong ca này. Thêm ghi chú ở form phía trên.")
 
+if st.session_state.menu == "handover":
+    _render_handover()
 
 # ── Đối chiếu: sub-menu 2 lựa chọn (có cổng mật khẩu riêng) ────────────────
 try:
@@ -4591,7 +4605,8 @@ def _check_recon():
     else:
         st.session_state.recon_pass_err = True
 
-if st.session_state.menu == "recon":
+@st.fragment
+def _render_recon():
     st.write("")
 
     # Cổng mật khẩu cho tính năng đối chiếu
@@ -4612,8 +4627,12 @@ if st.session_state.menu == "recon":
 
     st.info("Đã mở khóa — chọn công cụ Đối chiếu ở sidebar bên trái.")
 
+if st.session_state.menu == "recon":
+    _render_recon()
+
 # ── Kiểm tra lưu trú người nước ngoài ─────────────────────────────────────
-if st.session_state.menu == "recon_person":
+@st.fragment
+def _render_recon_person():
     st.write("")
     st.markdown('<div class="section-label">🌏 Kiểm tra lưu trú người nước ngoài</div>', unsafe_allow_html=True)
     st.caption("So khớp khách Smile vs Trang quản lý người nước ngoài theo số hộ chiếu — tìm khách chưa đăng ký / đăng ký trùng.")
@@ -4687,6 +4706,9 @@ if st.session_state.menu == "recon_person":
         if n_dup > 0:
             st.warning(f"🟠 {n_dup} dòng ĐĂNG KÝ TRÙNG trên lưu trú:")
             st.dataframe(r['dup'], use_container_width=True, hide_index=True)
+
+if st.session_state.menu == "recon_person":
+    _render_recon_person()
 
 # ── Kiểm tra hệ thống quản lý lưu trú phòng ────────────────────────────────
 def reconcile_rooms(smile_bytes, room_bytes, today):
@@ -4768,7 +4790,8 @@ def reconcile_rooms(smile_bytes, room_bytes, today):
     }
 
 
-if st.session_state.menu == "recon_room":
+@st.fragment
+def _render_recon_room():
     st.write("")
     st.markdown('<div class="section-label">🚪 Kiểm tra hệ thống quản lý lưu trú phòng</div>', unsafe_allow_html=True)
     st.caption("So khớp số phòng inhouse từ file khách lưu trú Smile với file danh sách số phòng — tìm phòng chưa đăng ký / thừa / trùng.")
@@ -4848,6 +4871,9 @@ if st.session_state.menu == "recon_room":
         if n_dup > 0:
             st.warning(f"🟠 {n_dup} phòng bị TRÙNG (xuất hiện nhiều lần) trong file số phòng: "
                        + ", ".join(rr['sys_dup']))
+
+if st.session_state.menu == "recon_room":
+    _render_recon_room()
 
 # ── Hiệu ứng mượt khi ĐỔI CÔNG CỤ (sidebar) ─────────────────────────────────
 # Đặt Ở CUỐI file (sau mọi khối `if st.session_state.menu == ...`) — không
