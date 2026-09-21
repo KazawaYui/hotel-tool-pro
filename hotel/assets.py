@@ -39,39 +39,40 @@ def load_template(name):
     with open(path, 'r') as f:
         return base64.b64decode(f.read())
 
-@st.cache_resource
-def _dark_bg_data_uri():
-    """Ảnh nền chế độ tối (mèo con ngủ) — nhúng thẳng base64 vào CSS, cùng
-    kiểu với load_template() ở trên, không cần hosting/URL ngoài."""
-    path = os.path.join(ASSET_DIR, 'bg_dark.b64')
-    with open(path, 'r') as f:
-        return 'data:image/jpeg;base64,' + f.read().strip()
+# ── Ảnh nền: phục vụ từ static/ thay vì nhúng base64 vào CSS ─────────────
+# Trước đây mỗi ảnh được nhúng thẳng dạng data: URI vào khối CSS, có ảnh
+# lặp tới 3 lần → ~565 KB CSS. Inline CSS KHÔNG BAO GIỜ được trình duyệt
+# cache nên toàn bộ chỗ đó phải tải lại mỗi lần mở trang. Ảnh phục vụ qua
+# URL thì có ETag: lần sau trình duyệt hỏi 304 và không tải lại gì cả.
+#
+# Dùng đường dẫn TƯƠNG ĐỐI ('app/static/…' chứ không phải '/app/static/…')
+# để app vẫn đúng khi deploy dưới một đường dẫn con.
+STATIC_DIR = os.path.join(ASSET_DIR, 'static')
 
-@st.cache_resource
-def _light_bg_data_uri():
-    """Ảnh nền chế độ sáng (mèo con chui trong túi giấy) — cùng cơ chế với
-    _dark_bg_data_uri() ở trên."""
-    path = os.path.join(ASSET_DIR, 'bg_light.b64')
-    with open(path, 'r') as f:
-        return 'data:image/jpeg;base64,' + f.read().strip()
+def _bg_url(name):
+    """URL ảnh nền trong static/. Trả '' nếu thiếu file — CSS gặp url("")
+    thì bỏ qua, nền lùi về màu nền phẳng chứ không vỡ layout."""
+    return f'app/static/{name}.jpg' if os.path.exists(
+        os.path.join(STATIC_DIR, f'{name}.jpg')) else ''
 
-@st.cache_resource
-def _season_bg_data_uri(key, theme):
-    """Ảnh nền màn chào theo mùa/dịp lễ (bg_<key>.b64). Mùa nào CHƯA có ảnh
-    riêng thì dùng lại ảnh nền sáng/tối sẵn có — không bao giờ để trống."""
-    path = os.path.join(ASSET_DIR, f'bg_{key}.b64')
-    if os.path.exists(path):
-        try:
-            with open(path, 'r') as f:
-                return 'data:image/jpeg;base64,' + f.read().strip()
-        except Exception:
-            pass
-    return _dark_bg_data_uri() if theme == 'dark' else _light_bg_data_uri()
+def _dark_bg_url():
+    """Ảnh nền chế độ tối (mèo con ngủ)."""
+    return _bg_url('bg_dark')
+
+def _light_bg_url():
+    """Ảnh nền chế độ sáng (mèo con chui trong túi giấy)."""
+    return _bg_url('bg_light')
+
+def _season_bg_url(key, theme):
+    """Ảnh nền màn chào theo mùa/dịp lễ. Mùa nào CHƯA có ảnh riêng thì dùng
+    lại ảnh nền sáng/tối sẵn có — không bao giờ để trống."""
+    return _bg_url(f'bg_{key}') or (_dark_bg_url() if theme == 'dark'
+                                    else _light_bg_url())
 
 
 # Ten duoc module nay so huu — liet ke tuong minh de `import *` lay
 # duoc ca helper co gach duoi dau.
 __all__ = [
-    '_dark_bg_data_uri', '_light_bg_data_uri', '_load_app_icon', '_season_bg_data_uri',
-    'load_template'
+    'ASSET_DIR', 'STATIC_DIR', '_bg_url', '_dark_bg_url', '_light_bg_url',
+    '_load_app_icon', '_season_bg_url', 'load_template'
 ]

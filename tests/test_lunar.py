@@ -83,8 +83,18 @@ def test_khung_gio(app, gio, key):
 
 
 def test_moi_mua_lay_duoc_anh_nen(app):
-    """Mùa nào chưa có ảnh riêng phải rơi về ảnh mặc định, không được lỗi."""
+    """Mùa nào chưa có ảnh riêng phải rơi về ảnh mặc định, không được trống."""
+    import os
     for key in ('spring', 'summer', 'autumn', 'winter', 'tet', 'trungthu', 'noel'):
         for theme in ('dark', 'light'):
-            uri = app._season_bg_data_uri(key, theme)
-            assert uri.startswith('data:image/'), f"{key}/{theme} không ra ảnh"
+            url = app._season_bg_url(key, theme)
+            assert url.startswith('app/static/'), f"{key}/{theme} không ra ảnh"
+            assert os.path.exists(os.path.join(
+                app.ASSET_DIR, url.replace('app/', '', 1))), f"thiếu file {url}"
+
+
+def test_duong_dan_anh_nen_la_tuong_doi(app):
+    """Phải là đường dẫn TƯƠNG ĐỐI để app còn đúng khi deploy dưới đường dẫn
+    con — '/app/static/...' sẽ trỏ sai lên gốc tên miền."""
+    assert not app._dark_bg_url().startswith('/')
+    assert not app._light_bg_url().startswith('/')
