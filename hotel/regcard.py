@@ -373,8 +373,223 @@ def build_regcards(xlsx_bytes, only_main=True):
 
 # Ten duoc module nay so huu — liet ke tuong minh de `import *` lay
 # duoc ca helper co gach duoi dau.
+# ── Tạo file ARR từ file Arrival (Book) Smile ──────────────────────────────
+def build_arr(book_bytes):
+    """Tạo file ARR ĐÚNG định dạng của ARR Converter gốc (tool HTML riêng, không
+    phải file mẫu in cũ):
+    - 6 cột: Conf# / Arrival / Departure / Company / Notice / [số phòng] — đọc
+      cột nguồn theo TÊN (Conf#, Folio#, Type, Arrival, Departure, Company,
+      Notice), không theo vị trí cố định như bản cũ.
+    - Font Patrick Hand toàn bộ; Conf# cỡ 50 đậm nền cam nhạt; số phòng cỡ 50;
+      các ô còn lại cỡ 20. Dòng dữ liệu cao 120, dòng header cao 142.5.
+    - Số phòng = số dòng Folio# hợp lệ trùng Conf# (bỏ dòng Type='**' - dummy).
+    - Dòng phụ chèn ngay sau booking tương ứng, gộp A:F, nền màu theo loại:
+      CÀ THẺ (cam) · THU TIỀN (xanh lá) · XEM LẠI BU (vàng) · FOC LATE C/O (xanh
+      dương, tự đọc giờ trong Notice nếu có, vd "FOC LATE C/O 18:00").
+    - Nhận diện nghiệp vụ đầy đủ (OTA, từ khóa CÀ THẺ/THU TIỀN/FOC/XEM LẠI BU)
+      y hệt bộ từ khóa của ARR Converter gốc.
+    """
+    import re as _re2
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    df = pd.read_excel(io.BytesIO(book_bytes), header=None)
+    hdr = None
+    for i in range(min(5, len(df))):
+        if any(str(v).strip() == 'Conf#' for v in df.iloc[i] if pd.notna(v)):
+            hdr = i; break
+    if hdr is None:
+        raise ValueError("Không tìm thấy dòng header chứa \"Conf#\" trong file. Kiểm tra lại file Arrival Smile.")
+
+    headers = [str(v).strip() if pd.notna(v) else '' for v in df.iloc[hdr]]
+    col = {}
+    for i, h in enumerate(headers):
+        if h and h not in col:
+            col[h] = i
+    data = df.iloc[hdr + 1:].reset_index(drop=True)
+
+    def C(name):
+        return col.get(name, -1)
+
+    conf_c, folio_c, type_c = C('Conf#'), C('Folio#'), C('Type')
+    arr_c, dep_c, comp_c, notice_c = C('Arrival'), C('Departure'), C('Company'), C('Notice')
+    if -1 in (conf_c, folio_c, arr_c, comp_c):
+        raise ValueError("File thiếu cột bắt buộc (Conf#, Folio#, Arrival, Company). Kiểm tra lại file.")
+
+    # Sửa lỗi Excel đảo dd/mm↔mm/dd với ngày ≤12 từ Smile export (dùng chung hàm _fix_date)
+    def _arr_fmt_date(v):
+        fixed = _fix_date(v)
+        if fixed is not None:
+            return fixed.strftime('%d/%m/%y')
+        return str(v).strip() if isinstance(v, str) and v.strip() else ''
+
+    # ── Đếm số phòng (= số dòng Folio# hợp lệ) theo từng Conf#, bỏ dòng Type='**' (dummy) ──
+    room_counts = {}
+    dummy_count = 0
+    for _, row in data.iterrows():
+        conf = row.iloc[conf_c] if conf_c >= 0 else None
+        folio = row.iloc[folio_c] if folio_c >= 0 else None
+        if pd.notna(conf) and pd.notna(folio):
+            typ = row.iloc[type_c] if type_c >= 0 else None
+            if str(typ).strip() == '**':
+                dummy_count += 1
+                continue
+            room_counts[conf] = room_counts.get(conf, 0) + 1
+
+    # ── Danh sách booking theo ĐÚNG thứ tự xuất hiện, mỗi Conf# 1 dòng ──
+    seen = set()
+    ordered = []
+    for _, row in data.iterrows():
+        conf = row.iloc[conf_c] if conf_c >= 0 else None
+        folio = row.iloc[folio_c] if folio_c >= 0 else None
+        typ = row.iloc[type_c] if type_c >= 0 else None
+        arr = row.iloc[arr_c] if arr_c >= 0 else None
+        comp = row.iloc[comp_c] if comp_c >= 0 else None
+        dep = row.iloc[dep_c] if dep_c >= 0 else None
+        notice = row.iloc[notice_c] if notice_c >= 0 else None
+        if pd.isna(conf) or pd.isna(folio) or pd.isna(arr) or pd.isna(comp):
+            continue
+        if str(typ).strip() == '**':
+            continue
+        if conf in seen:
+            continue
+        if not room_counts.get(conf):
+            continue
+        seen.add(conf)
+        ordered.append({
+            'type': 'bk', 'conf': conf,
+            'arrival': _arr_fmt_date(arr),
+            'departure': _arr_fmt_date(dep) if pd.notna(dep) else '',
+            'company': str(comp).strip(),
+            'notice': str(notice).strip() if pd.notna(notice) else '',
+            'rooms': room_counts[conf],
+        })
+    if not ordered:
+        raise ValueError("File không có dữ liệu booking hợp lệ nào.")
+
+    # ── Bộ nhận diện nghiệp vụ — y hệt ARR Converter gốc ──
+    ARR_OTA = ['EXPEDIA','BOOKING','AGODA','TRIP.COM','CTRIP','AIRBNB','TRAVELOKA',
+        'KLOOK','KAYAK','PRICELINE','HOTELS.COM','ORBITZ','TRIVAGO','MAKEMYTRIP',
+        'LASTMINUTE','HOSTELWORLD','WOTIF','HOTWIRE','VRBO','HOMEAWAY','IVIVU',
+        'MYTOUR','LUXSTAY','VNTRIP','GOTADI','TRAVELPORT','SKYSCANNER','BESTPRICE',
+        'LATEROOMS','EASYJET','RYANAIR','JETSTAR','HOTELBEDS','TOURICO','GETAROOM']
+    ARR_CA_THE = ['TACC','CC UPON','CHARGE CC','CHARGE CARD','CREDIT CARD','DEBIT CARD',
+        'CC AUTH','AUTH CC','AUTHORIZE CC','AUTHORIZE CARD','CC ON ARRIVAL',
+        'BILL TO CC','SWIPE CC','SWIPE CARD','PRE-AUTH','PREAUTH','PREPAID CC',
+        'CHARGE ON CC','CARD ON ARRIVAL','CC AT CI','CC AT CHECK','PAY BY CARD',
+        'CARD PAYMENT','TC UPON','TC ON ARRIVAL','TAKE CC','TAKE CARD']
+    ARR_THU_TIEN = ['PAY UPON','PAY ON ARRIVAL','CASH ON ARRIVAL','CASH UPON','COLLECT CASH',
+        'COLLECT PAYMENT','COLLECT ON ARRIVAL','PAYMENT ON ARRIVAL','CASH PAYMENT',
+        'CASH AT CHECK','CASH AT CI','DUE ON ARRIVAL','PAYABLE ON ARRIVAL',
+        'PAY AT CI','PAY AT CHECK','CASH DUE','OUTSTANDING','BALANCE DUE',
+        'PAYMENT DUE','COLLECT AT CI','COLLECT AT CHECK',
+        'RC UPON','UPON C/I','UPON CI','UPON CHECK-IN','UPON CHECKIN',
+        'GOA UPON','ROH UPON','COLLECT UPON']
+    ARR_XEM_LAI = ['CASH UPON','CASH ON ARRIVAL','CASH AT CI','CASH PAYMENT',
+        'PAY UPON','PAY AT CI','COLLECT CASH','CASH DUE']
+    ARR_FOC_LCO = ['FOC LATE CHECK','FOC LATE CHECKOUT','FOC LATE C/O','FOC LCO',
+        'LCO FOC','LATE CHECK OUT FOC','LATE CHECKOUT FOC','LATE C/O FOC',
+        'COMP LATE CHECK','COMP LATE CHECKOUT','COMP LCO',
+        'COMPLIMENTARY LATE CHECK','COMPLIMENTARY LCO',
+        'GRATIS LATE CHECK','FREE LATE CHECK']
+
+    def _pay_type(notice, company):
+        n = str(notice or '').upper()
+        co = str(company or '').upper()
+        is_ota = any(o in co for o in ARR_OTA)
+        is_ca_the = any(k in n for k in ARR_CA_THE)
+        is_thu_tien = any(k in n for k in ARR_THU_TIEN)
+        is_foc_lco = any(k in n for k in ARR_FOC_LCO)
+        has_foc = 'FOC' in n or 'COMP' in n or 'COMPLIMENTARY' in n
+        has_lco = 'LATE CHECK' in n or ' LCO' in n or 'LATE C/O' in n or 'LATE CHECKOUT' in n
+        if is_foc_lco or (has_foc and has_lco):
+            return 'foc_lco'
+        if is_ota and any(k in n for k in ARR_XEM_LAI):
+            return 'xem_lai_bu'
+        if is_ca_the:
+            return 'ca_the'
+        if is_thu_tien:
+            return 'thu_tien'
+        return 'none'
+
+    result = []
+    for i, bk in enumerate(ordered):
+        result.append(bk)
+        if i >= len(ordered) - 1:
+            continue
+        pt = _pay_type(bk['notice'], bk['company'])
+        if pt == 'ca_the':
+            result.append({'type': 'sep', 'conf': 'CÀ THẺ'})
+        elif pt == 'thu_tien':
+            result.append({'type': 'sep', 'conf': 'THU TIỀN'})
+        elif pt == 'xem_lai_bu':
+            result.append({'type': 'sep', 'conf': 'XEM LẠI BU'})
+        elif pt == 'foc_lco':
+            m = _re2.search(r'\b(\d{1,2}[:Hh]\d{2})\b', bk['notice'])
+            time_str = (' ' + m.group(1).upper()) if m else ''
+            result.append({'type': 'sep', 'conf': 'FOC LATE C/O' + time_str})
+
+    # ── Xuất Excel đúng định dạng ARR Converter gốc ──
+    wb = Workbook(); ws = wb.active; ws.title = 'Sheet1'
+    for i, w in enumerate([39.4, 15.1, 16.0, 21.9, 50.0, 10.3], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    thin = Side(style='thin')
+    border_all = Border(top=thin, bottom=thin, left=thin, right=thin)
+    center_wrap = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    conf_fill = PatternFill('solid', fgColor='FDEADA')
+    fill_colors = {'CÀ THẺ': 'FDEADA', 'THU TIỀN': 'D4F4E8', 'XEM LẠI BU': 'FFF8DC'}
+
+    ws.row_dimensions[1].height = 142.5
+    for i, h in enumerate(['Conf#', 'Arrival', 'Departure', 'Company', 'Notice', None], 1):
+        cell = ws.cell(1, i)
+        cell.value = h
+        cell.font = Font(name='Patrick Hand', size=50 if h == 'Conf#' else 20)
+        cell.alignment = center_wrap
+        cell.border = border_all
+
+    r = 2
+    for item in result:
+        ws.row_dimensions[r].height = 120.0
+        if item['type'] == 'sep':
+            ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+            label = item.get('conf') or 'CÀ THẺ'
+            color = fill_colors.get(label) or ('D6EAF8' if label.startswith('FOC LATE C/O') else 'FDEADA')
+            cell = ws.cell(r, 1)
+            cell.value = label
+            cell.font = Font(name='Patrick Hand', size=50)
+            cell.alignment = center_wrap
+            cell.fill = PatternFill('solid', fgColor=color)
+            cell.border = border_all
+        else:
+            vals = [item['conf'], item['arrival'], item['departure'], item['company'], item['notice'], item['rooms']]
+            for ci, v in enumerate(vals, 1):
+                cell = ws.cell(r, ci)
+                cell.value = v
+                cell.font = Font(name='Patrick Hand', size=50 if ci in (1, 6) else 20, bold=(ci == 1))
+                cell.alignment = center_wrap
+                cell.border = border_all
+                if ci == 1:
+                    cell.fill = conf_fill
+        r += 1
+
+    bookings = [x for x in result if x['type'] == 'bk']
+    stats = {
+        'bookings': len(bookings),
+        'rooms': sum(b['rooms'] for b in bookings),
+        'ota': sum(1 for b in bookings if any(o in b['company'].upper() for o in ARR_OTA)),
+        'dummy': dummy_count,
+        'ca_the': sum(1 for x in result if x['type'] == 'sep' and x['conf'] == 'CÀ THẺ'),
+        'thu_tien': sum(1 for x in result if x['type'] == 'sep' and x['conf'] == 'THU TIỀN'),
+        'xem_lai_bu': sum(1 for x in result if x['type'] == 'sep' and x['conf'] == 'XEM LẠI BU'),
+        'foc_lco': sum(1 for x in result if x['type'] == 'sep' and x['conf'].startswith('FOC LATE C/O')),
+    }
+    return wb, stats
+
+
 __all__ = [
-    '_grp_date', '_rc_clean_name', '_rc_conf', '_rc_date', '_rc_nights',
+    'build_arr', '_grp_date', '_rc_clean_name', '_rc_conf', '_rc_date', '_rc_nights',
     'build_group_regcard', 'build_regcards', 'load_group_template',
     'load_regcard_template'
 ]

@@ -11,6 +11,7 @@ from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.lib.colors import white, black
 import unicodedata as _ud, re as _re
 
+from .common import _strip_accents
 from .assets import load_template
 from .lookups import NAT_DK14
 
@@ -38,7 +39,11 @@ def _dk_is_dummy(name, room):
         return True, 'Tên là pending'
     if 'water sport' in n:
         return True, 'Không phải khách lưu trú'
-    if _re.fullmatch(r'[A-Za-z\s]+\d{4,}', str(name or '').strip()):
+    # Bỏ dấu trước khi so khớp: mẫu cũ chỉ nhận [A-Za-z\s] nên "Nguyễn Văn A
+    # 1234" lọt qua còn "NGUYEN VAN A 1234" thì bị loại — cùng một cái tên,
+    # chỉ khác cách gõ dấu, lại cho kết quả khác nhau. Nhận thêm dấu nháy và
+    # gạch nối vì tên nước ngoài hay có (O'Brien, Jean-Paul).
+    if _re.fullmatch(r"[A-Za-z\s'\-.]+\d{4,}", _strip_accents(name or '').strip()):
         return True, 'Tên chứa mã đặt phòng'
     digits = _re.sub(r'\D', '', str(room or ''))
     if digits and int(digits) >= 9000:

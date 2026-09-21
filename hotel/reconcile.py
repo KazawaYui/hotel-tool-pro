@@ -12,6 +12,7 @@ from reportlab.lib.colors import white, black
 import unicodedata as _ud, re as _re
 
 from .common import _norm_pp, _norm_room
+from .lookups import _norm_nat
 
 def reconcile(smile_bytes, luutru_bytes, today):
     """Đối chiếu file Smile (inhouse) với file trang quản lý lưu trú.
@@ -95,6 +96,86 @@ def reconcile(smile_bytes, luutru_bytes, today):
 
 # Ten duoc module nay so huu — liet ke tuong minh de `import *` lay
 # duoc ca helper co gach duoi dau.
+# ── Kiểm tra hệ thống quản lý lưu trú phòng ────────────────────────────────
+def reconcile_rooms(smile_bytes, room_bytes, today):
+    """Đối chiếu phòng inhouse từ file khách lưu trú Smile (trừ khách Arrival hôm nay)
+    với file Excel chỉ chứa danh sách số phòng."""
+    from collections import Counter
+
+    # ── Đọc file khách lưu trú Smile ──
+    df1 = pd.read_excel(io.BytesIO(smile_bytes), header=0)
+    if 'Rm#' not in df1.columns:
+        raise ValueError("File Smile không có cột 'Rm#'. Vui lòng dùng file khách lưu trú xuất từ Smile.")
+    smile = df1.dropna(subset=['Rm#']).copy()
+    smile['room'] = smile['Rm#'].apply(_norm_room)
+    smile['Arrival'] = pd.to_datetime(smile['Arrival'], errors='coerce') if 'Arrival' in smile else pd.NaT
+    _ln = smile['Last Name'].astype(str).str.strip() if 'Last Name' in smile else ''
+    _fn = smile['First Name'].astype(str).str.strip() if 'First Name' in smile else ''
+    smile['name'] = (_ln + ' ' + _fn).str.strip() if 'Last Name' in smile else ''
+    smile_total = len(smile)
+    # Cột Departure (dò tên linh hoạt)
+    _dep_col = next((c for c in df1.columns if 'depart' in str(c).lower()), None)
+    smile['Departure'] = pd.to_datetime(df1[_dep_col], errors='coerce') if _dep_col else pd.NaT
+    # Trừ khách Arrival = hôm nay và khách Departure = hôm nay (trả phòng)
+    if 'Arrival' in smile:
+        smile_f = smile[(smile['Arrival'].dt.date != today.date()) &
+                        (smile['Departure'].dt.date != today.date())].copy()
+    else:
+        smile_f = smile.copy()
+
+    # ── Đọc file chỉ chứa số phòng: lấy tất cả ô có dữ liệu ──
+    raw = pd.read_excel(io.BytesIO(room_bytes), header=None, dtype=str)
+    rooms_sys = []
+    for _, row_vals in raw.iterrows():
+        for v in row_vals:
+            if pd.isna(v): continue
+            r = _norm_room(v)
+            if not r: continue
+            # bỏ ô tiêu đề nếu lỡ có (vd "Số phòng", "Room", "STT")
+            if _norm_nat(r) in ('sophong', 'phong', 'room', 'rm', 'stt'): continue
+            rooms_sys.append(r)
+    if not rooms_sys:
+        raise ValueError("File số phòng không có dữ liệu. Vui lòng kiểm tra lại file.")
+
+    sys_rooms = set(rooms_sys)
+    _cnt = Counter(rooms_sys)
+    sys_dup = sorted((r for r, c in _cnt.items() if c > 1), key=lambda x: (len(x), x))
+
+    import re as _re3
+    def _is_virtual(r):
+        return bool(_re3.fullmatch(r'9\d{3}', r))  # phòng ảo 9000-9999 (posting master)
+
+    smile_rooms = set(r for r in smile_f['room'] if r and not _is_virtual(r))
+    sys_rooms = set(r for r in sys_rooms if not _is_virtual(r))
+
+    def _sortkey(x): return (len(x), x)
+    room_chua = sorted(smile_rooms - sys_rooms, key=_sortkey)  # inhouse nhưng CHƯA có trong file phòng
+    room_thua = sorted(sys_rooms - smile_rooms, key=_sortkey)  # có trong file phòng nhưng KHÔNG còn inhouse
+
+    # Chi tiết khách trong các phòng chưa đăng ký (tiện đăng ký bổ sung)
+    if room_chua:
+        detail = smile_f[smile_f['room'].isin(room_chua)].copy()
+        detail['_arr'] = detail['Arrival'].dt.strftime('%d/%m/%Y') if 'Arrival' in detail else ''
+        _nat = detail['NAT'] if 'NAT' in detail else ''
+        detail = pd.DataFrame({
+            'Số phòng': detail['room'].values,
+            'Họ tên': detail['name'].values,
+            'Quốc tịch': _nat.values if hasattr(_nat, 'values') else _nat,
+            'Ngày đến': detail['_arr'].values if hasattr(detail['_arr'], 'values') else '',
+        }).sort_values('Số phòng', key=lambda s: s.map(lambda x: (len(x), x)))
+    else:
+        detail = pd.DataFrame(columns=['Số phòng', 'Họ tên', 'Quốc tịch', 'Ngày đến'])
+
+    return {
+        'smile_total': smile_total, 'smile_filtered': len(smile_f),
+        'sys_total': len(rooms_sys), 'sys_unique': len(sys_rooms),
+        'smile_rooms': len(smile_rooms),
+        'room_chua': room_chua, 'room_thua': room_thua, 'sys_dup': sys_dup,
+        'room_match': len(smile_rooms & sys_rooms),
+        'detail_chua': detail,
+    }
+
+
 __all__ = [
-    'reconcile'
+    'reconcile', 'reconcile_rooms'
 ]
