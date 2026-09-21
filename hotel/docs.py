@@ -11,7 +11,7 @@ from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.lib.colors import white, black
 import unicodedata as _ud, re as _re
 
-from .common import _fix_departure_swap, _fmt_room, _norm_name, _norm_pp, cp, fmt, make_code
+from .common import apply_style, snapshot_styles, _fix_departure_swap, _fmt_room, _norm_name, _norm_pp, cp, fmt, make_code
 from .assets import load_template
 from .lookups import (
     LOAI_GIAY, _norm_nat, lookup_nat_kbtt, lookup_province_vnm, lookup_ward_vnm,
@@ -128,6 +128,7 @@ def build_kbtt(df_intl, visa_map=None):
     # Cấu trúc mẫu: dòng 1 = ô merge A1:L1 (tiêu đề + chú ý đỏ), dòng 2 = header,
     # dòng 3 = "[TEST] SAMPLE" BẮT BUỘC giữ nguyên, dữ liệu khách thật từ dòng 4.
     ref = [ws.cell(3,c) for c in range(1,13)]   # dùng style dòng 3 làm mẫu định dạng cho các dòng khách
+    ref_styles = snapshot_styles(ref)           # chụp 1 lần, dán lại cho mọi ô
     n = len(df_intl)
     # Xóa dòng dữ liệu thừa (nếu có), luôn giữ tối thiểu tới dòng 3 (dòng TEST)
     last_data_row = 3 + n
@@ -156,7 +157,7 @@ def build_kbtt(df_intl, visa_map=None):
         vals=[i,ht,ns,'D - Ngày',gt,qt,sh,sp,nd,ni,ni,vd]
         for ci,val in enumerate(vals,1):
             cell=ws.cell(er,ci); cell.value=val if isinstance(val,int) else str(val)
-            cp(ref[ci-1],cell)
+            apply_style(cell, ref_styles[ci-1])
     # Bảo toàn ô merge tiêu đề + chiều cao dòng 1 (phòng khi delete_rows làm xê dịch)
     if 'A1:L1' not in [str(m) for m in ws.merged_cells.ranges]:
         try: ws.merge_cells('A1:L1')
@@ -188,6 +189,7 @@ def build_vnm(df_vn):
     wsn = next((s for s in wb.sheetnames if 'KHACH' in s or 'DS' in s), wb.sheetnames[0])
     ws = wb[wsn]
     ref = [ws.cell(5,c) for c in range(1,ws.max_column+1)]
+    ref_styles = snapshot_styles(ref)           # chụp 1 lần, dán lại cho mọi ô
     for r in range(ws.max_row,4,-1): ws.delete_rows(r)
     gks_cnt=0; gbl_cnt=0
     ward_unmatched=[]  # (tên khách, phường/xã gốc) không tự tra được mã — giữ raw, cần lễ tân kiểm tra
@@ -234,7 +236,7 @@ def build_vnm(df_vn):
         vals=[i,ht,ns,gt,'VNM - Viet Nam',lg,ten_giay,sg,dt,cutru,tinh,phuong,dc,nd,ni,sp,'1 - Du lịch','','']
         for ci,val in enumerate(vals,1):
             cell=ws.cell(er,ci); cell.value=val if isinstance(val,int) else str(val)
-            if ci<=len(ref): cp(ref[ci-1],cell)
+            if ci<=len(ref_styles): apply_style(cell, ref_styles[ci-1])
     return wb, gks_cnt, gbl_cnt, ward_unmatched
 
 

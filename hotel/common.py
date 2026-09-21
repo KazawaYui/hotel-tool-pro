@@ -43,10 +43,38 @@ def make_code(prefix, ns):
     p = ns.replace('-','/').split('/')
     return f"{prefix}{p[0].zfill(2)}{p[1].zfill(2)}{p[2][-2:]}" if len(p)==3 else prefix
 
+def snapshot_styles(cells):
+    """Chụp định dạng của một dòng ô mẫu thành các đối tượng style THẬT.
+
+    cell.font trả về StyleProxy — không hash được nên openpyxl từ chối đưa
+    thẳng vào bảng style dùng chung. copy() ở đây vừa gỡ lớp proxy vừa tách
+    khỏi template gốc, và chỉ chạy MỘT LẦN cho cả file thay vì mỗi ô."""
+    return [(copy(c.font), copy(c.fill), copy(c.border), copy(c.alignment),
+             c.number_format) for c in cells]
+
+
+def apply_style(cell, style):
+    """Dán định dạng đã chụp sẵn vào ô.
+
+    Gán thẳng, không copy lại: openpyxl lưu style vào bảng dùng chung của
+    workbook rồi cho ô giữ chỉ số, nên nhiều ô trỏ cùng một đối tượng là
+    cách dùng bình thường. Copy từng ô chỉ tạo hàng nghìn đối tượng y hệt
+    nhau rồi vứt đi — với file 124 khách là gần 12.000 lệnh copy thừa."""
+    f, fl, b, al, nf = style
+    if f: cell.font = f
+    if fl: cell.fill = fl
+    if b: cell.border = b
+    if al: cell.alignment = al
+    cell.number_format = nf
+
+
 def cp(src, dst):
-    for a in ('font','fill','border','alignment'):
-        v = getattr(src,a)
-        if v: setattr(dst,a,copy(v))
+    """Chép định dạng giữa hai ô. Dùng cho vài ô lẻ; điền hàng loạt thì dùng
+    snapshot_styles() + apply_style() để không copy lại từng ô."""
+    for a in ('font', 'fill', 'border', 'alignment'):
+        v = getattr(src, a)
+        if v:
+            setattr(dst, a, copy(v))
     dst.number_format = src.number_format
 
 def serial2date(s):
@@ -174,7 +202,7 @@ def _norm_room(r):
 # Ten duoc module nay so huu — liet ke tuong minh de `import *` lay
 # duoc ca helper co gach duoi dau.
 __all__ = [
-    'VN_TZ', '_fix_date', '_fix_departure_swap', '_fmt_room', '_gv', '_norm_name',
+    'apply_style', 'snapshot_styles', 'VN_TZ', '_fix_date', '_fix_departure_swap', '_fmt_room', '_gv', '_norm_name',
     '_norm_pp', '_norm_room', '_strip_accents', '_to_date', 'cp', 'fmt', 'make_code',
     'now_vn', 'serial2date', 'today_vn', 'wb_to_bytes'
 ]
