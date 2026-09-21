@@ -377,11 +377,29 @@ def _season_bg_data_uri(key, theme):
 # ── Lookup tables ─────────────────────────────────────────────────────────
 # Full nationality mapping (normalized keys → "CODE - Name") — 350 entries
 import unicodedata as _ud, re as _re
-def _norm_nat(s):
+
+def _strip_accents(s):
+    """Bỏ dấu tiếng Việt, giữ lại đúng chữ cái gốc.
+
+    Đ/đ KHÔNG phải chữ D kèm dấu phụ mà là ký tự riêng (U+0110/U+0111) nên
+    NFD không tách ra được. Nếu chỉ NFD rồi lọc [^a-z0-9], chữ đ không lọt
+    qua bộ lọc và bị XOÁ HẲN: "Đà Nẵng" → "a nang", "Ấn Độ" → "ano". Phải
+    đổi tay Đ→D trước khi chuẩn hoá."""
+    s = str(s or '').replace('Đ', 'D').replace('đ', 'd')
+    s = _ud.normalize('NFD', s)
+    return ''.join(c for c in s if _ud.category(c) != 'Mn')
+
+def _norm_nat_legacy(s):
+    """Cách chuẩn hoá CŨ (nuốt mất chữ đ). Các khoá trong NAT_NORM bên dưới
+    được gõ theo đúng cách này (VD "Đài Loan" → "ailoan"), nên vẫn phải tra
+    được bằng nó — xem lookup_nat_kbtt()."""
     s = str(s).lower().strip()
     s = _ud.normalize('NFD', s)
     s = ''.join(c for c in s if _ud.category(c) != 'Mn')
     return _re.sub(r'[^a-z0-9]', '', s)
+
+def _norm_nat(s):
+    return _re.sub(r'[^a-z0-9]', '', _strip_accents(s).lower().strip())
 
 NAT_NORM = {
     "achentina": "ARG - Argentina",
@@ -736,13 +754,51 @@ NAT_NORM = {
     "zimbabwe": "ZWE - Zimbabwe"
 }
 
+# ── Sửa các mục tra SAI NƯỚC (nguy hiểm hơn thiếu: vẫn ra "một" kết quả nên
+# KHÔNG hiện cảnh báo nào, khách bị khai sai quốc tịch lên hồ sơ công an) ──
+#
+# "United Kingdom" từng trỏ sang GBD (British Territories Citizen). GBR mới
+# là United Kingdom.
+NAT_NORM["unitedkingdom"] = "GBR - United Kingdom"
+#
+# "Úc" từng trỏ sang Đức! Khoá "uc" vốn sinh ra từ "Đức" theo cách chuẩn hoá
+# cũ nuốt mất chữ đ ("Đức" → "uc"), rồi chiếm luôn chỗ của "Úc" — khách Úc bị
+# khai thành khách Đức. Nay "Đức" → "duc" nên trả "uc" lại đúng cho Úc.
+NAT_NORM["uc"] = "AUS - Australia"
+NAT_NORM["duc"] = "D - Germany"
+
+# ── Bổ sung tên tiếng Việt thường dùng còn thiếu ──
+# Mỗi mục dưới đây CHỈ trỏ tới một giá trị ĐÃ CÓ SẴN trong bảng, không tạo mã
+# quốc gia mới. Thiếu chúng thì khách ghi tên nước bằng tiếng Việt thông dụng
+# sẽ ra hồ sơ không có mã.
+for _vn_alias, _vn_target in (
+    ("nga", "RUS - Russia"),            # đã có: lienbangnga, russia
+    ("sec", "CZE - Czech Republic"),    # đã có: conghoasec, czechrepublic
+    ("dongtimor", "TLS - Timor Leste"), # đã có: ongtimo, timorleste
+    ("dailoan", "CHN - China"),         # theo đúng bảng: chinataiwan, trungquocailoan → CHN
+):
+    assert _vn_target in NAT_NORM.values(), f"mã {_vn_target} không có sẵn trong bảng"
+    NAT_NORM[_vn_alias] = _vn_target
+
+# PMS xuất quốc tịch bằng TÊN TIẾNG ANH ĐẦY ĐỦ ("United States of America",
+# "Philippines", "Myanmar"...) trong khi bảng trên chỉ có tên Việt và vài
+# alias rút gọn ("unitedstates", "philippin") → những khách đó ra hồ sơ KHÔNG
+# CÓ MÃ QUỐC TỊCH. Tự sinh khoá từ chính tên hiển thị của mỗi mục, nên mọi
+# mục đều tra được bằng đúng tên tiếng Anh của nó. setdefault: không đè khoá
+# đã có sẵn, chỉ bù chỗ thiếu.
+for _nat_val in list(NAT_NORM.values()):
+    if ' - ' in _nat_val:
+        NAT_NORM.setdefault(_norm_nat(_nat_val.split(' - ', 1)[1]), _nat_val)
+
 def lookup_nat_kbtt(raw):
     """Khớp thông minh: chuẩn hóa dấu/khoảng trắng để tìm mã quốc tịch."""
     if not raw: return ''
     raw = str(raw).strip()
-    key = _norm_nat(raw)
-    if key in NAT_NORM:
-        return NAT_NORM[key]
+    # Thử cả 2 cách chuẩn hoá: bản đúng (đ→d) và bản cũ (đ bị nuốt) — các khoá
+    # trong NAT_NORM được gõ theo bản cũ nên vẫn phải tra được bằng nó.
+    for key in (_norm_nat(raw), _norm_nat_legacy(raw)):
+        if key in NAT_NORM:
+            return NAT_NORM[key]
     # already in CODE - Name form?
     if _re.match(r'^[A-Z]{2,3} - ', raw):
         return raw
@@ -1313,10 +1369,9 @@ def split_wb(wb, loai):
     return wb2
 
 def _norm_name(s):
-    """Chuẩn hóa tên để khớp giữa 2 file: bỏ dấu, hoa thường, gộp khoảng trắng."""
-    s = str(s).lower().strip()
-    s = _ud.normalize('NFD', s)
-    s = ''.join(c for c in s if _ud.category(c) != 'Mn')
+    """Chuẩn hóa tên để khớp giữa 2 file: bỏ dấu, hoa thường, gộp khoảng trắng.
+    Cả hai phía đều chuẩn hoá lúc chạy bằng hàm này nên luôn khớp nhau."""
+    s = _strip_accents(s).lower().strip()
     return _re.sub(r'\s+', ' ', _re.sub(r'[^a-z0-9 ]', '', s)).strip()
 
 def parse_visa_file(visa_bytes):
@@ -2106,10 +2161,11 @@ def _fix_departure_swap(ni_str, nd_str):
 
 def _norm_addr(s):
     """Chuẩn hóa tên tỉnh/phường để so khớp: bỏ dấu, hoa/thường, bỏ tiền tố
-    Xã/Phường/Thị trấn/Đặc khu/Tỉnh/TP..., bỏ ký tự không phải chữ/số."""
-    s = str(s or '').strip()
-    s = _ud.normalize('NFD', s)
-    s = ''.join(c for c in s if _ud.category(c) != 'Mn')
+    Xã/Phường/Thị trấn/Đặc khu/Tỉnh/TP..., bỏ ký tự không phải chữ/số.
+
+    Bảng tra (load_vn_admin_lookup) cũng dựng khoá bằng chính hàm này nên cả
+    hai phía luôn khớp nhau."""
+    s = _strip_accents(s).strip()
     s = s.lower()
     s = _re.sub(r'^(xa|phuong|thi tran|dac khu|tinh|thanh pho|tp\.?)\s+', '', s)
     s = _re.sub(r'[^a-z0-9 ]', ' ', s)
