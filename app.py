@@ -65,13 +65,13 @@ if not st.session_state.get("_app_scripts_injected"):
         background-color: var(--bg);
         color: var(--tx);
         background-image: linear-gradient(rgba(246,247,250,.80), rgba(246,247,250,.93)),
-                           url("__LIGHT_BG_DATA_URI__");
+                           url("__LIGHT_BG_URL__");
         background-size: cover; background-position: center center;
         background-repeat: no-repeat; background-attachment: fixed;
     }
     html[data-theme="dark"] .stApp {
         background-image: linear-gradient(rgba(18,21,29,.78), rgba(18,21,29,.92)),
-                           url("__DARK_BG_DATA_URI__");
+                           url("__DARK_BG_URL__");
     }
 
     /* ── Sidebar ── */
@@ -267,13 +267,13 @@ if not st.session_state.get("_app_scripts_injected"):
         border-radius: var(--r-lg); padding: 1.15rem 1.35rem;
         min-height: 200px; display: flex; flex-direction: column; justify-content: center;
         background-image: linear-gradient(100deg, rgba(22,18,48,.95) 0%, rgba(34,26,66,.74) 46%, rgba(48,36,84,.26) 100%),
-                           url("__LIGHT_BG_DATA_URI__");
+                           url("__LIGHT_BG_URL__");
         background-size: cover, cover; background-position: center, center right;
         box-shadow: 0 12px 32px rgba(30,25,70,.28);
     }
     html[data-theme="dark"] .tan-hero {
         background-image: linear-gradient(100deg, rgba(16,14,32,.95) 0%, rgba(26,22,50,.74) 46%, rgba(40,32,72,.24) 100%),
-                           url("__DARK_BG_DATA_URI__");
+                           url("__DARK_BG_URL__");
         box-shadow: 0 14px 36px rgba(0,0,0,.45);
     }
     .tan-hero-lab {font-size: 0.74rem; font-weight: 640; opacity: .88;}
@@ -826,8 +826,8 @@ if not st.session_state.get("_app_scripts_injected"):
 })();
 </script>
 """
-    _boot_script = _boot_script.replace('__DARK_BG_DATA_URI__', _dark_bg_data_uri())
-    _boot_script = _boot_script.replace('__LIGHT_BG_DATA_URI__', _light_bg_data_uri())
+    _boot_script = _boot_script.replace('__DARK_BG_URL__', _dark_bg_url())
+    _boot_script = _boot_script.replace('__LIGHT_BG_URL__', _light_bg_url())
 
     # ── Nội dung màn chào: lấy từ SỐ LIỆU THẬT đã lưu trong ngày. Chưa chạy
     # công cụ nào thì ô số liệu hiện dấu "—", KHÔNG bịa con số. ──
@@ -861,7 +861,7 @@ if not st.session_state.get("_app_scripts_injected"):
                 + _g_cell('VIỆC CHƯA XONG', _g_todo, 'warn' if _g_todo else ''))
 
     for _ph, _val in (
-        ('__GREET_PHOTO__', _season_bg_data_uri(_g_season, _g_theme)),
+        ('__GREET_PHOTO__', _season_bg_url(_g_season, _g_theme)),
         ('__GREET_HOUR__', _g_hourkey),
         ('__GREET_SEASON_LABEL__', SEASON_LABEL[_g_season]),
         ('__GREET_SEASON__', _g_season),

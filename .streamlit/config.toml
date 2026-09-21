@@ -24,3 +24,6 @@ gatherUsageStats = false
 
 [server]
 maxUploadSize = 100
+# Phục vụ ảnh nền từ static/ thay vì nhúng base64 vào CSS —
+# inline CSS không bao giờ được trình duyệt cache.
+enableStaticServing = true
