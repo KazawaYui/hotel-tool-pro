@@ -194,8 +194,11 @@ def process_xlsx(xlsx_bytes, rate):
         for ci in range(1, n_cols + 1):
             cell = ws.cell(er, ci)
             f, fl, b, a, nf = ref_styles[ci - 1]
-            cell.font = copy(f); cell.fill = copy(fl); cell.border = copy(b)
-            cell.alignment = copy(a); cell.number_format = nf
+            # Gán thẳng, không copy lại từng ô — xem giải thích ở common.cp().
+            # ref_styles đã là bản sao tạo MỘT LẦN từ dòng mẫu, đủ để không
+            # đụng vào style gốc của template.
+            cell.font = f; cell.fill = fl; cell.border = b
+            cell.alignment = a; cell.number_format = nf
             sc = col_src[ci - 1]
             if sc is not None and row[sc - 1].value is not None:
                 cell.value = row[sc - 1].value

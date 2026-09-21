@@ -162,3 +162,32 @@ def test_hoi_quy_thu_tu_quy_doi_roi_moi_chia(app):
                if str(ws.cell(r, ci_room).value) in ('742', '744'))
     assert tong == 8313043, "phải khớp đúng số dư trên PMS"
     assert tong != 8301100, "đây là con số SAI của thứ tự cũ"
+
+
+# ── Định dạng file xuất ra ────────────────────────────────────────────────
+def test_o_du_lieu_duoc_ke_dinh_dang_theo_dong_mau(app):
+    """Style được chụp MỘT LẦN từ dòng mẫu rồi dán cho mọi ô (nhanh gấp ~2,5
+    lần so với copy từng ô). Test này chặn trường hợp tối ưu quá tay làm mất
+    luôn định dạng — file nộp công an sẽ sai mẫu."""
+    wb, _ = app.process_xlsx(_qllt([('B1', '742', 278.40),
+                                    ('B1', '744', 1500000)]), RATE)
+    ws = wb['customer']
+    for r in (2, 3):
+        c = ws.cell(r, 2)
+        assert c.font is not None and c.font.name, f'dòng {r} mất font'
+        assert c.border is not None, f'dòng {r} mất viền'
+        assert c.alignment is not None, f'dòng {r} mất căn lề'
+
+
+def test_moi_dong_co_cung_dinh_dang(app):
+    """Mọi dòng khách phải trông giống nhau — chụp style dùng chung không
+    được làm dòng sau khác dòng trước."""
+    rows = [('B1', str(600 + i), 1500000) for i in range(10)]
+    wb, _ = app.process_xlsx(_qllt(rows), RATE)
+    ws = wb['customer']
+    mau = [(str(ws.cell(2, c).font), str(ws.cell(2, c).border),
+            ws.cell(2, c).number_format) for c in range(1, ws.max_column + 1)]
+    for r in range(3, 12):
+        dong = [(str(ws.cell(r, c).font), str(ws.cell(r, c).border),
+                 ws.cell(r, c).number_format) for c in range(1, ws.max_column + 1)]
+        assert dong == mau, f'dòng {r} khác định dạng với dòng 2'
