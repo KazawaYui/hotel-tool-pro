@@ -20,7 +20,11 @@ from .common import now_vn, today_vn
 # Chỉ lưu tiến độ + số liệu TỔNG HỢP (không tên/hộ chiếu khách) cho các công cụ
 # xử lý dữ liệu khách; RIÊNG Sổ giao ca lưu đầy đủ nội dung vì đó chính là mục
 # đích của sổ giao ca (thông tin cần truyền lại nguyên vẹn cho ca sau).
-DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
+# Gốc dự án, KHÔNG phải dirname(__file__): bám theo __file__ sẽ ghi vào
+# hotel/data/ — vừa lệch chỗ so với dữ liệu ca đang có, vừa lọt khỏi mục
+# data/ trong .gitignore nên tiến độ ca có thể bị commit nhầm lên kho.
+DATA_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
 
 def _progress_path(date_iso=None):
     os.makedirs(DATA_DIR, exist_ok=True)
