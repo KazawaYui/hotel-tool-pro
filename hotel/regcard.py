@@ -12,17 +12,21 @@ from reportlab.lib.colors import white, black
 import unicodedata as _ud, re as _re
 
 from .common import _fix_date
+from .assets import ASSET_DIR
 from .lookups import _norm_nat
 
 # ── Regcard PDF builder ───────────────────────────────────────────────────
+# Dùng ASSET_DIR (gốc dự án) chứ KHÔNG phải dirname(__file__): các file .b64
+# nằm ở gốc, không nằm trong package — bám theo __file__ sẽ tìm nhầm vào
+# hotel/ và làm hỏng toàn bộ công cụ Regcard.
 @st.cache_resource
 def load_regcard_template():
-    path = os.path.join(os.path.dirname(__file__), 'tmpl_regcard.b64')
+    path = os.path.join(ASSET_DIR, 'tmpl_regcard.b64')
     with open(path, 'r') as f:
         return base64.b64decode(f.read())
 
 def load_group_template():
-    path = os.path.join(os.path.dirname(__file__), 'tmpl_group.b64')
+    path = os.path.join(ASSET_DIR, 'tmpl_group.b64')
     with open(path, 'r') as f:
         return base64.b64decode(f.read())
 
@@ -98,6 +102,36 @@ def _rc_nights(arr, dep):
     n = (d - a).days
     return str(n) if n >= 0 else ''
 
+# Đường kẻ DỌC của bảng trên mẫu regcard đoàn, dạng (x, y_trên, y_dưới) — đo
+# bằng cách render mẫu ở 1px/1điểm rồi dò cột pixel đen theo từng hàng. Phải
+# ghi theo hàng vì các hàng chia cột khác nhau: hàng Arrival/Departure cắt ở
+# x=291, hai hàng dưới cắt ở x=155 và 357.
+# Ô che dữ liệu mẫu phải nằm GỌN GIỮA hai đường — lấn ra là xoá mất khung.
+_GROUP_TABLE_LINES = (
+    (31, 160, 345),    # mép trái, suốt bảng
+    (553, 160, 345),   # mép phải, suốt bảng
+    (291, 160, 209),   # chỉ hàng Arrival / Departure
+    (155, 209, 345),   # hai hàng dưới
+    (357, 209, 345),   # hai hàng dưới
+)
+
+# Mẫu PDF có sẵn dữ liệu ví dụ in cứng (đoàn 21099 / TBA / VIRGO TRAVEL /
+# 25 phòng / 52 khách / 08-09.08.2026). Không che thì chữ mới vẽ ĐÈ LÊN chữ
+# cũ, phiếu in ra chồng hai lớp số đọc không ra — regcard cá nhân đã có bước
+# che này từ đầu, regcard đoàn thì bị bỏ sót.
+# Toạ độ (x0, trên, x1, dưới), nới tới sát mép ô để chứa được giá trị dài
+# hơn bản mẫu.
+_GROUP_BLANK = [
+    (156.3, 166, 290, 184),   # Arrival Date      (ô 155 → 292)
+    (433, 166, 551, 184),     # Departure Date    (ô 292 → 553)
+    (33, 246, 153, 266),      # Group Code        (ô  31 → 155)
+    (157, 246, 355, 267),     # Group Name        (ô 155 → 357)
+    (359, 246, 551, 267),     # Travel Agent      (ô 357 → 553)
+    (33, 312, 153, 333),      # No of rooms       (ô  31 → 155)
+    (157, 310, 355, 330),     # No of pax         (ô 155 → 357)
+]
+
+
 def build_group_regcard(grp_df, tmpl_bytes):
     """Vẽ 1 Registration Card for Group từ các dòng cùng 1 mã Group.
     Trả về trang PDF đã merge. Bảng Kind of rooms để trống (điền tay)."""
@@ -136,8 +170,12 @@ def build_group_regcard(grp_df, tmpl_bytes):
         'npax':      (187.2, 326.2, str(n_pax)),
     }
 
+
     buf = io.BytesIO()
     c = rl_canvas.Canvas(buf, pagesize=(595, 841))
+    c.setFillColor(white)
+    for x0, top, x1, bot in _GROUP_BLANK:
+        c.rect(x0, H - bot, (x1 - x0), (bot - top), fill=1, stroke=0)
     c.setFillColor(black)
     c.setFont(FONT, SIZE)
     for key, (x, bottom, val) in data.items():
@@ -589,7 +627,7 @@ def build_arr(book_bytes):
 
 
 __all__ = [
-    'build_arr', '_grp_date', '_rc_clean_name', '_rc_conf', '_rc_date', '_rc_nights',
+    '_GROUP_BLANK', '_GROUP_TABLE_LINES', 'build_arr', '_grp_date', '_rc_clean_name', '_rc_conf', '_rc_date', '_rc_nights',
     'build_group_regcard', 'build_regcards', 'load_group_template',
     'load_regcard_template'
 ]
