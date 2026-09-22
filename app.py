@@ -2021,8 +2021,28 @@ def build_group_regcard(grp_df, tmpl_bytes):
         'npax':      (187.2, 326.2, str(n_pax)),
     }
 
+    # Mẫu PDF có sẵn dữ liệu ví dụ in cứng (đoàn 21099 / TBA / VIRGO TRAVEL /
+    # 25 phòng / 52 khách / 08-09.08.2026). Không che thì chữ mới vẽ ĐÈ LÊN
+    # chữ cũ, phiếu in ra chồng hai lớp chữ, số đọc không ra — regcard cá
+    # nhân đã có bước che này từ đầu (BLANK ở dưới), regcard đoàn bị bỏ sót.
+    # Toạ độ (x0, trên, x1, dưới) đo bằng cách render mẫu ở 1px/1điểm rồi dò
+    # vị trí chữ và đường kẻ bảng — ô che phải nằm GỌN GIỮA hai đường dọc
+    # (x = 31, 155, 292 chỉ hàng đầu, 357, 553), lấn ra là xoá mất khung.
+    BLANK_GROUP = [
+        (156.3, 166, 290, 184),   # Arrival Date      (ô 155 → 292)
+        (433, 166, 551, 184),     # Departure Date    (ô 292 → 553)
+        (33, 246, 153, 266),      # Group Code        (ô  31 → 155)
+        (157, 246, 355, 267),     # Group Name        (ô 155 → 357)
+        (359, 246, 551, 267),     # Travel Agent      (ô 357 → 553)
+        (33, 312, 153, 333),      # No of rooms       (ô  31 → 155)
+        (157, 310, 355, 330),     # No of pax         (ô 155 → 357)
+    ]
+
     buf = io.BytesIO()
     c = rl_canvas.Canvas(buf, pagesize=(595, 841))
+    c.setFillColor(white)
+    for x0, top, x1, bot in BLANK_GROUP:
+        c.rect(x0, H - bot, (x1 - x0), (bot - top), fill=1, stroke=0)
     c.setFillColor(black)
     c.setFont(FONT, SIZE)
     for key, (x, bottom, val) in data.items():
