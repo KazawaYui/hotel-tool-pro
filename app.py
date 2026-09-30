@@ -2021,15 +2021,16 @@ def build_group_regcard(grp_df, tmpl_bytes):
         'npax':      (187.2, 326.2, str(n_pax)),
     }
 
-    # Mẫu PDF có sẵn dữ liệu ví dụ in cứng (đoàn 21099 / TBA / VIRGO TRAVEL /
-    # 25 phòng / 52 khách / 08-09.08.2026). Không che thì chữ mới vẽ ĐÈ LÊN
-    # chữ cũ, phiếu in ra chồng hai lớp chữ, số đọc không ra — regcard cá
-    # nhân đã có bước che này từ đầu (BLANK ở dưới), regcard đoàn bị bỏ sót.
+    # Mẫu PDF có sẵn dữ liệu ví dụ in cứng (đoàn 21168 / MINH QUANG CO. LTD /
+    # CONG TY TNHH MINH QUANG / 7 phòng / 14 khách / 30.09-02.10.2026). Không
+    # che thì chữ mới vẽ ĐÈ LÊN chữ cũ, phiếu in ra chồng hai lớp chữ, số đọc
+    # không ra — regcard cá nhân đã có bước che này từ đầu (BLANK ở dưới),
+    # regcard đoàn bị bỏ sót.
     # Toạ độ (x0, trên, x1, dưới) đo bằng cách render mẫu ở 1px/1điểm rồi dò
     # vị trí chữ và đường kẻ bảng — ô che phải nằm GỌN GIỮA hai đường dọc
-    # (x = 31, 155, 292 chỉ hàng đầu, 357, 553), lấn ra là xoá mất khung.
+    # (x = 31, 291 chỉ hàng đầu, 155, 357, 553), lấn ra là xoá mất khung.
     BLANK_GROUP = [
-        (156.3, 166, 290, 184),   # Arrival Date      (ô 155 → 292)
+        (150, 166, 289, 184),     # Arrival Date      (nhãn hết x=106, ô → 291)
         (433, 166, 551, 184),     # Departure Date    (ô 292 → 553)
         (33, 246, 153, 266),      # Group Code        (ô  31 → 155)
         (157, 246, 355, 267),     # Group Name        (ô 155 → 357)
@@ -2219,12 +2220,15 @@ def build_regcards(xlsx_bytes, only_main=True):
         'rm':(360.60,179.92),'company':(221.40,216.32),
         'special':(137.40,288.40),
     }
-    # Ô che dữ liệu cũ — vừa khít vùng chữ, không lấn đường kẻ bảng
+    # Ô che dữ liệu mẫu in sẵn trên template (Bao Uyen / 2025606 / 12a15 /
+    # AQUAMARINE BY SWANDOR...) — vừa khít vùng chữ, không lấn đường kẻ bảng
+    # (đường dọc x = 22.6, 215.4, 576.6; hàng Visa Card có thêm x = 278.4)
     BLANK = [
-        (125,99,250,110.5),(526,98,568,109.5),(119,133.5,168,145.2),
-        (329,133.5,378,145.2),(500,133.5,512,145.2),(113,169,145,180.9),
-        (360,169,410,180.9),(221,205.5,320,217.3),
-        (135,277,575,289.4),   # che dòng "AI Lunch ( EUR )..." in sẵn trên template
+        (125,99,250,110.5),(522,98,568,109.5),(119,133.5,168,145.2),
+        (329,133.5,378,145.2),(490,133.5,512,145.2),(113,169,145,180.9),
+        (355,169,410,180.9),(221,205.5,570,217.3),
+        (135,277,575,289.4),   # che dòng "AI Lunch, AI Dinner..." in sẵn trên template
+        (140,444,272,456.5),   # che "20/1/0 UAI PCK, RC FOC" in sẵn cạnh ô Visa Card
     ]
 
     # ── Gộp theo Conf# ──
