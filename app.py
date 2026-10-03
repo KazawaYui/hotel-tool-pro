@@ -1799,26 +1799,28 @@ def _dk_guest_stats(data, today):
     """Phân loại khách + phòng từ các dòng ĐK14 (file IH = khách ĐANG Ở, gồm cả
     khách trả phòng hôm nay): 'stay' = tất cả, 'cout' = ngày đi trùng `today`.
     Việt Nam = quốc tịch VNM; có quốc tịch khác = quốc tế; để trống = 'unk'
-    (không đoán bừa, báo riêng). Một phòng có cả khách Việt lẫn khách ngoại thì
-    tính vào cả 2 cột phòng, còn tổng phòng chỉ đếm 1 lần."""
+    (không đoán bừa, báo riêng). MỖI PHÒNG chỉ thuộc 1 nhóm — nhóm có nhiều
+    khách hơn trong phòng (phòng lẫn Việt/ngoại mà ngang nhau thì xếp quốc tế;
+    phòng chỉ có khách chưa rõ quốc tịch thì xếp 'unk') — nên số phòng Việt Nam
+    + quốc tế (+ chưa rõ) luôn bằng tổng phòng."""
     vn_nat = NAT_DK14['VNM']
-    acc = {s: {k: {'guests': 0, 'rooms': set()} for k in ('vn', 'intl', 'unk')}
-           for s in ('stay', 'cout')}
+    guests = {s: {'vn': 0, 'intl': 0, 'unk': 0} for s in ('stay', 'cout')}
+    rooms = {s: {} for s in ('stay', 'cout')}      # phòng -> số khách từng nhóm
     for r in data:
         nat, dep, room = r[4], r[8], str(r[9] or '').strip()
         kind = 'vn' if nat == vn_nat else ('intl' if nat else 'unk')
         for scope in (('stay', 'cout') if dep == today else ('stay',)):
-            acc[scope][kind]['guests'] += 1
+            guests[scope][kind] += 1
             if room:
-                acc[scope][kind]['rooms'].add(room)
+                rooms[scope].setdefault(room, {'vn': 0, 'intl': 0, 'unk': 0})[kind] += 1
     out = {'date': today.isoformat()}
-    for scope, a in acc.items():
-        out[scope] = {
-            'total': sum(a[k]['guests'] for k in a),
-            'vn': a['vn']['guests'], 'intl': a['intl']['guests'], 'unk': a['unk']['guests'],
-            'rooms': len(a['vn']['rooms'] | a['intl']['rooms'] | a['unk']['rooms']),
-            'vn_rooms': len(a['vn']['rooms']), 'intl_rooms': len(a['intl']['rooms']),
-        }
+    for scope in ('stay', 'cout'):
+        n = {'vn': 0, 'intl': 0, 'unk': 0}
+        for c in rooms[scope].values():
+            n['unk' if c['vn'] + c['intl'] == 0 else 'vn' if c['vn'] > c['intl'] else 'intl'] += 1
+        g = guests[scope]
+        out[scope] = {'total': sum(g.values()), 'vn': g['vn'], 'intl': g['intl'], 'unk': g['unk'],
+                      'rooms': len(rooms[scope]), 'vn_rooms': n['vn'], 'intl_rooms': n['intl']}
     return out
 
 # ── ĐK14: ghi file bằng cách CHÈN THẲNG XML vào mẫu ──────────────────────
