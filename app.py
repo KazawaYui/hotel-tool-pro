@@ -3677,11 +3677,10 @@ def build_arr(book_bytes):
         return 'none'
 
     result = []
-    for i, bk in enumerate(ordered):
+    for bk in ordered:
         result.append(bk)
-        if i >= len(ordered) - 1:
-            continue
-        pt = _pay_type(bk['notice'], bk['company'])
+        # Booking cuối file cũng có dòng phụ (trước đây bị bỏ qua → mất ghi chú cà thẻ/thu tiền)
+        pt =_pay_type(bk['notice'], bk['company'])
         # Riêng TA AGODA: dòng phụ thanh toán (cà thẻ / thu tiền / xem lại BU)
         # luôn ghi "CÀ THẺ LÚC C/I"; FOC LATE C/O giữ nguyên.
         if pt in ('ca_the', 'thu_tien', 'xem_lai_bu') and 'AGODA' in bk['company'].upper():
