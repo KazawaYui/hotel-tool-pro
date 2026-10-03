@@ -198,7 +198,9 @@ def _yesterday_total():
         if os.path.exists(p):
             with open(p, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            return ((data.get('tasks', {}) or {}).get('daily', {}) or {}).get('summary', {}).get('total')
+            # Cùng nguồn với thẻ tổng quan hôm nay: tổng khách ĐK14 (IH) của hôm qua
+            return ((((data.get('tasks', {}) or {}).get('daily', {}) or {}).get('summary', {}) or {})
+                    .get('dk14', {}) or {}).get('stay', {}).get('total')
     except Exception:
         pass
     return None
@@ -1793,6 +1795,32 @@ def _dk_transform(rows, default_notifier, default_checkin):
                      nat, id_num, addr, arr, dep, room, notifier, '', ''])
     return data, issues, skipped, cols, headers
 
+def _dk_guest_stats(data, today):
+    """Phân loại khách + phòng từ các dòng ĐK14 (file IH = khách ĐANG Ở, gồm cả
+    khách trả phòng hôm nay): 'stay' = tất cả, 'cout' = ngày đi trùng `today`.
+    Việt Nam = quốc tịch VNM; có quốc tịch khác = quốc tế; để trống = 'unk'
+    (không đoán bừa, báo riêng). Một phòng có cả khách Việt lẫn khách ngoại thì
+    tính vào cả 2 cột phòng, còn tổng phòng chỉ đếm 1 lần."""
+    vn_nat = NAT_DK14['VNM']
+    acc = {s: {k: {'guests': 0, 'rooms': set()} for k in ('vn', 'intl', 'unk')}
+           for s in ('stay', 'cout')}
+    for r in data:
+        nat, dep, room = r[4], r[8], str(r[9] or '').strip()
+        kind = 'vn' if nat == vn_nat else ('intl' if nat else 'unk')
+        for scope in (('stay', 'cout') if dep == today else ('stay',)):
+            acc[scope][kind]['guests'] += 1
+            if room:
+                acc[scope][kind]['rooms'].add(room)
+    out = {'date': today.isoformat()}
+    for scope, a in acc.items():
+        out[scope] = {
+            'total': sum(a[k]['guests'] for k in a),
+            'vn': a['vn']['guests'], 'intl': a['intl']['guests'], 'unk': a['unk']['guests'],
+            'rooms': len(a['vn']['rooms'] | a['intl']['rooms'] | a['unk']['rooms']),
+            'vn_rooms': len(a['vn']['rooms']), 'intl_rooms': len(a['intl']['rooms']),
+        }
+    return out
+
 # ── ĐK14: ghi file bằng cách CHÈN THẲNG XML vào mẫu ──────────────────────
 # Chỉ thay phần <sheetData> từ dòng 18 trở đi, giữ nguyên byte mọi thứ còn lại
 # của file mẫu (kiểu ô, viền, font, gộp ô, khổ giấy, hình vẽ, cấu hình in...).
@@ -1861,7 +1889,8 @@ def _dk_set_cell_text(xml, ref, text):
 
 def build_dk14(xls_bytes, default_notifier='', default_checkin=None):
     """IH → file ĐK14 .xlsx. Trả (bytes file, số khách, danh sách bỏ qua,
-    nhật ký dòng, thông tin cột đã dò được)."""
+    nhật ký dòng, thông tin cột đã dò được, thống kê khách/phòng đang ở và
+    trả phòng hôm nay — chỉ để hiện ở Tổng quan ca trực)."""
     rows = _dk_read_rows(xls_bytes)
     data, issues, skipped, cols, headers = _dk_transform(rows, default_notifier, default_checkin)
 
@@ -1896,7 +1925,8 @@ def build_dk14(xls_bytes, default_notifier='', default_checkin=None):
             for item in zin.infolist():
                 zout.writestr(item, xml.encode('utf-8') if item.filename == sheet_path
                               else zin.read(item.filename))
-    return out.getvalue(), len(data), skipped, issues, (cols, headers)
+    return (out.getvalue(), len(data), skipped, issues, (cols, headers),
+            dict(_dk_guest_stats(data, today_vn()), time=now_vn().strftime('%H:%M:%S')))
 
 
 # ── Regcard PDF builder ───────────────────────────────────────────────────
@@ -3346,10 +3376,11 @@ if not st.session_state.get("_app_scripts_injected"):
         return (f'<div class="bs-cell"><div class="bs-k">{label}</div>'
                 f'<div class="bs-v{_mut}">{"—" if value is None else value}</div></div>')
 
-    _g_cells = (_g_cell('KHÁCH LƯU TRÚ', _g_sum.get('total'))
-                + _g_cell('QUỐC TẾ', _g_sum.get('intl'))
-                + _g_cell('VIỆT NAM', _g_sum.get('vn'))
-                + _g_cell('CHECK-IN HÔM NAY', _g_sum.get('checkin_n'))
+    _g_stay = (_g_sum.get('dk14') or {}).get('stay') or {}   # số khách lấy từ ĐK14 (IH)
+    _g_cells = (_g_cell('KHÁCH LƯU TRÚ', _g_stay.get('total'))
+                + _g_cell('QUỐC TẾ', _g_stay.get('intl'))
+                + _g_cell('VIỆT NAM', _g_stay.get('vn'))
+                + _g_cell('CHECK-IN HÔM NAY', None)
                 + _g_cell('VIỆC CHƯA XONG', _g_todo, 'warn' if _g_todo else ''))
 
     for _ph, _val in (
@@ -3788,7 +3819,7 @@ def _render_dashboard():
                  'visa_watch': len(_d.get('visa_watch') or []),
                  'unknown_nats': len(_d.get('unknown_nats') or []),
                  'invalid_ids': len(_d.get('kbtt_invalid_ids') or []), 'stale': None}
-    elif _p_daily.get('summary'):
+    elif (_p_daily.get('summary') or {}).get('total') is not None:   # có kết quả XLSX đã lưu
         _ps = _p_daily['summary']
         _hero = {'total': _ps.get('total'), 'intl': _ps.get('intl'), 'vn': _ps.get('vn'),
                  'red': _ps.get('red_issues') or 0, 'yellow': _ps.get('yellow_issues') or 0,
@@ -3798,39 +3829,54 @@ def _render_dashboard():
     else:
         _hero = None
 
+    # Số khách + phòng ở thẻ HERO lấy từ file ĐK14 (IH) — là danh sách khách thực
+    # tế đang ở và sắp trả phòng, chính xác hơn số đếm từ file XLSX (ARR ngày cũ,
+    # khách trong đó đã nằm sẵn trong IH). XLSX vẫn dùng cho kiểm tra dữ liệu,
+    # cảnh báo, visa ở các thẻ khác. Check-in chưa có nguồn nên để trống.
+    _cnt = (_d or {}).get('dk14_stats') or (_p_daily.get('summary') or {}).get('dk14')
+    _cnt_live = bool((_d or {}).get('dk14_stats'))
+
+    def _hero_cell(label, val, sub=''):
+        _s = (f'<div style="font-size:.66rem;opacity:.8;font-weight:600;margin-top:1px">{sub}</div>'
+              if sub else '')
+        return (f'<div><div class="tan-hero-k">{label}</div>'
+                f'<div class="tan-hero-v">{"—" if val is None else val}</div>{_s}</div>')
+
     # ── HÀNG 1: thẻ HERO (ảnh mèo) + 2 thẻ số liệu ──
     _r1a, _r1b, _r1c = st.columns([2, 1, 1], gap="small")
     with _r1a:
-        if _hero:
+        if _cnt:
+            _stay, _cout = _cnt['stay'], _cnt['cout']
             _yday = _yesterday_total()
             _cmp = ''
             if _yday:
-                _delta = (_hero['total'] or 0) - _yday
+                _delta = _stay['total'] - _yday
                 _cmp = (f'▲ {_delta} khách so với hôm qua · ' if _delta > 0 else
                         f'▼ {abs(_delta)} khách so với hôm qua · ' if _delta < 0 else
                         'bằng hôm qua · ')
-            _room_txt = f"{_hero['rooms']} phòng có khách · " if _hero.get('rooms') else ''
-            _stale_txt = (f"số liệu lúc {_hero['stale']}" if _hero['stale'] else "cập nhật trong phiên này")
+            _room_txt = f"{_stay['rooms']} phòng có khách · " if _stay['rooms'] else ''
+            _unk_txt = f"{_stay['unk']} khách chưa rõ quốc tịch · " if _stay['unk'] else ''
+            _stale_txt = ("cập nhật trong phiên này" if _cnt_live
+                          else f"số liệu lúc {_cnt.get('time') or '—'}")
             st.markdown(
                 '<div class="tan-hero">'
                 '<div class="tan-hero-lab">🛏️ Tổng khách lưu trú hôm nay</div>'
-                f'<div class="tan-hero-val">{_hero["total"]}</div>'
-                f'<div class="tan-hero-sub">{_cmp}{_room_txt}{_stale_txt}</div>'
+                f'<div class="tan-hero-val">{_stay["total"]}</div>'
+                f'<div class="tan-hero-sub">{_cmp}{_room_txt}{_unk_txt}{_stale_txt}</div>'
                 '<div class="tan-hero-split">'
-                f'<div><div class="tan-hero-k">🌍 Quốc tế</div><div class="tan-hero-v">{_hero["intl"]}</div></div>'
-                f'<div><div class="tan-hero-k">🇻🇳 Việt Nam</div><div class="tan-hero-v">{_hero["vn"]}</div></div>'
-                f'<div><div class="tan-hero-k">🔑 Check-in</div><div class="tan-hero-v">'
-                f'{_hero["cin"] if _hero.get("cin") is not None else "—"}</div></div>'
-                f'<div><div class="tan-hero-k">🚪 Check-out</div><div class="tan-hero-v">'
-                f'{_hero["cout"] if _hero.get("cout") is not None else "—"}</div></div>'
-                '</div></div>', unsafe_allow_html=True)
+                + _hero_cell('🌍 Quốc tế', _stay['intl'], f"{_stay['intl_rooms']} phòng")
+                + _hero_cell('🇻🇳 Việt Nam', _stay['vn'], f"{_stay['vn_rooms']} phòng")
+                + _hero_cell('🔑 Check-in', None)
+                + _hero_cell('🚪 Check-out', _cout['total'],
+                             f"QT {_cout['intl']} · VN {_cout['vn']} · {_cout['rooms']} phòng")
+                + '</div></div>', unsafe_allow_html=True)
         else:
             st.markdown(
                 '<div class="tan-hero">'
                 '<div class="tan-hero-lab">👋 Chào ca trực</div>'
                 '<div class="tan-hero-val" style="font-size:1.45rem">Chưa có số liệu hôm nay</div>'
-                '<div class="tan-hero-sub">Bắt đầu bằng <b>Xử lý hàng ngày</b> hoặc '
-                '<b>Regcard + ARR</b> ở sidebar — số liệu sẽ tự lên đây.</div>'
+                '<div class="tan-hero-sub">Xử lý file <b>IH</b> ở <b>Xử lý hàng ngày</b> (làm ĐK14) '
+                '— số khách và phòng đang ở sẽ tự lên đây.</div>'
                 '<div class="tan-hero-split">'
                 '<div><div class="tan-hero-k">🌍 Quốc tế</div><div class="tan-hero-v">—</div></div>'
                 '<div><div class="tan-hero-k">🇻🇳 Việt Nam</div><div class="tan-hero-v">—</div></div>'
@@ -4117,7 +4163,7 @@ def _render_daily():
                         progress.progress(85, text="Điền mẫu ĐK14...")
                         xls_bytes = xls_file.read()
                         (dk14_bytes, dk_count, dk14_skipped,
-                         dk14_issues, dk14_map) = build_dk14(xls_bytes, dk_notifier, dk_checkin)
+                         dk14_issues, dk14_map, dk14_stats) = build_dk14(xls_bytes, dk_notifier, dk_checkin)
                         out_files[f'dk14_{date_str}.xlsx'] = dk14_bytes
                         has_dk14 = True
                         files_made.append("🚔 ĐK14")
@@ -4135,6 +4181,7 @@ def _render_daily():
                           'dk14_count': dk_count if has_dk14 else None, 'dk14_skipped': dk14_skipped,
                           'dk14_issues': dk14_issues if has_dk14 else [],
                           'dk14_map': dk14_map if has_dk14 else None,
+                          'dk14_stats': dk14_stats if has_dk14 else None,
                           'cnt_report': cnt_report}
                 if has_xlsx:
                     unknown_nats = []
@@ -4183,9 +4230,10 @@ def _render_daily():
                 def _mark_daily_done(state, _daily=_daily, has_xlsx=has_xlsx, has_dk14=has_dk14):
                     task = {'done': True, 'time': now_vn().strftime('%H:%M:%S'),
                             'has_xlsx': has_xlsx, 'has_dk14': has_dk14}
+                    summary = None
                     if has_xlsx:
                         iss = _daily.get('issues')
-                        task['summary'] = {
+                        summary = {
                             'total': _daily.get('total'), 'intl': _daily.get('intl'), 'vn': _daily.get('vn'),
                             'gks': _daily.get('gks'), 'gbl': _daily.get('gbl'), 'conv': _daily.get('conv'),
                             'red_issues': int((iss['Mức độ'] == '🔴').sum()) if iss is not None and len(iss) else 0,
@@ -4194,6 +4242,14 @@ def _render_daily():
                             'rooms_cnt': _daily.get('rooms_cnt'),
                             'checkin_n': _daily.get('checkin_n'), 'checkout_n': _daily.get('checkout_n'),
                         }
+                    # Số khách/phòng từ ĐK14 (chỉ để hiện ở Tổng quan) — chạy XLSX sau đó
+                    # không được làm mất nó.
+                    dk = _daily.get('dk14_stats') or (
+                        ((state.get('tasks') or {}).get('daily') or {}).get('summary') or {}).get('dk14')
+                    if dk:
+                        summary = dict(summary or {}, dk14=dk)
+                    if summary is not None:
+                        task['summary'] = summary
                     state.setdefault('tasks', {})['daily'] = task
                 _progress_update(_mark_daily_done)
             except Exception as e:
