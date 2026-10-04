@@ -3870,7 +3870,9 @@ def _render_dashboard():
                 + _hero_cell('🇻🇳 Việt Nam', _stay['vn'], f"{_stay['vn_rooms']} phòng")
                 + _hero_cell('🔑 Check-in', None)
                 + _hero_cell('🚪 Check-out', _cout['total'],
-                             f"QT {_cout['intl']} · VN {_cout['vn']} · {_cout['rooms']} phòng")
+                             f"QT {_cout['intl']} khách · {_cout['intl_rooms']} phòng<br>"
+                             f"VN {_cout['vn']} khách · {_cout['vn_rooms']} phòng<br>"
+                             f"Tổng {_cout['rooms']} phòng")
                 + '</div></div>', unsafe_allow_html=True)
         else:
             st.markdown(
