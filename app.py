@@ -3710,15 +3710,12 @@ def build_arr(book_bytes):
         return 'none'
 
     result = []
-    for bk in ordered:
+    for i, bk in enumerate(ordered):
         result.append(bk)
-        # Booking cuối file cũng có dòng phụ (trước đây bị bỏ qua → mất ghi chú cà thẻ/thu tiền)
-        pt =_pay_type(bk['notice'], bk['company'])
-        # Riêng TA AGODA: dòng phụ thanh toán (cà thẻ / thu tiền / xem lại BU)
-        # luôn ghi "CÀ THẺ LÚC C/I"; FOC LATE C/O giữ nguyên.
-        if pt in ('ca_the', 'thu_tien', 'xem_lai_bu') and 'AGODA' in bk['company'].upper():
-            result.append({'type': 'sep', 'conf': 'CÀ THẺ LÚC C/I'})
-        elif pt == 'ca_the':
+        if i >= len(ordered) - 1:
+            continue
+        pt = _pay_type(bk['notice'], bk['company'])
+        if pt == 'ca_the':
             result.append({'type': 'sep', 'conf': 'CÀ THẺ'})
         elif pt == 'thu_tien':
             result.append({'type': 'sep', 'conf': 'THU TIỀN'})
@@ -3738,8 +3735,7 @@ def build_arr(book_bytes):
     border_all = Border(top=thin, bottom=thin, left=thin, right=thin)
     center_wrap = Alignment(horizontal='center', vertical='center', wrap_text=True)
     conf_fill = PatternFill('solid', fgColor='FDEADA')
-    fill_colors = {'CÀ THẺ': 'FDEADA', 'CÀ THẺ LÚC C/I': 'FDEADA',
-                   'THU TIỀN': 'D4F4E8', 'XEM LẠI BU': 'FFF8DC'}
+    fill_colors = {'CÀ THẺ': 'FDEADA', 'THU TIỀN': 'D4F4E8', 'XEM LẠI BU': 'FFF8DC'}
 
     ws.row_dimensions[1].height = 142.5
     for i, h in enumerate(['Conf#', 'Arrival', 'Departure', 'Company', 'Notice', None], 1):
@@ -3780,7 +3776,7 @@ def build_arr(book_bytes):
         'rooms': sum(b['rooms'] for b in bookings),
         'ota': sum(1 for b in bookings if any(o in b['company'].upper() for o in ARR_OTA)),
         'dummy': dummy_count,
-        'ca_the': sum(1 for x in result if x['type'] == 'sep' and x['conf'] in ('CÀ THẺ', 'CÀ THẺ LÚC C/I')),
+        'ca_the': sum(1 for x in result if x['type'] == 'sep' and x['conf'] == 'CÀ THẺ'),
         'thu_tien': sum(1 for x in result if x['type'] == 'sep' and x['conf'] == 'THU TIỀN'),
         'xem_lai_bu': sum(1 for x in result if x['type'] == 'sep' and x['conf'] == 'XEM LẠI BU'),
         'foc_lco': sum(1 for x in result if x['type'] == 'sep' and x['conf'].startswith('FOC LATE C/O')),
