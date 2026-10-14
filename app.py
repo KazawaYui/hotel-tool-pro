@@ -1039,7 +1039,7 @@ def build_handover_xlsx(info, entries):
                                        vertical='center', wrap_text=True)
     return wb
 
-def build_daily_report(date_str, daily, arr_stats, recon, reconr):
+def build_daily_report(date_str, daily, arr_stats):
     """Báo cáo ngày 1 trang (Excel) cho quản lý — tổng hợp mọi số liệu các công cụ
     đã chạy trong phiên; phần nào chưa chạy thì tự bỏ qua."""
     wb = Workbook(); ws = wb.active; ws.title = 'Bao cao ngay'
@@ -1093,18 +1093,6 @@ def build_daily_report(date_str, daily, arr_stats, recon, reconr):
         kv('Cần thu tiền (THU TIỀN)', arr_stats.get('thu_tien'))
         kv('Xem lại BU', arr_stats.get('xem_lai_bu'))
         kv('FOC Late C/O', arr_stats.get('foc_lco'))
-        r += 1
-    if recon:
-        section('4. ĐỐI CHIẾU LƯU TRÚ NGƯỜI NƯỚC NGOÀI')
-        kv('Khách chưa đăng ký lưu trú', len(recon.get('chua_dk', [])))
-        kv('Có trên lưu trú, thiếu trên Smile', len(recon.get('thua', [])))
-        kv('Đăng ký trùng', len(recon.get('dup', [])))
-        r += 1
-    if reconr:
-        section('5. ĐỐI CHIẾU HỆ THỐNG PHÒNG')
-        kv('Phòng chưa đăng ký', len(reconr.get('room_chua', [])))
-        kv('Phòng thừa trong file', len(reconr.get('room_thua', [])))
-        kv('Phòng trùng trong file', len(reconr.get('sys_dup', [])))
         r += 1
     r += 1
     f = ws.cell(r, 1)
@@ -2445,97 +2433,13 @@ def build_regcards(xlsx_bytes, only_main=True):
     writer.write(out)
     return out.getvalue(), count
 
-# ── Đối chiếu Smile vs Trang lưu trú người nước ngoài ─────────────────────
+# ── Chuẩn hoá số hộ chiếu (dùng khi khớp file visa với khách KBTT) ────────
 def _norm_pp(p):
     """Chuẩn hóa số hộ chiếu."""
     if pd.isna(p): return ''
     s = str(p).strip().upper().replace(' ','')
     if s.endswith('.0'): s = s[:-2]
     return s
-
-def _norm_room(r):
-    if pd.isna(r): return ''
-    s = str(r).strip()
-    if s.endswith('.0'): s = s[:-2]
-    return s.upper()  # 12a05 và 12A05 là một phòng
-
-def reconcile(smile_bytes, luutru_bytes, today):
-    """Đối chiếu file Smile (inhouse) với file trang quản lý lưu trú.
-    today: pd.Timestamp ngày xuất file (hôm nay)."""
-    # ── Đọc Smile ──
-    df1 = pd.read_excel(io.BytesIO(smile_bytes), header=0)
-    smile = df1[['Passport #','NAT','Rm#','Arrival','Last Name','First Name']].copy()
-    smile = smile.dropna(subset=['Passport #'])
-    smile['pp'] = smile['Passport #'].apply(_norm_pp)
-    smile['Arrival'] = pd.to_datetime(smile['Arrival'], errors='coerce')
-    smile['name'] = (smile['Last Name'].astype(str).str.strip() + ' ' +
-                     smile['First Name'].astype(str).str.strip())
-    smile['room'] = smile['Rm#'].apply(_norm_room)
-    # Cột Departure (dò tên linh hoạt phòng khi khác tên)
-    _dep_col = next((c for c in df1.columns if 'depart' in str(c).lower()), None)
-    smile['Departure'] = pd.to_datetime(df1[_dep_col], errors='coerce') if _dep_col else pd.NaT
-    # Lọc: bỏ VNM + bỏ arrival = hôm nay + bỏ departure = hôm nay (khách trả phòng)
-    smile_f = smile[(smile['NAT'] != 'VNM') &
-                    (smile['Arrival'].dt.date != today.date()) &
-                    (smile['Departure'].dt.date != today.date())].copy()
-
-    # ── Đọc Lưu trú ──
-    df2 = pd.read_excel(io.BytesIO(luutru_bytes), header=9)
-    df2 = df2.dropna(subset=['Họ tên'])
-    df2['pp'] = df2['Số hộ chiếu'].apply(_norm_pp)
-    # Cột ngày đi dự kiến: file mới đổi tên thành "Thời gian dự kiến tạm trú tại CSLT".
-    # Dò linh hoạt để chạy được cả file mẫu mới lẫn cũ.
-    _ddk_col = next((c for c in df2.columns
-                     if 'dự kiến' in str(c).lower() and 'tạm trú' in str(c).lower()), None)
-    if _ddk_col is None:
-        _ddk_col = next((c for c in df2.columns if 'đi dự kiến' in str(c).lower()), None)
-    df2['ddk'] = pd.to_datetime(df2[_ddk_col], format='%d/%m/%Y', errors='coerce') if _ddk_col else pd.NaT
-    df2['room'] = df2['Số phòng'].apply(_norm_room)
-    # Lọc: bỏ ngày đi dự kiến = hôm nay
-    luutru_f = df2[df2['ddk'].dt.date != today.date()].copy()
-
-    smile_pp = set(smile_f['pp'])
-    luutru_pp = set(luutru_f['pp'])
-
-    # Đối chiếu người
-    chua_dk = smile_f[~smile_f['pp'].isin(luutru_pp)][['name','pp','NAT','room','Arrival']].copy()
-    chua_dk.columns = ['Họ tên','Số hộ chiếu','Quốc tịch','Số phòng','Ngày đến']
-    chua_dk['Ngày đến'] = chua_dk['Ngày đến'].dt.strftime('%d/%m/%Y')
-
-    thua = luutru_f[~luutru_f['pp'].isin(smile_pp)].copy()
-    # Giai đoạn lưu trú: Ngày đến → Ngày đi dự kiến
-    _dd = pd.to_datetime(thua['Ngày đến '], format='%d/%m/%Y', errors='coerce') if 'Ngày đến ' in thua else pd.Series([pd.NaT]*len(thua))
-    thua['_luutru'] = (_dd.dt.strftime('%d/%m/%Y').fillna('?') + ' → ' +
-                       thua['ddk'].dt.strftime('%d/%m/%Y').fillna('?'))
-    _qt = thua['QT'] if 'QT' in thua else ''
-    thua = pd.DataFrame({
-        'Họ tên': thua['Họ tên'].values,
-        'Số hộ chiếu': thua['pp'].values,
-        'Quốc tịch': _qt.values if hasattr(_qt,'values') else _qt,
-        'Số phòng': thua['room'].values,
-        'Giai đoạn lưu trú': thua['_luutru'].values,
-    })
-
-    dup = luutru_f[luutru_f['pp'].duplicated(keep=False) & (luutru_f['pp']!='')]
-    dup = dup[['Họ tên','pp','room']].sort_values('pp').copy()
-    dup.columns = ['Họ tên','Số hộ chiếu','Số phòng']
-
-    # Đối chiếu phòng
-    smile_rooms = set(r for r in smile_f['room'] if r)
-    luutru_rooms = set(r for r in luutru_f['room'] if r)
-    def _sortkey(x): return (len(x), x)
-    room_chua = sorted(smile_rooms - luutru_rooms, key=_sortkey)
-    room_thua = sorted(luutru_rooms - smile_rooms, key=_sortkey)
-
-    return {
-        'smile_total': len(smile), 'smile_filtered': len(smile_f),
-        'luutru_total': len(df2), 'luutru_filtered': len(luutru_f),
-        'chua_dk': chua_dk, 'thua': thua, 'dup': dup,
-        'room_chua': room_chua, 'room_thua': room_thua,
-        'room_match': len(smile_rooms & luutru_rooms),
-        'smile_rooms': len(smile_rooms), 'luutru_rooms': len(luutru_rooms),
-    }
-
 
 
 # ── UI ────────────────────────────────────────────────────────────────────
@@ -3368,7 +3272,7 @@ if not st.session_state.get("_app_scripts_injected"):
 
     _g_tasks = (_load_progress().get('tasks') or {})
     _g_sum = ((_g_tasks.get('daily') or {}).get('summary') or {})
-    _g_todo = sum(1 for _k in ('daily', 'regcard', 'recon_person', 'recon_room')
+    _g_todo = sum(1 for _k in ('daily', 'regcard')
                   if not (_g_tasks.get(_k) or {}).get('done'))
     _g_todo_txt = (f'còn {_g_todo} việc chưa xong' if _g_todo
                    else 'đã xong các việc trong ngày')
@@ -3442,9 +3346,11 @@ if "menu" not in st.session_state:
 
 MENU_LABELS = {
     'dashboard': 'Tổng quan ca trực', 'daily': 'Xử lý hàng ngày', 'regcard': 'Regcard + ARR',
-    'handover': 'Sổ giao ca', 'recon': 'Đối chiếu (cổng mật khẩu)',
-    'recon_person': 'Đối chiếu người nước ngoài', 'recon_room': 'Đối chiếu hệ thống phòng',
+    'handover': 'Sổ giao ca',
 }
+# Phiên cũ có thể còn trỏ tới trang đã gỡ (vd Đối chiếu) → về Tổng quan
+if st.session_state.menu not in MENU_LABELS:
+    st.session_state.menu = "dashboard"
 
 # Nạp tiến độ đã lưu trên đĩa cho HÔM NAY — chạy 1 lần khi phiên bắt đầu, và
 # tự làm mới nếu phiên mở vắt qua nửa đêm (ngày mới → tiến độ trống lại).
@@ -3500,22 +3406,6 @@ with st.sidebar:
               type="primary" if st.session_state.menu == "handover" else "secondary",
               on_click=go_menu, args=("handover",))
 
-    st.markdown('<div class="sb-section">Đối chiếu</div>', unsafe_allow_html=True)
-    if st.session_state.get("recon_ok"):
-        st.button("Người nước ngoài", key="nav_recon_person", use_container_width=True,
-                  icon=":material/public:",
-                  type="primary" if st.session_state.menu == "recon_person" else "secondary",
-                  on_click=go_menu, args=("recon_person",))
-        st.button("Hệ thống phòng", key="nav_recon_room", use_container_width=True,
-                  icon=":material/door_front:",
-                  type="primary" if st.session_state.menu == "recon_room" else "secondary",
-                  on_click=go_menu, args=("recon_room",))
-    else:
-        st.button("Đối chiếu lưu trú", key="nav_recon", use_container_width=True,
-                  icon=":material/lock:",
-                  type="primary" if st.session_state.menu == "recon" else "secondary",
-                  on_click=go_menu, args=("recon",))
-
     st.markdown('<div class="sb-section">Giao diện</div>', unsafe_allow_html=True)
     # Nút gạt 3 trạng thái (segmented) thay cho ô chọn — nhìn gọn và bấm 1 lần
     _tcols = st.columns(3, gap="small")
@@ -3540,11 +3430,9 @@ _tb_chip = ('<span class="tan-chip ok">● Supabase đã kết nối</span>' if 
             else '<span class="tan-chip">● Lưu tạm trên máy chủ</span>')
 _tb_d = st.session_state.get('daily_results')
 _tb_rc = st.session_state.get('rc_results')
-_tb_rp = st.session_state.get('recon_results')
-_tb_rr = st.session_state.get('reconr_results')
 # Báo cáo ngày chỉ dựng khi đang ở Tổng quan VÀ đã có ít nhất 1 công cụ chạy
 # xong — tránh dựng workbook thừa ở mọi trang, mọi lần rerun.
-_tb_report = bool(_tb_d or _tb_rc or _tb_rp or _tb_rr) and st.session_state.menu == "dashboard"
+_tb_report = bool(_tb_d or _tb_rc) and st.session_state.menu == "dashboard"
 
 with st.container(key="tan_topbar"):
     _tbl, _tbm, _tbr = st.columns([4.6, 1.25, 1.35], vertical_alignment="center")
@@ -3558,7 +3446,7 @@ with st.container(key="tan_topbar"):
         _tb_rp_date = (_tb_d or {}).get('date_str') or today_vn().strftime('%d_%m')
         _tb_wb = build_daily_report(_tb_rp_date.replace('_', '/'),
                                     _tb_d if _tb_d and _tb_d.get('has_xlsx') else None,
-                                    (_tb_rc or {}).get('arr_stats'), _tb_rp, _tb_rr)
+                                    (_tb_rc or {}).get('arr_stats'))
         _tbm.download_button("⇩ Xuất báo cáo", wb_to_bytes(_tb_wb),
                              file_name=f"bao_cao_ngay_{_tb_rp_date}.xlsx",
                              mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -3793,15 +3681,11 @@ def _render_dashboard():
 
     _d = st.session_state.get('daily_results')
     _rc = st.session_state.get('rc_results')
-    _re_p = st.session_state.get('recon_results')
-    _re_r = st.session_state.get('reconr_results')
     # Tiến độ đã lưu trên đĩa cho HÔM NAY — còn nguyên dù tải lại trang hoặc
     # công cụ đó được chạy ở 1 phiên/tab khác trước đó trong ngày.
     _ptasks = st.session_state.get('progress', {}).get('tasks', {})
     _p_daily = _ptasks.get('daily', {})
     _p_regcard = _ptasks.get('regcard', {})
-    _p_rp = _ptasks.get('recon_person', {})
-    _p_rr = _ptasks.get('recon_room', {})
 
     st.markdown(f'<div class="tan-h1">Tổng quan ca trực</div>'
                 f'<div class="tan-h1sub">{_thu}, {_now.strftime("%d/%m/%Y")} · {_shift} · '
@@ -3929,12 +3813,6 @@ def _render_dashboard():
                  "daily", None if _d else _p_daily.get('time')),
                 ("Regcard + file ARR", _rc is not None or _p_regcard.get('done'),
                  "regcard", None if _rc else _p_regcard.get('time')),
-                ("Đối chiếu người nước ngoài", _re_p is not None or _p_rp.get('done'),
-                 "recon_person" if st.session_state.get("recon_ok") else "recon",
-                 None if _re_p else _p_rp.get('time')),
-                ("Đối chiếu hệ thống phòng", _re_r is not None or _p_rr.get('done'),
-                 "recon_room" if st.session_state.get("recon_ok") else "recon",
-                 None if _re_r else _p_rr.get('time')),
                 (f"Sổ giao ca ({_handover_n} ghi chú)", _handover_n > 0, "handover", None),
             ]
             _done_n = sum(1 for _t in _tasks if _t[1])
@@ -4673,291 +4551,6 @@ def _render_handover():
 
 if st.session_state.menu == "handover":
     _render_handover()
-
-# ── Đối chiếu: sub-menu 2 lựa chọn (có cổng mật khẩu riêng) ────────────────
-try:
-    RECON_PASS = st.secrets.get("recon_pass", "368736")
-except Exception:
-    RECON_PASS = "368736"
-if "recon_ok" not in st.session_state:
-    st.session_state.recon_ok = False
-
-def _check_recon():
-    if st.session_state.get("recon_pass_input", "") == RECON_PASS:
-        st.session_state.recon_ok = True
-        st.session_state.recon_pass_err = False
-    else:
-        st.session_state.recon_pass_err = True
-
-@st.fragment
-def _render_recon():
-    st.write("")
-
-    # Cổng mật khẩu cho tính năng đối chiếu
-    if not st.session_state.recon_ok:
-        st.markdown('<div class="section-label">🔒 Nhập mật khẩu để truy cập</div>', unsafe_allow_html=True)
-        st.caption("Tính năng Đối chiếu lưu trú được bảo vệ bằng mật khẩu riêng.")
-        with st.form("recon_pass_form", clear_on_submit=False):
-            st.text_input("Mật khẩu", key="recon_pass_input", type="password", placeholder="Nhập mật khẩu")
-            ok = st.form_submit_button("Mở khóa →", type="primary", use_container_width=True)
-            if ok:
-                _check_recon()
-                if st.session_state.recon_ok:
-                    st.session_state.menu = "recon_person"
-                    st.rerun()
-        if st.session_state.get("recon_pass_err"):
-            st.error("❌ Mật khẩu không đúng!")
-        st.stop()
-
-    st.info("Đã mở khóa — chọn công cụ Đối chiếu ở sidebar bên trái.")
-
-if st.session_state.menu == "recon":
-    _render_recon()
-
-# ── Kiểm tra lưu trú người nước ngoài ─────────────────────────────────────
-@st.fragment
-def _render_recon_person():
-    st.write("")
-    st.markdown('<div class="section-label">🌏 Kiểm tra lưu trú người nước ngoài</div>', unsafe_allow_html=True)
-    st.caption("So khớp khách Smile vs Trang quản lý người nước ngoài theo số hộ chiếu — tìm khách chưa đăng ký / đăng ký trùng.")
-
-    rc1, rc2 = st.columns(2)
-    with rc1:
-        smile_file = st.file_uploader("File Smile — Inhouse (.xlsx)", type=['xlsx'], key="recon_smile")
-    with rc2:
-        luutru_file = st.file_uploader("File Trang lưu trú người nước ngoài (.xlsx)", type=['xlsx'], key="recon_luutru")
-
-    today_str = st.text_input("📅 Ngày xuất file (hôm nay)", value=today_vn().strftime('%d/%m/%Y'),
-                              help="Dùng để loại bỏ: khách arrival hôm nay (Smile) và khách ngày đi dự kiến hôm nay (Lưu trú)")
-
-    st.write("")
-
-    if st.button("🔍 Bắt đầu kiểm tra", type="primary",
-                 disabled=(smile_file is None or luutru_file is None), use_container_width=True):
-        with st.spinner("Đang đối chiếu..."):
-            try:
-                today = pd.to_datetime(today_str, format='%d/%m/%Y')
-                _rp = reconcile(smile_file.read(), luutru_file.read(), today)
-                st.session_state['recon_results'] = _rp
-
-                def _mark_recon_person_done(state, _rp=_rp):
-                    state.setdefault('tasks', {})['recon_person'] = {
-                        'done': True, 'time': now_vn().strftime('%H:%M:%S'),
-                        'summary': {'chua_dang_ky': len(_rp.get('chua_dk', [])),
-                                   'thua': len(_rp.get('thua', [])), 'trung': len(_rp.get('dup', []))}}
-                _progress_update(_mark_recon_person_done)
-            except Exception as e:
-                st.session_state.pop('recon_results', None)
-                st.error(f"❌ Lỗi: {e}")
-                st.exception(e)
-
-    r = st.session_state.get('recon_results')
-    if r:
-        st.success("✅ Kiểm tra hoàn tất!")
-
-        c1, c2 = st.columns(2)
-        c1.metric("Smile (sau lọc)", r['smile_filtered'], f"từ {r['smile_total']} (bỏ VNM + arrival/departure hôm nay)")
-        c2.metric("Lưu trú (sau lọc)", r['luutru_filtered'], f"từ {r['luutru_total']} (bỏ đi dự kiến hôm nay)")
-
-        st.divider()
-        st.markdown("### 👤 Kết quả đối chiếu người (theo số hộ chiếu)")
-
-        n_chua = len(r['chua_dk']); n_thua = len(r['thua']); n_dup = len(r['dup'])
-
-        # Bảng tổng hợp chênh lệch
-        m1, m2, m3 = st.columns(3)
-        m1.metric("🔴 Chưa đăng ký", n_chua)
-        m2.metric("🟡 Có/lưu trú, thiếu/Smile", n_thua)
-        m3.metric("🟠 Đăng ký trùng", n_dup)
-
-        if n_chua == 0 and n_thua == 0 and n_dup == 0:
-            st.success("✅ Khớp hoàn toàn! Không có ai thiếu/thừa/trùng.")
-
-        if n_chua > 0:
-            st.error(f"🔴 {n_chua} khách trên Smile nhưng CHƯA đăng ký lưu trú:")
-            st.dataframe(r['chua_dk'], use_container_width=True, hide_index=True)
-        else:
-            st.success("✅ Không có khách nào chưa đăng ký lưu trú.")
-
-        if n_thua > 0:
-            st.warning(f"🟡 Chênh lệch **{n_thua} người**: có trên Trang quản lý người nước ngoài nhưng KHÔNG có trên Smile (có thể đã checkout nhưng chưa xóa khỏi lưu trú):")
-            st.dataframe(r['thua'], use_container_width=True, hide_index=True)
-            # Nút tải danh sách chênh lệch
-            _csv = r['thua'].to_csv(index=False).encode('utf-8-sig')
-            st.download_button("⬇️ Tải danh sách chênh lệch (CSV)", _csv,
-                               file_name="chenh_lech_luu_tru.csv", mime="text/csv")
-
-        if n_dup > 0:
-            st.warning(f"🟠 {n_dup} dòng ĐĂNG KÝ TRÙNG trên lưu trú:")
-            st.dataframe(r['dup'], use_container_width=True, hide_index=True)
-
-if st.session_state.menu == "recon_person":
-    _render_recon_person()
-
-# ── Kiểm tra hệ thống quản lý lưu trú phòng ────────────────────────────────
-def reconcile_rooms(smile_bytes, room_bytes, today):
-    """Đối chiếu phòng inhouse từ file khách lưu trú Smile (trừ khách Arrival hôm nay)
-    với file Excel chỉ chứa danh sách số phòng."""
-    from collections import Counter
-
-    # ── Đọc file khách lưu trú Smile ──
-    df1 = pd.read_excel(io.BytesIO(smile_bytes), header=0)
-    if 'Rm#' not in df1.columns:
-        raise ValueError("File Smile không có cột 'Rm#'. Vui lòng dùng file khách lưu trú xuất từ Smile.")
-    smile = df1.dropna(subset=['Rm#']).copy()
-    smile['room'] = smile['Rm#'].apply(_norm_room)
-    smile['Arrival'] = pd.to_datetime(smile['Arrival'], errors='coerce') if 'Arrival' in smile else pd.NaT
-    _ln = smile['Last Name'].astype(str).str.strip() if 'Last Name' in smile else ''
-    _fn = smile['First Name'].astype(str).str.strip() if 'First Name' in smile else ''
-    smile['name'] = (_ln + ' ' + _fn).str.strip() if 'Last Name' in smile else ''
-    smile_total = len(smile)
-    # Cột Departure (dò tên linh hoạt)
-    _dep_col = next((c for c in df1.columns if 'depart' in str(c).lower()), None)
-    smile['Departure'] = pd.to_datetime(df1[_dep_col], errors='coerce') if _dep_col else pd.NaT
-    # Trừ khách Arrival = hôm nay và khách Departure = hôm nay (trả phòng)
-    if 'Arrival' in smile:
-        smile_f = smile[(smile['Arrival'].dt.date != today.date()) &
-                        (smile['Departure'].dt.date != today.date())].copy()
-    else:
-        smile_f = smile.copy()
-
-    # ── Đọc file chỉ chứa số phòng: lấy tất cả ô có dữ liệu ──
-    raw = pd.read_excel(io.BytesIO(room_bytes), header=None, dtype=str)
-    rooms_sys = []
-    for _, row_vals in raw.iterrows():
-        for v in row_vals:
-            if pd.isna(v): continue
-            r = _norm_room(v)
-            if not r: continue
-            # bỏ ô tiêu đề nếu lỡ có (vd "Số phòng", "Room", "STT")
-            if _norm_nat(r) in ('sophong', 'phong', 'room', 'rm', 'stt'): continue
-            rooms_sys.append(r)
-    if not rooms_sys:
-        raise ValueError("File số phòng không có dữ liệu. Vui lòng kiểm tra lại file.")
-
-    sys_rooms = set(rooms_sys)
-    _cnt = Counter(rooms_sys)
-    sys_dup = sorted((r for r, c in _cnt.items() if c > 1), key=lambda x: (len(x), x))
-
-    import re as _re3
-    def _is_virtual(r):
-        return bool(_re3.fullmatch(r'9\d{3}', r))  # phòng ảo 9000-9999 (posting master)
-
-    smile_rooms = set(r for r in smile_f['room'] if r and not _is_virtual(r))
-    sys_rooms = set(r for r in sys_rooms if not _is_virtual(r))
-
-    def _sortkey(x): return (len(x), x)
-    room_chua = sorted(smile_rooms - sys_rooms, key=_sortkey)  # inhouse nhưng CHƯA có trong file phòng
-    room_thua = sorted(sys_rooms - smile_rooms, key=_sortkey)  # có trong file phòng nhưng KHÔNG còn inhouse
-
-    # Chi tiết khách trong các phòng chưa đăng ký (tiện đăng ký bổ sung)
-    if room_chua:
-        detail = smile_f[smile_f['room'].isin(room_chua)].copy()
-        detail['_arr'] = detail['Arrival'].dt.strftime('%d/%m/%Y') if 'Arrival' in detail else ''
-        _nat = detail['NAT'] if 'NAT' in detail else ''
-        detail = pd.DataFrame({
-            'Số phòng': detail['room'].values,
-            'Họ tên': detail['name'].values,
-            'Quốc tịch': _nat.values if hasattr(_nat, 'values') else _nat,
-            'Ngày đến': detail['_arr'].values if hasattr(detail['_arr'], 'values') else '',
-        }).sort_values('Số phòng', key=lambda s: s.map(lambda x: (len(x), x)))
-    else:
-        detail = pd.DataFrame(columns=['Số phòng', 'Họ tên', 'Quốc tịch', 'Ngày đến'])
-
-    return {
-        'smile_total': smile_total, 'smile_filtered': len(smile_f),
-        'sys_total': len(rooms_sys), 'sys_unique': len(sys_rooms),
-        'smile_rooms': len(smile_rooms),
-        'room_chua': room_chua, 'room_thua': room_thua, 'sys_dup': sys_dup,
-        'room_match': len(smile_rooms & sys_rooms),
-        'detail_chua': detail,
-    }
-
-
-@st.fragment
-def _render_recon_room():
-    st.write("")
-    st.markdown('<div class="section-label">🚪 Kiểm tra hệ thống quản lý lưu trú phòng</div>', unsafe_allow_html=True)
-    st.caption("So khớp số phòng inhouse từ file khách lưu trú Smile với file danh sách số phòng — tìm phòng chưa đăng ký / thừa / trùng.")
-
-    rr1, rr2 = st.columns(2)
-    with rr1:
-        smile_file_r = st.file_uploader("File khách lưu trú Smile (.xlsx)", type=['xlsx'], key="reconr_smile")
-    with rr2:
-        room_file = st.file_uploader("File số phòng (.xlsx — chỉ chứa danh sách số phòng)", type=['xlsx'], key="reconr_room")
-
-    today_str_r = st.text_input("📅 Ngày xuất file (hôm nay)", value=today_vn().strftime('%d/%m/%Y'),
-                                key="reconr_today",
-                                help="Khách có Arrival = ngày này trên Smile sẽ được loại bỏ khỏi đối chiếu")
-
-    st.write("")
-
-    if st.button("🔍 Bắt đầu kiểm tra", type="primary", key="reconr_run",
-                 disabled=(smile_file_r is None or room_file is None), use_container_width=True):
-        with st.spinner("Đang đối chiếu phòng..."):
-            try:
-                today_r = pd.to_datetime(today_str_r, format='%d/%m/%Y')
-                _rr = reconcile_rooms(smile_file_r.read(), room_file.read(), today_r)
-                st.session_state['reconr_results'] = _rr
-
-                def _mark_recon_room_done(state, _rr=_rr):
-                    state.setdefault('tasks', {})['recon_room'] = {
-                        'done': True, 'time': now_vn().strftime('%H:%M:%S'),
-                        'summary': {'chua_dang_ky': len(_rr.get('room_chua', [])),
-                                   'thua': len(_rr.get('room_thua', [])), 'trung': len(_rr.get('sys_dup', []))}}
-                _progress_update(_mark_recon_room_done)
-            except Exception as e:
-                st.session_state.pop('reconr_results', None)
-                st.error(f"❌ Lỗi: {e}")
-                st.exception(e)
-
-    rr = st.session_state.get('reconr_results')
-    if rr:
-        st.success("✅ Kiểm tra hoàn tất!")
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Phòng inhouse (Smile)", rr['smile_rooms'],
-                  f"{rr['smile_filtered']} khách (từ {rr['smile_total']}, đã trừ arrival hôm nay)")
-        c2.metric("Phòng trong file", rr['sys_unique'],
-                  (f"{rr['sys_total']} dòng" if rr['sys_total'] != rr['sys_unique'] else None))
-        c3.metric("🟢 Phòng khớp", rr['room_match'])
-
-        st.divider()
-        st.markdown("### 🚪 Kết quả đối chiếu phòng")
-
-        n_chua = len(rr['room_chua']); n_thua = len(rr['room_thua']); n_dup = len(rr['sys_dup'])
-
-        m1, m2, m3 = st.columns(3)
-        m1.metric("🔴 Chưa đăng ký", n_chua)
-        m2.metric("🟡 Thừa trong file", n_thua)
-        m3.metric("🟠 Trùng trong file", n_dup)
-
-        if n_chua == 0 and n_thua == 0 and n_dup == 0:
-            st.success("✅ Khớp hoàn toàn! Không có phòng thiếu/thừa/trùng.")
-            st.balloons()
-
-        if n_chua > 0:
-            st.error(f"🔴 {n_chua} phòng có khách inhouse nhưng CHƯA có trong file số phòng: "
-                     + ", ".join(rr['room_chua']))
-            st.markdown("**Chi tiết khách trong các phòng chưa đăng ký:**")
-            st.dataframe(rr['detail_chua'], use_container_width=True, hide_index=True)
-            _csv_r = rr['detail_chua'].to_csv(index=False).encode('utf-8-sig')
-            st.download_button("⬇️ Tải danh sách phòng chưa đăng ký (CSV)", _csv_r,
-                               file_name="phong_chua_dang_ky.csv", mime="text/csv")
-        else:
-            st.success("✅ Tất cả phòng inhouse đều đã có trong file số phòng.")
-
-        if n_thua > 0:
-            st.warning(f"🟡 {n_thua} phòng có trong file nhưng KHÔNG còn khách inhouse "
-                       f"(có thể đã checkout nhưng chưa gỡ): "
-                       + ", ".join(rr['room_thua']))
-
-        if n_dup > 0:
-            st.warning(f"🟠 {n_dup} phòng bị TRÙNG (xuất hiện nhiều lần) trong file số phòng: "
-                       + ", ".join(rr['sys_dup']))
-
-if st.session_state.menu == "recon_room":
-    _render_recon_room()
 
 # ── Hiệu ứng mượt khi ĐỔI CÔNG CỤ (sidebar) ─────────────────────────────────
 # Đặt Ở CUỐI file (sau mọi khối `if st.session_state.menu == ...`) — không
