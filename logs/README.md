@@ -11,8 +11,6 @@ Chỉ gồm **số liệu thống kê tổng hợp** và **trình tự thao tác
 - `daily_processing` / `regcard_arr`: đếm số liệu (tổng khách, số booking,
   số lỗi dữ liệu, số cảnh báo visa...) — không có tên, số hộ chiếu, hay số
   phòng cụ thể của từng khách
-- `handover`: chỉ đếm số ghi chú theo phân loại (vd "Khách nợ": 2) — **không**
-  kèm nội dung ghi chú tự do (nội dung đó có thể chứa thông tin nhạy cảm)
 
 ## Mục đích
 
