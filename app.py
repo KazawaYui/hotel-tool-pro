@@ -2317,10 +2317,12 @@ def _norm_pp(p):
 
 # ══ Theo dõi XNC — nhân viên nước ngoài (nội bộ) ═══════════════════════════
 # Mục RIÊNG: không đọc/ghi IH, ĐK14, KBTT, VNM và không cộng vào số khách ở
-# Tổng quan. Nhân viên nội bộ không có trong IH nên "còn ở / đã out" lấy từ:
-#   (1) danh sách người nước ngoài xuất từ cổng — mỗi lần nạp bản mới, app so
-#       với lần trước rồi ĐỀ XUẤT (ai mới vào, ai biến mất, ai được gia hạn);
-#   (2) điểm danh nhanh mỗi ngày (mặc định giống hôm qua, chỉ đổi người khác).
+# Tổng quan. CHỈ theo dõi đúng nhóm nhân viên lập ở lần nạp đầu (danh sách
+# CỐ ĐỊNH): không file nào nạp sau đó được thêm người mới vào sổ — người lạ
+# trong file (vd danh sách cổng có lẫn khách) bị bỏ qua. "Còn ở / đã out" lấy từ:
+#   (1) điểm danh nhanh mỗi ngày (mặc định giống hôm qua, chỉ đổi người khác);
+#   (2) tuỳ chọn: danh sách người nước ngoài xuất từ cổng — chỉ để cập nhật ngày
+#       tạm trú của nhân viên đã có, và ĐỀ XUẤT ai biến mất khỏi danh sách.
 # Lịch sử nằm trong file Excel "sổ theo dõi" người dùng tải về / nạp lại; số
 # hộ chiếu KHÔNG được lưu trên server (chỉ nằm trong phiên đang mở).
 import bisect as _bisect
@@ -2455,23 +2457,31 @@ def _xnc_log(reg, day, pp, event, detail=''):
 
 
 def xnc_ingest(reg, parsed, list_day, today):
-    """Gộp danh sách cổng vào sổ. Trả bản tóm tắt thay đổi để hiện cho người
-    dùng xác nhận; KHÔNG tự đổi trạng thái 'Out' — người biến mất khỏi danh
-    sách chỉ được ĐỀ XUẤT (cổng có thể cập nhật chậm/sót)."""
+    """Gộp danh sách cổng vào sổ.
+    - Sổ trống (lần nạp ĐẦU): lập danh sách nhân viên từ file.
+    - Từ đó danh sách CỐ ĐỊNH: người trong file mà không thuộc sổ bị BỎ QUA (đếm
+      vào 'ignored', tuyệt đối không thêm) — file cổng có thể lẫn người khác.
+    Trả bản tóm tắt thay đổi để hiện cho người dùng xác nhận; KHÔNG tự đổi
+    trạng thái 'Out' — nhân viên biến mất khỏi danh sách chỉ được ĐỀ XUẤT."""
     people = reg['people']
-    seen, new, back, changes = set(), [], [], []
+    create = not people
+    seen, new, back, changes, ignored = set(), [], [], [], 0
     for it in parsed['people']:
         pp = it['pp']
-        seen.add(pp)
         p = people.get(pp)
         if p is None:
+            if not create:
+                ignored += 1
+                continue
             pend = bool(it['arr'] and it['arr'] > today)
             people[pp] = _xnc_person(pp, it['name'], dob=it['dob'], gender=it['gender'], nat=it['nat'],
                                      room=it['room'], arr=it['arr'], exp=it['exp'], per=it['per'],
                                      status='pending' if pend else 'in', since=it['arr'])
-            _xnc_log(reg, list_day, pp, 'Thêm mới', f"từ danh sách cổng · đến {_xnc_fd(it['arr'])}")
+            _xnc_log(reg, list_day, pp, 'Thêm vào sổ', f"lập danh sách nhân viên · đến {_xnc_fd(it['arr'])}")
             new.append(pp)
+            seen.add(pp)
             continue
+        seen.add(pp)
         if p['status'] == 'out' and it['arr'] and p['arr'] and it['arr'] > p['arr']:
             p['status'] = 'pending' if it['arr'] > today else 'in'      # ngày đến MỚI hơn → vào lại
             p['since'], p['away_until'] = it['arr'], None
@@ -2501,8 +2511,8 @@ def xnc_ingest(reg, parsed, list_day, today):
     for lb in parsed.get('labels', []):
         if lb not in reg['meta']['groups']:
             reg['meta']['groups'].append(lb)
-    return {'new': new, 'back': back, 'changes': changes, 'missing': missing,
-            'count': len(parsed['people']), 'day': list_day}
+    return {'new': new, 'back': back, 'changes': changes, 'missing': missing, 'ignored': ignored,
+            'created': create, 'count': len(parsed['people']), 'day': list_day}
 
 
 def xnc_refresh_pending(reg, today):
@@ -2540,7 +2550,7 @@ def xnc_confirm_day(reg, day):
 
 def xnc_apply_edits(reg, edits, today):
     """Áp dụng bảng "Điểm danh hôm nay" sau khi người dùng sửa. `edits` =
-    {hộ chiếu: {'status','away_until','group','per','note'}}. Chỉ ghi những gì
+    {hộ chiếu: {'status','away_until','group','per','exp','note'}}. Chỉ ghi những gì
     THỰC SỰ đổi (kèm nhật ký) rồi chốt điểm danh hôm nay. Trả số thay đổi."""
     changed = 0
     for pp, e in edits.items():
@@ -2561,6 +2571,10 @@ def xnc_apply_edits(reg, edits, today):
         if per != p['per']:
             _xnc_log(reg, today, pp, 'Nhập hạn được phép', f"{_xnc_fd(p['per'])} → {_xnc_fd(per)} (nhập tay)")
             p['per'] = per
+            changed += 1
+        if 'exp' in e and e['exp'] != p['exp']:
+            _xnc_log(reg, today, pp, 'Nhập dự kiến tạm trú', f"{_xnc_fd(p['exp'])} → {_xnc_fd(e['exp'])} (nhập tay)")
+            p['exp'] = e['exp']
             changed += 1
         note = str(e.get('note') or '').strip()
         if note != p['note']:
@@ -4859,9 +4873,7 @@ def _render_xnc():
 
     # ── Nạp dữ liệu ──
     with st.container(border=True):
-        c1, c2 = st.columns(2)
-        up_so = c1.file_uploader("📒 Sổ theo dõi (.xlsx) — nạp lại sổ đã tải ở lần trước", type=['xlsx'], key="xnc_up_so")
-        up_ds = c2.file_uploader("🏛 Danh sách người nước ngoài xuất từ cổng (.xlsx)", type=['xlsx'], key="xnc_up_ds")
+        up_so = st.file_uploader("📒 Sổ theo dõi nhân viên (.xlsx) — nạp sổ đã tải ở lần trước", type=['xlsx'], key="xnc_up_so")
         st.caption("🔒 Sổ chỉ nằm trong phiên đang mở và trong file bạn tải về — số hộ chiếu **không** được lưu trên máy chủ. "
                    "Nhớ tải sổ cập nhật trước khi đóng hoặc tải lại trang.")
 
@@ -4881,36 +4893,54 @@ def _render_xnc():
 
         if st.session_state.get('xnc_note'):
             st.warning(st.session_state.pop('xnc_note'))
-        parsed = None
-        if up_ds is not None:
-            key = (up_ds.name, up_ds.size)
-            if st.session_state.get('xnc_ds_key') != key:
-                try:
-                    st.session_state['xnc_ds_parsed'] = xnc_parse_list(up_ds.getvalue())
-                except Exception as e:
-                    st.session_state['xnc_ds_parsed'] = None
-                    st.error(f"❌ Không đọc được danh sách: {e}")
-                st.session_state['xnc_ds_key'] = key
-            parsed = st.session_state.get('xnc_ds_parsed')
-        if parsed:
-            a, b, c = st.columns([2.4, 1.3, 1.1], vertical_alignment='center')
-            lbl = (f" · nhãn nhóm tìm thấy: {', '.join(parsed['labels'])}" if parsed['labels'] else '')
-            a.markdown(f"Đọc được **{len(parsed['people'])}** người{lbl}")
-            list_day = b.date_input("Ngày của danh sách", value=parsed['list_day'] or today, format="DD/MM/YYYY",
-                                    key=f"xnc_list_day_{up_ds.name}_{up_ds.size}")
-            if c.button("⬆ Nạp vào sổ", type="primary", use_container_width=True, key="xnc_ingest_btn"):
-                reg = st.session_state.get('xnc_reg') or xnc_new_registry()
-                summary = xnc_ingest(reg, parsed, list_day, today)
-                xnc_refresh_pending(reg, today)
-                st.session_state.update(xnc_reg=reg, xnc_dirty=True, xnc_last=summary)
-                st.rerun()
-            for w in parsed['warnings'][:5]:
-                st.warning(w)
+        reg = st.session_state.get('xnc_reg')
+        title = ("🏛 Cập nhật ngày tạm trú từ danh sách cổng (tuỳ chọn) — chỉ áp dụng cho nhân viên đã có trong sổ" if reg
+                 else "🏛 Lập sổ lần đầu từ danh sách nhân viên (file xuất từ cổng)")
+        with st.expander(title, expanded=not reg):
+            up_ds = st.file_uploader("Danh sách người nước ngoài xuất từ cổng (.xlsx)", type=['xlsx'], key="xnc_up_ds")
+            parsed = None
+            if up_ds is not None:
+                key = (up_ds.name, up_ds.size)
+                if st.session_state.get('xnc_ds_key') != key:
+                    try:
+                        st.session_state['xnc_ds_parsed'] = xnc_parse_list(up_ds.getvalue())
+                    except Exception as e:
+                        st.session_state['xnc_ds_parsed'] = None
+                        st.error(f"❌ Không đọc được danh sách: {e}")
+                    st.session_state['xnc_ds_key'] = key
+                parsed = st.session_state.get('xnc_ds_parsed')
+            if parsed:
+                n = len(parsed['people'])
+                lbl = (f" · nhãn nhóm tìm thấy: {', '.join(parsed['labels'])}" if parsed['labels'] else '')
+                if reg:
+                    ign = sum(1 for it in parsed['people'] if it['pp'] not in reg['people'])
+                    st.markdown(f"Đọc được **{n}** người · **{n - ign}** thuộc {len(reg['people'])} nhân viên đang theo dõi"
+                                + (f" · **{ign}** người khác sẽ **bỏ qua** (không thêm vào sổ)" if ign else "") + lbl)
+                    btn = "⬆ Cập nhật nhân viên từ danh sách"
+                else:
+                    st.markdown(f"Đọc được **{n}** người → sẽ lập sổ gồm **{n}** nhân viên{lbl}")
+                    st.caption("Danh sách này trở thành **danh sách nhân viên cố định** của sổ: các file nạp sau chỉ cập nhật "
+                               "những người này, không thêm được người mới.")
+                    if n > 60:
+                        st.warning(f"⚠️ File có {n} người — nhiều hơn số nhân viên dự kiến. Chỉ lập sổ từ danh sách NHÂN VIÊN, "
+                                   "không phải danh sách khách.")
+                    btn = f"⬆ Lập sổ gồm {n} nhân viên"
+                b, c = st.columns([1.3, 1.7], vertical_alignment='bottom')
+                list_day = b.date_input("Ngày của danh sách", value=parsed['list_day'] or today, format="DD/MM/YYYY",
+                                        key=f"xnc_list_day_{up_ds.name}_{up_ds.size}")
+                if c.button(btn, type="primary", use_container_width=True, key="xnc_ingest_btn"):
+                    reg = st.session_state.get('xnc_reg') or xnc_new_registry()
+                    summary = xnc_ingest(reg, parsed, list_day, today)
+                    xnc_refresh_pending(reg, today)
+                    st.session_state.update(xnc_reg=reg, xnc_dirty=True, xnc_last=summary)
+                    st.rerun()
+                for w in parsed['warnings'][:5]:
+                    st.warning(w)
 
     reg = st.session_state.get('xnc_reg')
     if not reg:
-        st.info("**Lần đầu:** nạp file *Danh sách người nước ngoài* từ cổng ở ô bên phải rồi bấm **Nạp vào sổ** để tạo sổ.  \n"
-                "**Những lần sau:** nạp sổ đã tải hôm trước (ô bên trái), rồi nạp danh sách cổng mới nếu có thay đổi.")
+        st.info("**Lần đầu:** mở mục *Lập sổ lần đầu* ở trên, nạp file danh sách nhân viên từ cổng rồi bấm **Lập sổ**.  \n"
+                "**Những lần sau:** chỉ cần nạp sổ đã tải hôm trước (ô trên cùng).")
         return
 
     xnc_refresh_pending(reg, today)
@@ -4919,7 +4949,7 @@ def _render_xnc():
     dirty = st.session_state.get('xnc_dirty')
     bar1, bar2 = st.columns([3, 1.3], vertical_alignment='center')
     bar1.markdown(
-        f'<span class="tan-chip">{S["total"]} người</span> '
+        f'<span class="tan-chip">chỉ theo dõi {S["total"]} nhân viên trong sổ</span> '
         f'<span class="tan-chip">danh sách cổng: {_xnc_fd(meta.get("list_day"))}</span> '
         f'<span class="tan-chip">điểm danh: {_xnc_fd(meta.get("confirm_day"))}</span> '
         + ('<span class="tan-chip warn">● Chưa tải sổ</span>' if dirty else '<span class="tan-chip ok">✓ Đã lưu</span>'),
@@ -4938,7 +4968,7 @@ def _render_xnc():
     aw = [p['away_until'] for p in people_all if p['status'] == 'away' and p['away_until']]
     outs = [p['since'] for p in people_all if p['status'] == 'out' and p['since']]
     cards = [
-        ('👥', '', 'Đang theo dõi', S['total'], '', nat_txt),
+        ('👥', '', 'Nhân viên theo dõi', S['total'], '', nat_txt),
         ('●', 'ok', 'Đang ở', S['in'], 'color:var(--ok)', f'điểm danh gần nhất {_xnc_fd(meta.get("confirm_day"), True)}' if meta.get('confirm_day') else 'chưa điểm danh'),
         ('✈', 'acc', 'Tạm vắng', S['away'], 'color:var(--acc)', f'dự kiến quay lại sớm nhất {_xnc_fd(min(aw), True)}' if aw else ('chưa có ngày quay lại' if S['away'] else 'không ai')),
         ('○', '', 'Đã out', S['out'], '', f'gần nhất từ {_xnc_fd(max(outs), True)}' if outs else 'không ai'),
@@ -4951,7 +4981,7 @@ def _render_xnc():
                         f'<div class="kpi-val" style="{vstyle}">{val}</div><div class="kpi-sub">{sub}</div>',
                         unsafe_allow_html=True)
     if S['pending']:
-        st.caption(f"ℹ️ {S['pending']} người có ngày đến sau hôm nay — hiện trạng thái *Sắp đến*, chưa tính vào các số trên.")
+        st.caption(f"ℹ️ {S['pending']} nhân viên có ngày đến sau hôm nay — hiện trạng thái *Sắp đến*, chưa tính vào các số trên.")
 
     t1, t2, t3, t4 = st.tabs(["Điểm danh", "Cảnh báo", "Hồ sơ từng người", "Nhật ký"])
 
@@ -4973,15 +5003,8 @@ def _render_xnc():
                 if last:
                     rp = reg['people']
                     f_ = (lambda v: _xnc_fd(v) if isinstance(v, datetime.date) else (v or '—'))
-                    nw = [pp for pp in last['new'] if pp in rp]
-                    if len(nw) > 5:       # lần nạp đầu / danh sách đổi nhiều: gộp thành 1 dòng cho gọn
-                        st.markdown(f"＋ **{len(nw)}** người mới → đã thêm vào sổ "
-                                    f"(đang ở: {sum(rp[pp]['status'] == 'in' for pp in nw)}, "
-                                    f"sắp đến: {sum(rp[pp]['status'] == 'pending' for pp in nw)})")
-                    else:
-                        for pp in nw:
-                            st.markdown(f"＋ **{E(rp[pp]['name'])}** mới xuất hiện (đến {_xnc_fd(rp[pp]['arr'])}) → đã thêm vào sổ"
-                                        + (" · trạng thái *Sắp đến*" if rp[pp]['status'] == 'pending' else " · trạng thái **Ở**"))
+                    if last.get('created'):
+                        st.markdown(f"✓ Đã lập sổ gồm **{len(last['new'])}** nhân viên — từ nay chỉ theo dõi đúng danh sách này.")
                     for pp in last['back']:
                         if pp in rp:
                             st.markdown(f"↩ **{E(rp[pp]['name'])}** vào lại (ngày đến mới {_xnc_fd(rp[pp]['arr'])})")
@@ -4990,7 +5013,10 @@ def _render_xnc():
                         st.markdown(f"↻ **{E(rp[pp]['name'])}** — {lb.lower()}: {f_(ov)} → **{f_(nv)}**")
                     if len(chg) > 8:
                         st.caption(f"… và {len(chg) - 8} thay đổi khác (xem ở tab Nhật ký)")
-                    if not (nw or last['back'] or chg or missing):
+                    if last.get('ignored'):
+                        st.caption(f"ℹ️ {last['ignored']} người khác trong danh sách không thuộc nhân viên đang theo dõi — "
+                                   "đã bỏ qua, không thêm vào sổ.")
+                    if not (last.get('created') or last['back'] or chg or last.get('ignored') or missing):
                         st.caption("Không có thay đổi so với lần nạp trước.")
                     st.button("Đã xem — ẩn tóm tắt", key="xnc_hide_last", on_click=lambda: st.session_state.update(xnc_last=None))
 
@@ -5020,7 +5046,7 @@ def _render_xnc():
         shown = sorted([p for p in people_all if _keep(p)], key=lambda p: (-xnc_top(p, today), p['name']))
         with st.container(border=True):
             st.markdown(f'<div class="pan-h"><span class="pan-t">Bảng điểm danh tháng {ym[1]:02d}/{ym[0]}</span>'
-                        f'<span class="tan-chip">{len(shown)}/{len(people_all)} người · cảnh báo xếp lên đầu</span></div>'
+                        f'<span class="tan-chip">{len(shown)}/{len(people_all)} nhân viên · cảnh báo xếp lên đầu</span></div>'
                         '<div class="xlg"><span><i style="background:rgba(16,185,129,.85)"></i>Ở</span>'
                         '<span><i style="border:1.5px dashed var(--ok)"></i>Tạm vắng</span>'
                         '<span><i style="background:rgba(114,125,149,.4)"></i>Out</span>'
@@ -5029,14 +5055,14 @@ def _render_xnc():
             if shown and days:
                 st.markdown(_xnc_matrix_html(reg, shown, days, today), unsafe_allow_html=True)
             else:
-                st.caption("Không có người nào khớp bộ lọc.")
+                st.caption("Không có nhân viên nào khớp bộ lọc.")
 
         done_today = meta.get('confirm_day') == today
         st.markdown(f'<div class="section-label" style="margin-top:.9rem">✔ Điểm danh hôm nay {today:%d/%m/%Y} '
                     + ('<span class="tan-chip ok">✓ đã điểm danh</span>' if done_today else '<span class="tan-chip warn">● chưa điểm danh hôm nay</span>')
                     + '</div>', unsafe_allow_html=True)
         st.caption("Mặc định giống hôm qua — chỉ đổi người khác. Chọn **Vắng** thì nhập thêm ngày dự kiến quay lại. "
-                   "Có thể nhập tay *Hạn được phép* cho người còn thiếu, và gắn *Nhóm*.")
+                   "Có thể nhập tay *Dự kiến tạm trú* và *Hạn được phép* cho nhân viên còn thiếu, và gắn *Nhóm*.")
         order = sorted(people_all, key=lambda p: (-xnc_top(p, today), p['name']))
         groups = list(dict.fromkeys(list(XNC_DEFAULT_GROUPS) + meta.get('groups', []) + [p['group'] for p in people_all if p['group']]))
         df = pd.DataFrame({
@@ -5044,6 +5070,7 @@ def _render_xnc():
             'Nhóm': [p['group'] or None for p in order],
             'Hôm nay': [XNC_ST[p['status']] for p in order],
             'Dự kiến quay lại': [p['away_until'] for p in order],
+            'Dự kiến tạm trú đến': [p['exp'] for p in order],
             'Hạn được phép': [p['per'] for p in order],
             'Ghi chú': [p['note'] for p in order],
         }, index=[p['pp'] for p in order])
@@ -5055,12 +5082,13 @@ def _render_xnc():
                 'Nhóm': st.column_config.SelectboxColumn('Nhóm', options=groups),
                 'Hôm nay': st.column_config.SelectboxColumn('Hôm nay', options=['Ở', 'Vắng', 'Out'] + (['Sắp đến'] if S['pending'] else []), required=True),
                 'Dự kiến quay lại': st.column_config.DateColumn('Dự kiến quay lại', format='DD/MM/YYYY'),
+                'Dự kiến tạm trú đến': st.column_config.DateColumn('Dự kiến tạm trú đến', format='DD/MM/YYYY'),
                 'Hạn được phép': st.column_config.DateColumn('Hạn được phép', format='DD/MM/YYYY'),
                 'Ghi chú': st.column_config.TextColumn('Ghi chú'),
             })
         if st.button(f"✔ Xác nhận điểm danh {today:%d/%m}", type="primary", key="xnc_confirm"):
             edits = {pp: {'status': r['Hôm nay'], 'away_until': _xnc_d(r['Dự kiến quay lại']), 'group': _xnc_s(r['Nhóm']),
-                          'per': _xnc_d(r['Hạn được phép']), 'note': _xnc_s(r['Ghi chú'])}
+                          'per': _xnc_d(r['Hạn được phép']), 'exp': _xnc_d(r['Dự kiến tạm trú đến']), 'note': _xnc_s(r['Ghi chú'])}
                      for pp, r in edited.iterrows()}
             n = xnc_apply_edits(reg, edits, today)
             st.session_state['xnc_dirty'] = True
