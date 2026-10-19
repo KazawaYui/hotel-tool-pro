@@ -2317,15 +2317,18 @@ def _norm_pp(p):
 
 # ══ Theo dõi XNC — nhân viên nước ngoài (nội bộ) ═══════════════════════════
 # Mục RIÊNG: không đọc/ghi IH, ĐK14, KBTT, VNM và không cộng vào số khách ở
-# Tổng quan. CHỈ theo dõi đúng nhóm nhân viên lập ở lần nạp đầu (danh sách
-# CỐ ĐỊNH): không file nào nạp sau đó được thêm người mới vào sổ — người lạ
-# trong file (vd danh sách cổng có lẫn khách) bị bỏ qua. "Còn ở / đã out" lấy từ:
+# Tổng quan. CHỈ theo dõi nhóm nhân viên lập ở lần nạp đầu: file nạp sau không
+# tự thêm người — người lạ trong file (vd danh sách có lẫn khách) bị bỏ qua, trừ
+# người dùng chủ động chọn thêm khi cập nhật danh sách nhân viên (xnc_ingest(add=)).
+# "Còn ở / đã out" lấy từ:
 #   (1) điểm danh nhanh mỗi ngày (mặc định giống hôm qua, chỉ đổi người khác);
-#   (2) tuỳ chọn: danh sách người nước ngoài xuất từ cổng — chỉ để cập nhật ngày
-#       tạm trú của nhân viên đã có, và ĐỀ XUẤT ai biến mất khỏi danh sách.
+#   (2) tuỳ chọn: danh sách nhân viên mới (file xuất từ cổng) — cập nhật ngày tạm
+#       trú / phòng / nhóm (nhóm theo MÀU ô tên, chú giải ở cuối file) của nhân
+#       viên đã có, và ĐỀ XUẤT ai biến mất khỏi danh sách (người dùng xác nhận).
 # Lịch sử nằm trong file Excel "sổ theo dõi" người dùng tải về / nạp lại; số
 # hộ chiếu KHÔNG được lưu trên server (chỉ nằm trong phiên đang mở).
 import bisect as _bisect
+import difflib as _difflib
 import html as _html
 from openpyxl.utils import get_column_letter
 
@@ -2361,6 +2364,26 @@ def _xnc_nat(raw):
 
 def _xnc_hdr(v):
     return _re.sub(r'\s+', ' ', str(v or '')).strip().lower()
+
+
+def _xnc_fill_key(cell):
+    """Khoá màu nền của 1 ô (None nếu không tô / tô trắng). So sánh bằng khoá này
+    nên màu RGB lẫn màu theme (vd nhóm GRO) đều khớp với chú giải."""
+    try:
+        f = cell.fill
+        if f is None or f.patternType != 'solid' or f.fgColor is None:
+            return None
+        fg = f.fgColor
+        if fg.type == 'rgb' and isinstance(fg.rgb, str):
+            rgb = fg.rgb[-6:].upper()
+            return None if rgb == 'FFFFFF' else ('rgb', rgb)
+        if fg.type == 'theme':
+            return ('theme', fg.theme, round(fg.tint or 0.0, 2))
+        if fg.type == 'indexed':
+            return ('idx', fg.indexed)
+    except Exception:
+        pass
+    return None
 
 
 def xnc_parse_list(xlsx_bytes):
@@ -2407,6 +2430,15 @@ def xnc_parse_list(xlsx_bytes):
         j = cols.get(k)
         return r[j] if (j is not None and j < len(r)) else None
 
+    # Màu ô tên = nhóm/bộ phận: file xuất kèm CHÚ GIẢI ở cuối (mỗi dòng 1 nhãn, ô bên
+    # cạnh tô đúng màu của nhóm đó). Chỉ đọc được với .xlsx; lỗi thì bỏ qua màu.
+    wsx = None
+    if xlsx_bytes[:2] == b'PK':
+        try:
+            wsx = load_workbook(io.BytesIO(xlsx_bytes)).worksheets[0]
+        except Exception:
+            wsx = None
+    legend = {}                                  # khoá màu -> nhãn nhóm
     people, labels, warns, seen = [], [], [], set()
     for ri in range(hdr_i + 1, len(rows)):
         r = rows[ri] or []
@@ -2418,6 +2450,12 @@ def xnc_parse_list(xlsx_bytes):
             filled = [str(c).strip() for c in r if c is not None and str(c).strip() != '']
             if len(filled) == 1 and not _re.fullmatch(r'[\d.,/\- ]+', filled[0]):
                 labels.append(filled[0].upper())                 # dòng nhãn cuối file (nhóm/bộ phận)
+                if wsx is not None:
+                    for cj in [cols['name']] + [j for j in range(len(r)) if j != cols['name']]:
+                        k = _xnc_fill_key(wsx.cell(ri + 1, cj + 1))
+                        if k:
+                            legend.setdefault(k, filled[0].upper())
+                            break
             elif name:
                 warns.append(f'Dòng {ri + 1}: "{name}" thiếu số hộ chiếu — bỏ qua')
             continue
@@ -2433,10 +2471,61 @@ def xnc_parse_list(xlsx_bytes):
             room = room[:-2]
         people.append({'pp': pp, 'name': name.upper(), 'dob': _dk_to_date(cell(r, 'dob')),
                        'gender': str(cell(r, 'gender') or '').strip(), 'nat': _xnc_nat(cell(r, 'nat')),
-                       'room': room, 'arr': arr, 'exp': exp, 'per': per})
+                       'room': room, 'arr': arr, 'exp': exp, 'per': per, 'group': '',
+                       '_fill': _xnc_fill_key(wsx.cell(ri + 1, cols['name'] + 1)) if wsx is not None else None})
     if not people:
         raise ValueError('Không có dòng người nào có số hộ chiếu trong file.')
-    return {'people': people, 'labels': list(dict.fromkeys(labels)), 'list_day': list_day, 'warnings': warns}
+    unknown = 0
+    for it in people:                            # nhóm theo màu ô tên (không tô màu → để trống)
+        k = it.pop('_fill')
+        if k:
+            if k in legend:
+                it['group'] = legend[k]
+            else:
+                unknown += 1
+    if unknown:
+        warns.append(f'{unknown} người có ô tên tô màu không có trong chú giải cuối file — để trống nhóm')
+    return {'people': people, 'labels': list(dict.fromkeys(labels)), 'list_day': list_day, 'warnings': warns,
+            'legend': list(dict.fromkeys(legend.values()))}
+
+
+def xnc_name_day(fname, today):
+    """Ngày ghi trong TÊN file ("…TINH_DEN_19.10.xlsx" → 19/10). Tên file không có
+    năm → lấy năm nay, nếu ngày đó còn ở tương lai thì lùi 1 năm. None nếu không thấy."""
+    s = str(fname or '').replace('Đ', 'D').replace('đ', 'd')
+    s = _ud.normalize('NFD', s)
+    s = ''.join(c for c in s if _ud.category(c) != 'Mn').upper()
+    m = _re.search(r'DEN[\s_\-]*(\d{1,2})[.\-/_](\d{1,2})(?:[.\-/_](\d{4}|\d{2})(?!\d))?', s)
+    if not m:
+        return None
+    d, mo = int(m.group(1)), int(m.group(2))
+    y = m.group(3)
+    try:
+        if y:
+            return datetime.date(int(y) + (2000 if len(y) == 2 else 0), mo, d)
+        day = datetime.date(today.year, mo, d)
+        return day if day <= today else datetime.date(today.year - 1, mo, d)
+    except ValueError:
+        return None
+
+
+def xnc_groups(reg):
+    """Các nhóm đã biết (mặc định + nhãn từ file + nhóm đang gán), không trùng."""
+    return list(dict.fromkeys(list(XNC_DEFAULT_GROUPS) + reg['meta'].get('groups', [])
+                              + [p['group'] for p in reg['people'].values() if p['group']]))
+
+
+def xnc_canon_group(label, known):
+    """Nhãn nhóm đọc từ file → tên nhóm đã có nếu chỉ khác hoa/thường hay lỗi chính
+    tả nhỏ (vd ENTERTAIMENT → ENTERTAINMENT), để 1 nhóm không bị tách làm 2."""
+    s = _re.sub(r'\s+', ' ', str(label or '')).strip().upper()
+    if not s:
+        return ''
+    by_up = {g.upper(): g for g in known}
+    if s in by_up:
+        return by_up[s]
+    close = _difflib.get_close_matches(s, list(by_up), n=1, cutoff=0.86)
+    return by_up[close[0]] if close else s
 
 
 def xnc_new_registry():
@@ -2456,29 +2545,40 @@ def _xnc_log(reg, day, pp, event, detail=''):
                        'event': event, 'detail': detail})
 
 
-def xnc_ingest(reg, parsed, list_day, today):
+def xnc_ingest(reg, parsed, list_day, today, add=None):
     """Gộp danh sách cổng vào sổ.
     - Sổ trống (lần nạp ĐẦU): lập danh sách nhân viên từ file.
     - Từ đó danh sách CỐ ĐỊNH: người trong file mà không thuộc sổ bị BỎ QUA (đếm
-      vào 'ignored', tuyệt đối không thêm) — file cổng có thể lẫn người khác.
+      vào 'ignored', tuyệt đối không tự thêm) — file cổng có thể lẫn người khác.
+      Muốn thêm nhân viên mới phải nêu rõ số hộ chiếu trong `add` (người dùng đã
+      chủ động chọn trên giao diện).
+    - Nhóm lấy từ màu ô tên trong file (nếu có) và ghi đè nhóm trong sổ khi khác.
     Trả bản tóm tắt thay đổi để hiện cho người dùng xác nhận; KHÔNG tự đổi
     trạng thái 'Out' — nhân viên biến mất khỏi danh sách chỉ được ĐỀ XUẤT."""
     people = reg['people']
     create = not people
-    seen, new, back, changes, ignored = set(), [], [], [], 0
+    add = set(add or ())
+    known = xnc_groups(reg)
+    seen, new, added, back, changes, regroup, ignored = set(), [], [], [], [], [], 0
     for it in parsed['people']:
         pp = it['pp']
         p = people.get(pp)
+        grp = xnc_canon_group(it.get('group'), known)
+        if grp and grp not in known:
+            known.append(grp)
         if p is None:
-            if not create:
+            if not (create or pp in add):
                 ignored += 1
                 continue
             pend = bool(it['arr'] and it['arr'] > today)
             people[pp] = _xnc_person(pp, it['name'], dob=it['dob'], gender=it['gender'], nat=it['nat'],
-                                     room=it['room'], arr=it['arr'], exp=it['exp'], per=it['per'],
+                                     room=it['room'], arr=it['arr'], exp=it['exp'], per=it['per'], group=grp,
                                      status='pending' if pend else 'in', since=it['arr'])
-            _xnc_log(reg, list_day, pp, 'Thêm vào sổ', f"lập danh sách nhân viên · đến {_xnc_fd(it['arr'])}")
+            _xnc_log(reg, list_day, pp, 'Thêm vào sổ' if create else 'Thêm nhân viên mới',
+                     ('lập danh sách nhân viên' if create else 'thêm theo danh sách mới') + f" · đến {_xnc_fd(it['arr'])}")
             new.append(pp)
+            if not create:
+                added.append(pp)
             seen.add(pp)
             continue
         seen.add(pp)
@@ -2494,6 +2594,10 @@ def xnc_ingest(reg, parsed, list_day, today):
                 show = (lambda v: _xnc_fd(v) if isinstance(v, datetime.date) else (v or '—'))
                 _xnc_log(reg, list_day, pp, f'Đổi {label.lower()}', f'{show(ov)} → {show(nv)}')
                 changes.append((pp, label, ov, nv))
+        if grp and grp != p['group']:
+            _xnc_log(reg, list_day, pp, 'Đổi nhóm', f"{p['group'] or '—'} → {grp} (theo màu ô tên trong file)")
+            regroup.append((pp, p['group'], grp))
+            p['group'] = grp
         for key in ('name', 'dob', 'gender', 'nat'):
             if not p[key] and it[key]:
                 p[key] = it[key]
@@ -2508,11 +2612,12 @@ def xnc_ingest(reg, parsed, list_day, today):
                 _xnc_log(reg, list_day, pp, 'Không còn trong danh sách cổng', 'đề xuất: xác nhận đã out')
                 missing.append(pp)
     reg['meta']['list_day'] = list_day
-    for lb in parsed.get('labels', []):
+    for lb in (parsed.get('legend') or parsed.get('labels', [])):
+        lb = xnc_canon_group(lb, known)
         if lb not in reg['meta']['groups']:
             reg['meta']['groups'].append(lb)
-    return {'new': new, 'back': back, 'changes': changes, 'missing': missing, 'ignored': ignored,
-            'created': create, 'count': len(parsed['people']), 'day': list_day}
+    return {'new': new, 'added': added, 'back': back, 'changes': changes, 'regroup': regroup, 'missing': missing,
+            'ignored': ignored, 'created': create, 'count': len(parsed['people']), 'day': list_day}
 
 
 def xnc_refresh_pending(reg, today):
@@ -2632,6 +2737,11 @@ def xnc_top(p, today):
     return al[0][0] if al else 0
 
 
+def xnc_sort_key(p, today):
+    """Người đã out xuống cuối; còn lại cảnh báo nặng nhất lên đầu, rồi theo tên."""
+    return (p['status'] == 'out', -xnc_top(p, today), p['name'])
+
+
 def xnc_summary(reg, today):
     s = {'total': 0, 'in': 0, 'away': 0, 'out': 0, 'pending': 0, 'urgent': 0, 'attention': 0, 'per_missing': 0}
     for p in reg['people'].values():
@@ -2687,7 +2797,7 @@ def xnc_to_xlsx(reg, today):
         c = ws.cell(1, ci, h)
         c.font, c.fill, c.border = fb, hfill, bdr
         c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    order = sorted(reg['people'].values(), key=lambda p: (-xnc_top(p, today), p['name']))
+    order = sorted(reg['people'].values(), key=lambda p: xnc_sort_key(p, today))
     fills = {'in': 'C6EFCE', 'away': 'E4DFFB', 'out': 'D9D9D9', 'pending': 'FFF2CC'}
     for ri, p in enumerate(order, 2):
         for ci, (k, _) in enumerate(XNC_COLS, 1):
@@ -4777,6 +4887,26 @@ def _xnc_cb_out(pp, day):
         st.session_state['xnc_dirty'] = True
 
 
+def _xnc_cb_out_all(items):
+    """Xác nhận out hàng loạt: mỗi người lấy đúng ngày đang chọn ở ô "Out từ" của họ."""
+    reg = st.session_state.get('xnc_reg')
+    if reg:
+        for pp, day in items:
+            if pp in reg['people'] and reg['people'][pp]['status'] != 'out':
+                xnc_set_status(reg, pp, 'out', st.session_state.get(f'xnc_outd_{pp}') or day)
+        st.session_state['xnc_dirty'] = True
+
+
+def _xnc_cb_keep_all(pps, day):
+    reg = st.session_state.get('xnc_reg')
+    if reg:
+        for pp in pps:
+            if pp in reg['people'] and not reg['people'][pp]['ack_missing']:
+                reg['people'][pp]['ack_missing'] = True
+                _xnc_log(reg, day, pp, 'Giữ nguyên', 'không còn trong danh sách cổng nhưng vẫn ở')
+        st.session_state['xnc_dirty'] = True
+
+
 def _xnc_cb_keep(pp, day):
     reg = st.session_state.get('xnc_reg')
     if reg and pp in reg['people']:
@@ -4894,10 +5024,12 @@ def _render_xnc():
         if st.session_state.get('xnc_note'):
             st.warning(st.session_state.pop('xnc_note'))
         reg = st.session_state.get('xnc_reg')
-        title = ("🏛 Cập nhật ngày tạm trú từ danh sách cổng (tuỳ chọn) — chỉ áp dụng cho nhân viên đã có trong sổ" if reg
+        title = ("🏛 Cập nhật danh sách nhân viên từ file cổng mới (ngày tạm trú, nhóm, người mới / người đã đi)" if reg
                  else "🏛 Lập sổ lần đầu từ danh sách nhân viên (file xuất từ cổng)")
-        with st.expander(title, expanded=not reg):
-            up_ds = st.file_uploader("Danh sách người nước ngoài xuất từ cổng (.xlsx)", type=['xlsx'], key="xnc_up_ds")
+        gen = st.session_state.get('xnc_ds_gen', 0)
+        # Mỗi lần áp dụng danh sách: đổi nhãn (thêm/bỏ 1 ký tự ẩn) để expander tự thu gọn, đổi khoá để xoá file đã chọn
+        with st.expander(title + '\u200b' * (gen % 2), expanded=not reg):
+            up_ds = st.file_uploader("Danh sách người nước ngoài xuất từ cổng (.xlsx)", type=['xlsx'], key=f"xnc_up_ds_{gen}")
             parsed = None
             if up_ds is not None:
                 key = (up_ds.name, up_ds.size)
@@ -4911,28 +5043,75 @@ def _render_xnc():
                 parsed = st.session_state.get('xnc_ds_parsed')
             if parsed:
                 n = len(parsed['people'])
-                lbl = (f" · nhãn nhóm tìm thấy: {', '.join(parsed['labels'])}" if parsed['labels'] else '')
+                fp = {it['pp']: it for it in parsed['people']}
+                known = xnc_groups(reg) if reg else list(XNC_DEFAULT_GROUPS)
+                gc = {}
+                for it in parsed['people']:
+                    g_ = xnc_canon_group(it['group'], known) or 'chưa gắn'
+                    gc[g_] = gc.get(g_, 0) + 1
+                grp_txt = ' · '.join(f'{k} {v}' for k, v in sorted(gc.items(), key=lambda t: (t[0] == 'chưa gắn', -t[1])))
+                sel_add, low = [], False
                 if reg:
-                    ign = sum(1 for it in parsed['people'] if it['pp'] not in reg['people'])
-                    st.markdown(f"Đọc được **{n}** người · **{n - ign}** thuộc {len(reg['people'])} nhân viên đang theo dõi"
-                                + (f" · **{ign}** người khác sẽ **bỏ qua** (không thêm vào sổ)" if ign else "") + lbl)
-                    btn = "⬆ Cập nhật nhân viên từ danh sách"
+                    strangers = [it for it in parsed['people'] if it['pp'] not in reg['people']]
+                    gone = [p for p in reg['people'].values() if p['pp'] not in fp and p['status'] != 'out']
+                    gone_new = [p for p in gone if p['in_list']]            # chưa được đề xuất ở lần nạp trước
+                    st.markdown(f"Đọc được **{n}** người · **{n - len(strangers)}** đã có trong sổ · "
+                                f"**{len(strangers)}** chưa có trong sổ · **{len(gone)}** nhân viên trong sổ không còn trong file")
+                    if strangers:
+                        many = len(strangers) > 15
+                        if many:
+                            st.warning(f"⚠️ {len(strangers)} người trong file chưa có trong sổ — nhiều bất thường, có thể file lẫn khách. "
+                                       "Mặc định **không thêm ai**; chỉ chọn những người thực sự là nhân viên.")
+                        ids = [it['pp'] for it in strangers]
+
+                        def _lbl(pp):
+                            it = fp[pp]
+                            return f"{it['name']} · {it['nat'] or '—'} · {'P.' + it['room'] if it['room'] else '—'} · đến {_xnc_fd(it['arr'], True)}"
+                        sel_add = st.multiselect("Người mới trong file — chọn người sẽ **thêm** vào danh sách nhân viên", ids,
+                                                 default=[] if many else ids, format_func=_lbl,
+                                                 key=f"xnc_add_{up_ds.name}_{up_ds.size}",
+                                                 help="Người không được chọn sẽ bị bỏ qua, không đưa vào sổ")
+                    eff = [f"cập nhật ngày tạm trú / phòng / nhóm của **{n - len(strangers)}** nhân viên đã có"]
+                    if strangers:
+                        eff.append(f"thêm **{len(sel_add)}** người mới" + (f", bỏ qua {len(strangers) - len(sel_add)} người" if len(sel_add) < len(strangers) else ''))
+                    if gone_new:
+                        eff.append(f"**{len(gone_new)}** nhân viên không còn trong file → *đề xuất* Out (bạn xác nhận ngày)")
+                    st.caption("Sẽ: " + ' · '.join(eff) + (f"  \nNhóm theo màu ô tên: {grp_txt}" if len(gc) > 1 or 'chưa gắn' not in gc else ''))
+                    btn = "⟳ Cập nhật danh sách nhân viên"
+                    active = sum(1 for p in reg['people'].values() if p['status'] != 'out')
+                    low = active >= 5 and (n - len(strangers)) < 0.5 * active
+                    if low:
+                        st.error(f"⛔ Chỉ **{n - len(strangers)}/{active}** nhân viên đang theo dõi có trong file này — nhiều khả năng đây "
+                                 "**không phải danh sách nhân viên** (có thể là danh sách khách).")
+                        low = not st.checkbox("Tôi chắc chắn đây là danh sách nhân viên mới — vẫn cập nhật", key=f"xnc_force_{up_ds.name}_{up_ds.size}")
                 else:
-                    st.markdown(f"Đọc được **{n}** người → sẽ lập sổ gồm **{n}** nhân viên{lbl}")
-                    st.caption("Danh sách này trở thành **danh sách nhân viên cố định** của sổ: các file nạp sau chỉ cập nhật "
-                               "những người này, không thêm được người mới.")
+                    st.markdown(f"Đọc được **{n}** người → sẽ lập sổ gồm **{n}** nhân viên")
+                    st.caption(f"Nhóm theo màu ô tên trong file: {grp_txt}" if len(gc) > 1 or 'chưa gắn' not in gc else
+                               "File không có màu ô tên → chưa gắn nhóm (gắn tay ở bảng Điểm danh).")
+                    st.caption("Danh sách này trở thành **danh sách nhân viên** của sổ: các file nạp sau chỉ cập nhật "
+                               "những người này; muốn thêm / bớt người phải xác nhận ở bước cập nhật.")
                     if n > 60:
                         st.warning(f"⚠️ File có {n} người — nhiều hơn số nhân viên dự kiến. Chỉ lập sổ từ danh sách NHÂN VIÊN, "
                                    "không phải danh sách khách.")
                     btn = f"⬆ Lập sổ gồm {n} nhân viên"
-                b, c = st.columns([1.3, 1.7], vertical_alignment='bottom')
-                list_day = b.date_input("Ngày của danh sách", value=parsed['list_day'] or today, format="DD/MM/YYYY",
+                nm_day = xnc_name_day(up_ds.name, today)
+                cands = [d for d in (parsed['list_day'], nm_day) if d and d <= today]
+                day0 = max(cands) if cands else today
+                b, c = st.columns([1.3, 1.9], vertical_alignment='bottom')
+                list_day = b.date_input("Ngày của danh sách", value=day0, max_value=today, format="DD/MM/YYYY",
                                         key=f"xnc_list_day_{up_ds.name}_{up_ds.size}")
-                if c.button(btn, type="primary", use_container_width=True, key="xnc_ingest_btn"):
+                if parsed['list_day'] and nm_day and parsed['list_day'] != nm_day and day0 == max(parsed['list_day'], nm_day):
+                    st.caption(f"Ngày trong tiêu đề file là {_xnc_fd(parsed['list_day'])}, tên file ghi {_xnc_fd(nm_day)} → "
+                               f"lấy ngày mới hơn ({_xnc_fd(day0)}). Sửa lại nếu chưa đúng.")
+                prev_day = reg['meta'].get('list_day') if reg else None
+                if prev_day and list_day < prev_day:
+                    st.warning(f"⚠️ Ngày danh sách ({_xnc_fd(list_day)}) cũ hơn danh sách đã nạp lần trước ({_xnc_fd(prev_day)}) — "
+                               "chắc chắn đây là file mới nhất?")
+                if c.button(btn, type="primary", use_container_width=True, key="xnc_ingest_btn", disabled=low):
                     reg = st.session_state.get('xnc_reg') or xnc_new_registry()
-                    summary = xnc_ingest(reg, parsed, list_day, today)
+                    summary = xnc_ingest(reg, parsed, list_day, today, add=set(sel_add))
                     xnc_refresh_pending(reg, today)
-                    st.session_state.update(xnc_reg=reg, xnc_dirty=True, xnc_last=summary)
+                    st.session_state.update(xnc_reg=reg, xnc_dirty=True, xnc_last=summary, xnc_ds_gen=gen + 1)
                     st.rerun()
                 for w in parsed['warnings'][:5]:
                     st.warning(w)
@@ -4949,7 +5128,7 @@ def _render_xnc():
     dirty = st.session_state.get('xnc_dirty')
     bar1, bar2 = st.columns([3, 1.3], vertical_alignment='center')
     bar1.markdown(
-        f'<span class="tan-chip">chỉ theo dõi {S["total"]} nhân viên trong sổ</span> '
+        f'<span class="tan-chip">đang theo dõi {S["total"] - S["out"]} nhân viên' + (f' (+{S["out"]} đã out)' if S['out'] else '') + '</span> '
         f'<span class="tan-chip">danh sách cổng: {_xnc_fd(meta.get("list_day"))}</span> '
         f'<span class="tan-chip">điểm danh: {_xnc_fd(meta.get("confirm_day"))}</span> '
         + ('<span class="tan-chip warn">● Chưa tải sổ</span>' if dirty else '<span class="tan-chip ok">✓ Đã lưu</span>'),
@@ -4963,12 +5142,13 @@ def _render_xnc():
     people_all = list(reg['people'].values())
     nat_cnt = {}
     for p in people_all:
-        nat_cnt[p['nat'] or '—'] = nat_cnt.get(p['nat'] or '—', 0) + 1
+        if p['status'] != 'out':
+            nat_cnt[p['nat'] or '—'] = nat_cnt.get(p['nat'] or '—', 0) + 1
     nat_txt = ' · '.join(f'{v} {E(k)}' for k, v in sorted(nat_cnt.items(), key=lambda t: -t[1])[:5])
     aw = [p['away_until'] for p in people_all if p['status'] == 'away' and p['away_until']]
     outs = [p['since'] for p in people_all if p['status'] == 'out' and p['since']]
     cards = [
-        ('👥', '', 'Nhân viên theo dõi', S['total'], '', nat_txt),
+        ('👥', '', 'Nhân viên theo dõi', S['total'] - S['out'], '', nat_txt),
         ('●', 'ok', 'Đang ở', S['in'], 'color:var(--ok)', f'điểm danh gần nhất {_xnc_fd(meta.get("confirm_day"), True)}' if meta.get('confirm_day') else 'chưa điểm danh'),
         ('✈', 'acc', 'Tạm vắng', S['away'], 'color:var(--acc)', f'dự kiến quay lại sớm nhất {_xnc_fd(min(aw), True)}' if aw else ('chưa có ngày quay lại' if S['away'] else 'không ai')),
         ('○', '', 'Đã out', S['out'], '', f'gần nhất từ {_xnc_fd(max(outs), True)}' if outs else 'không ai'),
@@ -4991,20 +5171,30 @@ def _render_xnc():
         last = st.session_state.get('xnc_last')
         if missing or last:
             with st.container(border=True):
-                st.markdown('<div class="pan-h"><span class="pan-t">Đề xuất từ danh sách cổng mới</span></div>', unsafe_allow_html=True)
-                for p in missing:
-                    d = min(p['missing_since'] or today, today)
-                    x, w, y, z = st.columns([5, 1.7, 1.3, 1.3], vertical_alignment='center')
-                    x.markdown(f"⬆ **{E(p['name'])}** không còn trong danh sách cổng → đề xuất **Đã out**")
-                    w.date_input("Out từ", value=d, max_value=today, format="DD/MM/YYYY", key=f"xnc_outd_{p['pp']}",
-                                 label_visibility="collapsed", help="Ngày người này thực sự rời — sửa nếu khác ngày đề xuất")
-                    y.button("Xác nhận out", key=f"xnc_out_{p['pp']}", on_click=_xnc_cb_out, args=(p['pp'], d), use_container_width=True)
-                    z.button("Giữ nguyên", key=f"xnc_keep_{p['pp']}", on_click=_xnc_cb_keep, args=(p['pp'], today), use_container_width=True)
+                st.markdown(f'<div class="pan-h"><span class="pan-t">{"Kết quả nạp danh sách cổng" if last else "Đề xuất từ danh sách cổng mới"}</span></div>',
+                            unsafe_allow_html=True)
                 if last:
                     rp = reg['people']
                     f_ = (lambda v: _xnc_fd(v) if isinstance(v, datetime.date) else (v or '—'))
                     if last.get('created'):
                         st.markdown(f"✓ Đã lập sổ gồm **{len(last['new'])}** nhân viên — từ nay chỉ theo dõi đúng danh sách này.")
+                        gcnt = {}
+                        for pp in last['new']:
+                            g_ = rp[pp]['group'] or 'chưa gắn'
+                            gcnt[g_] = gcnt.get(g_, 0) + 1
+                        if set(gcnt) != {'chưa gắn'}:
+                            st.markdown("🏷 Nhóm theo màu ô tên trong file: " + ' · '.join(
+                                f"{E(k)} **{v}**" for k, v in sorted(gcnt.items(), key=lambda t: (t[0] == 'chưa gắn', -t[1]))))
+                    for pp in last.get('added', []):
+                        if pp in rp:
+                            st.markdown(f"➕ **{E(rp[pp]['name'])}** — thêm vào danh sách nhân viên "
+                                        f"(đến {_xnc_fd(rp[pp]['arr'])} · {E(_xnc_room(rp[pp]))}"
+                                        f"{' · ' + E(rp[pp]['group']) if rp[pp]['group'] else ''})")
+                    for pp, og, ng in last.get('regroup', [])[:6]:
+                        if pp in rp:
+                            st.markdown(f"🏷 **{E(rp[pp]['name'])}** — nhóm: {E(og or '—')} → **{E(ng)}** (theo màu ô tên trong file)")
+                    if len(last.get('regroup', [])) > 6:
+                        st.caption(f"… và {len(last['regroup']) - 6} người đổi nhóm khác (xem ở tab Nhật ký)")
                     for pp in last['back']:
                         if pp in rp:
                             st.markdown(f"↩ **{E(rp[pp]['name'])}** vào lại (ngày đến mới {_xnc_fd(rp[pp]['arr'])})")
@@ -5016,14 +5206,39 @@ def _render_xnc():
                     if last.get('ignored'):
                         st.caption(f"ℹ️ {last['ignored']} người khác trong danh sách không thuộc nhân viên đang theo dõi — "
                                    "đã bỏ qua, không thêm vào sổ.")
-                    if not (last.get('created') or last['back'] or chg or last.get('ignored') or missing):
+                    if not (last.get('created') or last.get('added') or last.get('regroup') or last['back'] or chg
+                            or last.get('ignored') or missing):
                         st.caption("Không có thay đổi so với lần nạp trước.")
+                if missing:
+                    st.markdown(f"⬆ **{len(missing)} nhân viên không còn trong danh sách cổng** → đề xuất **Đã out** "
+                                "(chọn ngày rời thực tế rồi xác nhận)")
+                    if len(missing) > 1:
+                        items = [(p['pp'], min(p['missing_since'] or today, today)) for p in missing]
+                        ba, bb, _sp = st.columns([2.6, 2.6, 4.2])
+                        ba.button(f"Xác nhận out cả {len(missing)} người", key="xnc_out_all", type="primary", use_container_width=True,
+                                  on_click=_xnc_cb_out_all, args=(items,), help="Mỗi người lấy theo ngày đang chọn ở ô bên dưới")
+                        bb.button(f"Giữ nguyên cả {len(missing)} người", key="xnc_keep_all", use_container_width=True,
+                                  on_click=_xnc_cb_keep_all, args=([p['pp'] for p in missing], today),
+                                  help="Vẫn đang ở — chỉ là file cổng không còn ghi")
+                    for p in missing:
+                        d = min(p['missing_since'] or today, today)
+                        x, w, y, z = st.columns([5, 1.7, 1.3, 1.3], vertical_alignment='center')
+                        x.markdown(f"**{E(p['name'])}** · {E(p['nat'] or '—')} · {E(_xnc_room(p))}"
+                                   + (f" · {E(p['group'])}" if p['group'] else ''))
+                        w.date_input("Out từ", value=d, max_value=today, format="DD/MM/YYYY", key=f"xnc_outd_{p['pp']}",
+                                     label_visibility="collapsed", help="Ngày người này thực sự rời — sửa nếu khác ngày đề xuất")
+                        y.button("Xác nhận out", key=f"xnc_out_{p['pp']}", on_click=_xnc_cb_out, args=(p['pp'], d), use_container_width=True)
+                        z.button("Giữ nguyên", key=f"xnc_keep_{p['pp']}", on_click=_xnc_cb_keep, args=(p['pp'], today), use_container_width=True)
+                if last:
                     st.button("Đã xem — ẩn tóm tắt", key="xnc_hide_last", on_click=lambda: st.session_state.update(xnc_last=None))
 
-        f1, f2, f3 = st.columns([3.2, 1.6, 1.4], vertical_alignment='center')
-        flt = f1.radio("Lọc", ['Tất cả', 'Cần xử lý', 'Đang ở', 'Tạm vắng', 'Đã out', 'Thiếu hạn phép'], horizontal=True,
+        flt = st.radio("Lọc", ['Tất cả', 'Cần xử lý', 'Đang ở', 'Tạm vắng', 'Đã out', 'Thiếu hạn phép'], horizontal=True,
                        key="xnc_flt", label_visibility="collapsed")
+        f2, f3, f4 = st.columns([2.2, 1.2, 1.2], vertical_alignment='center')
         q = f2.text_input("Tìm", placeholder="🔎 tên / hộ chiếu / phòng", key="xnc_q", label_visibility="collapsed").strip().lower()
+        grp_opts = (['Tất cả nhóm'] + [g for g in xnc_groups(reg) if any(p['group'] == g for p in people_all)]
+                    + (['Chưa gắn nhóm'] if any(not p['group'] for p in people_all) else []))
+        gsel = f4.selectbox("Nhóm", grp_opts, key="xnc_grp", label_visibility="collapsed")
         first_day = min([p['arr'] for p in people_all if p['arr']] + [today])
         months, y_, m_ = [], today.year, today.month
         while (y_, m_) >= (first_day.year, first_day.month):
@@ -5035,6 +5250,9 @@ def _render_xnc():
         days = [d0 + datetime.timedelta(i) for i in range((min(d1, today) - d0).days + 1)]
 
         def _keep(p):
+            if gsel == 'Chưa gắn nhóm' and p['group']: return False
+            if gsel not in ('Tất cả nhóm', 'Chưa gắn nhóm') and p['group'] != gsel: return False
+            if p['status'] == 'out' and p['since'] and p['since'] < d0 and flt != 'Đã out': return False   # đã đi từ trước tháng này
             if flt == 'Cần xử lý' and xnc_top(p, today) < 1: return False
             if flt == 'Đang ở' and p['status'] != 'in': return False
             if flt == 'Tạm vắng' and p['status'] != 'away': return False
@@ -5043,7 +5261,7 @@ def _render_xnc():
             if q and q not in f"{p['name']} {p['pp']} {p['room']}".lower(): return False
             return True
 
-        shown = sorted([p for p in people_all if _keep(p)], key=lambda p: (-xnc_top(p, today), p['name']))
+        shown = sorted([p for p in people_all if _keep(p)], key=lambda p: xnc_sort_key(p, today))
         with st.container(border=True):
             st.markdown(f'<div class="pan-h"><span class="pan-t">Bảng điểm danh tháng {ym[1]:02d}/{ym[0]}</span>'
                         f'<span class="tan-chip">{len(shown)}/{len(people_all)} nhân viên · cảnh báo xếp lên đầu</span></div>'
@@ -5063,8 +5281,8 @@ def _render_xnc():
                     + '</div>', unsafe_allow_html=True)
         st.caption("Mặc định giống hôm qua — chỉ đổi người khác. Chọn **Vắng** thì nhập thêm ngày dự kiến quay lại. "
                    "Có thể nhập tay *Dự kiến tạm trú* và *Hạn được phép* cho nhân viên còn thiếu, và gắn *Nhóm*.")
-        order = sorted(people_all, key=lambda p: (-xnc_top(p, today), p['name']))
-        groups = list(dict.fromkeys(list(XNC_DEFAULT_GROUPS) + meta.get('groups', []) + [p['group'] for p in people_all if p['group']]))
+        order = sorted(people_all, key=lambda p: xnc_sort_key(p, today))
+        groups = xnc_groups(reg)
         df = pd.DataFrame({
             'Họ tên': [p['name'] for p in order],
             'Nhóm': [p['group'] or None for p in order],
@@ -5121,7 +5339,7 @@ def _render_xnc():
 
     # ═════════ Tab 3 · Hồ sơ từng người ═════════
     with t3:
-        opts = sorted(reg['people'], key=lambda pp: (-xnc_top(reg['people'][pp], today), reg['people'][pp]['name']))
+        opts = sorted(reg['people'], key=lambda pp: xnc_sort_key(reg['people'][pp], today))
         sel = st.selectbox("Chọn người", opts, format_func=lambda pp: f"{reg['people'][pp]['name']} · {reg['people'][pp]['nat']}",
                            key="xnc_sel", label_visibility="collapsed")
         p = reg['people'][sel]
