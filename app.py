@@ -835,6 +835,18 @@ def _fmt_room(v):
         s = s[:-2]
     return s
 
+def _txt(v):
+    """Ô văn bản đọc qua pandas: ô trống là NaN (float) → str(nan) = 'nan' sẽ lọt
+    thẳng vào file nộp (vd cột ĐỊA CHỈ CHI TIẾT của VNM). Trả '' cho None/NaN/NaT."""
+    if v is None:
+        return ''
+    try:
+        if pd.isna(v):
+            return ''
+    except (TypeError, ValueError):
+        pass
+    return str(v).strip()
+
 def _to_date(v):
     """Đọc ngày linh hoạt (datetime / chuỗi dd/mm/yyyy) → datetime.date hoặc None."""
     if v is None:
@@ -1300,12 +1312,12 @@ def build_kbtt(df_intl, visa_map=None):
         ws.delete_rows(last_data_row + 1, ws.max_row - last_data_row)
     for i,(_,row) in enumerate(df_intl.iterrows(),1):
         er=i+3   # dữ liệu khách thật bắt đầu dòng 4 (dòng 3 là TEST, giữ nguyên)
-        ht=str(row.get('HỌ TÊN ',row.get('HỌ TÊN',''))).strip()
+        ht=_txt(row.get('HỌ TÊN ',row.get('HỌ TÊN','')))
         ns=fmt(row['NGÀY SINH']); nd=fmt(row['NGÀY ĐẾN']); ni=fmt(row.get('NGÀY ÐI',row.get('NGÀY ĐI','')))
         ni=_fix_departure_swap(ni, nd)
         gt='M - Nam' if str(row.get('GIỚI TÍNH','')).strip()=='Nam' else 'F - Nữ'
-        qt=lookup_nat_kbtt(row.get('QUỐC TỊCH',''))
-        sh=str(row.get('SỐ GIẤY TỜ','')).strip(); sp=str(row.get('SỐ PHÒNG','')).strip()
+        qt=lookup_nat_kbtt(_txt(row.get('QUỐC TỊCH','')))
+        sh=_txt(row.get('SỐ GIẤY TỜ','')); sp=_txt(row.get('SỐ PHÒNG',''))
         # SỐ GIẤY TỜ chỉ là mã tạm nội bộ (GKS/GBL/GKA/GBS = trẻ em dùng giấy
         # khai sinh/giấy bảo lãnh, chưa có hộ chiếu thật) — KHÔNG được nộp lên
         # hồ sơ KBTT như số hộ chiếu thật, để trống + cảnh báo thay vì điền sai.
@@ -1359,12 +1371,12 @@ def build_vnm(df_vn):
     _CUTRU_MAP={'thuongtru':'1 - Thường trú','tamtru':'2 - Tạm trú'}
     for i,(_,row) in enumerate(df_vn.iterrows(),1):
         er=i+4
-        ht=str(row.get('HỌ TÊN ',row.get('HỌ TÊN',''))).strip()
+        ht=_txt(row.get('HỌ TÊN ',row.get('HỌ TÊN','')))
         ns=fmt(row['NGÀY SINH']); nd=fmt(row['NGÀY ĐẾN']); ni=fmt(row.get('NGÀY ÐI',row.get('NGÀY ĐI','')))
         ni=_fix_departure_swap(ni, nd)
         gt='F - Nữ' if str(row.get('GIỚI TÍNH','')).strip()=='Nữ' else 'M - Nam'
-        sg_raw=str(row.get('SỐ GIẤY TỜ','')).strip()
-        lg_raw=str(row.get('LOẠI GIẤY TỜ','')).strip()
+        sg_raw=_txt(row.get('SỐ GIẤY TỜ',''))   # _txt: ô trống = NaN → '' (str(nan) = "nan" bị coi là số hộ chiếu)
+        lg_raw=_txt(row.get('LOẠI GIẤY TỜ',''))
         is_gks='GKS' in sg_raw.upper(); is_gbl='GBL' in sg_raw.upper()
         ten_giay=''
         if is_gks:
@@ -1392,8 +1404,8 @@ def build_vnm(df_vn):
             ward_unmatched.append((ht, phuong_raw))
         if inferred_prov and not tinh:
             tinh = inferred_prov
-        dc=str(row.get('ÐỊA CHỈ',row.get('ĐỊA CHỈ',''))).strip()
-        sp=str(row.get('SỐ PHÒNG','')).strip()
+        dc=_txt(row.get('ÐỊA CHỈ',row.get('ĐỊA CHỈ','')))
+        sp=_txt(row.get('SỐ PHÒNG',''))
         dt=_fmt_room(row.get('SỐ ĐIỆN THOẠI',''))  # phòng vệ thêm nếu cột vẫn lọt qua dạng số (mất số 0 đầu)
         cutru=_CUTRU_MAP.get(_norm_nat(row.get('THƯỜNG TRÚ / TẠM TRÚ','')),'1 - Thường trú')
         vals=[i,ht,ns,gt,'VNM - Viet Nam',lg,ten_giay,sg,dt,cutru,tinh,phuong,dc,nd,ni,sp,'1 - Du lịch','','']
