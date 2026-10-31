@@ -277,6 +277,14 @@ def _season_bg_data_uri(key, theme):
             pass
     return _dark_bg_data_uri() if theme == 'dark' else _light_bg_data_uri()
 
+@st.cache_resource
+def _splash_font_css():
+    """Phông của màn chào HUD (Chakra Petch + JetBrains Mono, hỗ trợ tiếng Việt, đã cắt
+    chỉ giữ chữ cần dùng) dạng @font-face base64 — nhúng sẵn, không cần mạng ngoài."""
+    path = os.path.join(os.path.dirname(__file__), 'hud_fonts.css')
+    with open(path, 'r', encoding='utf-8') as f:
+        return f.read().strip()
+
 # ── Lookup tables ─────────────────────────────────────────────────────────
 # Full nationality mapping (normalized keys → "CODE - Name") — 350 entries
 import unicodedata as _ud, re as _re
@@ -2782,16 +2790,12 @@ if not st.session_state.get("_app_scripts_injected"):
     }
 
     @media (prefers-reduced-motion: reduce) {
-        .sb-mascot, #bg-sakura-layer .petal,
-        #boot-splash .bs-pt, #boot-splash .bs-bg, #boot-splash .bs-moon,
-        #boot-splash .bs-blink {
+        .sb-mascot, #bg-sakura-layer .petal {
             animation: none !important;
         }
-        .tan-rv, #boot-splash .bs-card, #boot-splash .bs-corner,
-        #boot-splash .bs-strip, #boot-splash .bs-enter, #boot-splash .bs-hint2 {
+        .tan-rv {
             animation: none !important; opacity: 1 !important; transform: none !important;
         }
-        #boot-splash .bs-card { transform: translateY(-50%) !important; }
         .stApp *, #boot-splash {transition-duration: 0.01ms !important;}
     }
     `;
@@ -2834,242 +2838,491 @@ if not st.session_state.get("_app_scripts_injected"):
         doc.body.insertBefore(layer, doc.body.firstChild);
     }
 
-    // ── Màn chào ca trực (bản phối B+C) ──────────────────────────────────
-    // Ảnh nền tràn màn hình đổi theo MÙA và DỊP LỄ, ám sắc trời đổi theo GIỜ,
-    // hạt rơi theo mùa; lời chào nằm trong thẻ kính bên trái, đồng hồ góc phải,
-    // thanh số liệu ở đáy. Sau 2 giây thì DỪNG chờ người dùng bấm Enter (hoặc
-    // chạm màn hình) mới vào app — giống màn khoá Windows. Chỉ chào lần đầu
-    // mỗi phiên tab; refresh trong cùng tab không phải chào lại.
+    // ── Màn chào ca trực — phong cách HUD AI (kiểu J.A.R.V.I.S) ────────────
+    // Vòng lò phản ứng + nhật ký khởi động chạy ~3 giây, đếm số liệu thật trong ngày,
+    // gõ lời chào theo ca, rồi DỪNG chờ người dùng bấm Enter (hoặc chạm màn hình) mới
+    // vào app. Chỉ chào lần đầu mỗi phiên tab; refresh trong cùng tab không chào lại.
+    // Phông (Chakra Petch + JetBrains Mono, đã cắt chỉ giữ chữ cần dùng) nhúng base64
+    // từ file hud_fonts.css nên không cần tải font ngoài. Hiệu ứng chạy liên tục chỉ
+    // dùng transform/opacity; tắt hết khi hệ thống bật "giảm chuyển động".
     var _bsSeen = false;
     try { _bsSeen = window.parent.sessionStorage.getItem('tanBootSplashSeen') === '1'; } catch (e) {}
     if (!_bsSeen && !doc.getElementById('boot-splash')) {
         try { window.parent.sessionStorage.setItem('tanBootSplashSeen', '1'); } catch (e) {}
+        var W = window.parent;
         var css3 = doc.createElement('style');
         css3.id = 'boot-splash-style';
-        css3.textContent = `
+        css3.textContent = `__FONT_CSS__
+          /* ══ Màn chào kiểu HUD AI (J.A.R.V.I.S) — chỉ transform/opacity chạy liên tục ══ */
           #boot-splash {
+            --rgb: 46,230,255; --c1: #2ee6ff; --c2: #2f8bff; --c3: #c8f8ff; --amb: #ffb84d;
+            --tx: #d9f8ff; --dim: #74b6cc; --ln: rgba(46,230,255,.30); --glow: rgba(46,230,255,.55);
+            --hud: min(58vh, 46vw, 660px); --core0: #02101a; --core1: #031c2a;
+            --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, 'Liberation Mono', monospace;
             position: fixed; inset: 0; z-index: 999999; overflow: hidden;
-            background: #07090f; cursor: pointer; user-select: none;
-            transition: opacity 0.5s ease;
-            font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+            background: #01050b; color: var(--tx); cursor: pointer; user-select: none;
+            font-family: 'Chakra Petch', 'Segoe UI', system-ui, -apple-system, sans-serif;
           }
-          #boot-splash.bs-hide { opacity: 0; pointer-events: none; }
+          #boot-splash[data-pal="mark"] {
+            --rgb: 255,178,62; --c1: #ffb23e; --c2: #ff4a30; --c3: #ffe6b0;
+            --tx: #fff0d9; --dim: #cf9f6e; --ln: rgba(255,178,62,.30); --glow: rgba(255,178,62,.55); --core0: #170904; --core1: #230f06;
+          }
+          #boot-splash *, #boot-splash *::before, #boot-splash *::after { box-sizing: border-box; }
+          #boot-splash.bs-hide { animation: bsOut .8s cubic-bezier(.6,0,.3,1) forwards; pointer-events: none; }
+          @keyframes bsOut {
+            0%   { opacity: 1; transform: scale(1); }
+            35%  { opacity: 1; transform: scale(1.012); }
+            100% { opacity: 0; transform: scale(1.22); }
+          }
+          @keyframes bsBlink { 0%,100% { opacity: 1; } 50% { opacity: .15; } }
+          @keyframes bsSpin  { to { transform: rotate(360deg); } }
+          @keyframes bsRise  { to { transform: translate(var(--dx), -112vh); } }
+          @keyframes bsDown  { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
+          @keyframes bsUp    { from { opacity: 0; transform: translateY(18px); }  to { opacity: 1; transform: none; } }
+          @keyframes bsSideL { from { opacity: 0; transform: translate(-26px,-58%); } to { opacity: 1; transform: translateY(-58%); } }
+          @keyframes bsSideR { from { opacity: 0; transform: translate(26px,-58%); }  to { opacity: 1; transform: translateY(-58%); } }
 
-          /* Lớp 1 — ảnh nền theo mùa, phóng rất chậm cho đỡ tĩnh */
-          #boot-splash .bs-bg {
-            position: absolute; inset: 0; background-size: cover; background-position: center 55%;
-            background-image: url('__GREET_PHOTO__');
-            animation: bsKen 34s ease-in-out infinite alternate;
-          }
-          @keyframes bsKen {
-            from { transform: scale(1.02) translate(0.6%, 0); }
-            to   { transform: scale(1.09) translate(-1.2%, -1.2%); }
-          }
-          /* Lớp 2 — ám sắc trời theo giờ (soft-light nên ảnh giữ nguyên chi tiết) */
-          #boot-splash .bs-hour { position: absolute; inset: 0; mix-blend-mode: soft-light; }
-          #boot-splash[data-h="dawn"]  .bs-hour { background: linear-gradient(180deg,#2a3d6b,#ff9d5c 68%,#ffd9a8); }
-          #boot-splash[data-h="day"]   .bs-hour { background: linear-gradient(180deg,#4e97dc,#cfe6f7); }
-          #boot-splash[data-h="dusk"]  .bs-hour { background: linear-gradient(180deg,#3a1c58,#e0724a 62%,#ffb066); }
-          #boot-splash[data-h="night"] .bs-hour { background: linear-gradient(180deg,#070c1e,#1c2352 68%,#2c2f60); }
-          /* Lớp 3 — ám sắc mùa */
-          #boot-splash .bs-season { position: absolute; inset: 0; mix-blend-mode: overlay; opacity: .5; }
-          #boot-splash[data-s="spring"]   .bs-season { background: linear-gradient(120deg,#ffb3d9,#c9a8ff); }
-          #boot-splash[data-s="summer"]   .bs-season { background: linear-gradient(120deg,#7fd4ff,#b9f0e0); }
-          #boot-splash[data-s="autumn"]   .bs-season { background: linear-gradient(120deg,#e09a4a,#c96a2b); }
-          #boot-splash[data-s="winter"]   .bs-season { background: linear-gradient(120deg,#8fb8e0,#cfe2f5); }
-          #boot-splash[data-s="tet"]      .bs-season { background: linear-gradient(120deg,#e03a3a,#ffc93a); opacity: .34; }
-          #boot-splash[data-s="trungthu"] .bs-season { background: linear-gradient(120deg,#ffb347,#ff7a45); opacity: .40; }
-          #boot-splash[data-s="noel"]     .bs-season { background: linear-gradient(120deg,#4a8fd4,#e05a5a); opacity: .42; }
-          /* Lớp 4 — scrim giữ chữ luôn đọc được trên mọi ảnh */
-          #boot-splash .bs-scrim {
+          /* — Nền: tối xanh + lưới + sàn phối cảnh + tia quét + vạch quét + tối góc — */
+          #boot-splash .bs-bgfx {
             position: absolute; inset: 0;
-            background: linear-gradient(96deg,rgba(6,8,14,.76) 0%,rgba(6,8,14,.40) 40%,rgba(6,8,14,.06) 66%,rgba(6,8,14,.34) 100%),
-                        linear-gradient(0deg,rgba(6,8,14,.88) 0%,rgba(6,8,14,.18) 34%,transparent 52%);
+            background: radial-gradient(ellipse 72% 64% at 50% 46%, #08283f 0%, #04182a 32%, #020b15 64%, #01050b 100%);
           }
-          /* Lớp 5 — trăng rằm, chỉ dịp Trung Thu */
-          #boot-splash .bs-moon {
-            position: absolute; z-index: 3; right: 31%; top: 15%; display: none;
-            width: 132px; height: 132px; border-radius: 50%;
-            background: radial-gradient(circle at 60% 36%, #fffdf0 58%, #f2e2b8);
-            animation: bsMoon 6s ease-in-out infinite;
+          #boot-splash[data-pal="mark"] .bs-bgfx {
+            background: radial-gradient(ellipse 72% 64% at 50% 46%, #43190a 0%, #270e06 34%, #120704 66%, #060302 100%);
           }
-          #boot-splash[data-s="trungthu"] .bs-moon { display: block; }
-          @keyframes bsMoon {
-            0%,100% { box-shadow: 0 0 110px 38px rgba(255,225,150,.36); }
-            50%     { box-shadow: 0 0 140px 54px rgba(255,225,150,.52); }
+          #boot-splash .bs-grid {
+            position: absolute; inset: 0; opacity: .2;
+            background: linear-gradient(var(--ln) 1px, transparent 1px) 0 0 / 64px 64px,
+                        linear-gradient(90deg, var(--ln) 1px, transparent 1px) 0 0 / 64px 64px;
+            -webkit-mask-image: radial-gradient(ellipse 58% 54% at 50% 46%, #000 0%, transparent 100%);
+                    mask-image: radial-gradient(ellipse 58% 54% at 50% 46%, #000 0%, transparent 100%);
           }
-          /* Lớp 6 — hạt rơi theo mùa */
-          #boot-splash .bs-pt { position: absolute; z-index: 2; will-change: transform; pointer-events: none; }
-          @keyframes bsFall { to { transform: translate(var(--dx), 118vh) rotate(700deg); } }
-          @keyframes bsRise { to { transform: translate(var(--dx), -118vh) rotate(24deg); } }
+          #boot-splash .bs-floor {
+            position: absolute; left: -30%; right: -30%; bottom: -4%; height: 42%; overflow: hidden; opacity: .5;
+            transform: perspective(560px) rotateX(66deg); transform-origin: 50% 100%;
+            -webkit-mask-image: linear-gradient(0deg, #000 0%, transparent 88%);
+                    mask-image: linear-gradient(0deg, #000 0%, transparent 88%);
+          }
+          #boot-splash .bs-floor::before {
+            content: ""; position: absolute; left: 0; right: 0; top: -64px; bottom: 0;
+            background: linear-gradient(var(--ln) 1px, transparent 1px) 0 0 / 64px 64px,
+                        linear-gradient(90deg, var(--ln) 1px, transparent 1px) 50% 0 / 64px 64px;
+            animation: bsFloor 2.8s linear infinite;
+          }
+          @keyframes bsFloor { to { transform: translateY(64px); } }
+          #boot-splash .bs-scan {
+            position: absolute; left: 0; right: 0; top: 0; height: 160px; transform: translateY(-160px);
+            background: linear-gradient(180deg, transparent, rgba(var(--rgb),.06) 62%, rgba(var(--rgb),.2) 98%, transparent 100%);
+            animation: bsScan 6s linear 1.2s infinite;
+          }
+          @keyframes bsScan { to { transform: translateY(100vh); } }
+          #boot-splash .bs-lines {
+            position: absolute; inset: 0; pointer-events: none; opacity: .55;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,.2) 0 1px, transparent 1px 3px);
+          }
+          #boot-splash .bs-vig {
+            position: absolute; inset: 0; pointer-events: none;
+            background: radial-gradient(ellipse at 50% 46%, transparent 42%, rgba(0,0,0,.7) 100%);
+          }
+          #boot-splash .bs-pt {
+            position: absolute; z-index: 2; top: 108vh; pointer-events: none; will-change: transform;
+            background: var(--c1); box-shadow: 0 0 8px var(--c1); animation: bsRise linear infinite;
+          }
 
-          /* Thẻ kính chứa lời chào */
-          #boot-splash .bs-card {
-            position: absolute; left: 80px; top: calc(50% - 44px); transform: translateY(-50%); z-index: 6;
-            width: 498px; max-width: calc(100vw - 48px); padding: 32px 34px 28px; border-radius: 24px;
-            background: rgba(255,255,255,.10); backdrop-filter: blur(26px) saturate(150%);
-            border: 1px solid rgba(255,255,255,.20);
-            box-shadow: 0 30px 90px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.24);
-            animation: bsCard .75s cubic-bezier(.34,1.32,.64,1) both;
+          /* — Khung góc màn hình — */
+          #boot-splash .bs-fr { position: absolute; z-index: 6; width: 54px; height: 54px; pointer-events: none;
+            border: 0 solid var(--c1); opacity: 0; animation: bsFr .9s ease .15s forwards; }
+          #boot-splash .bs-fr.tl { left: 22px;  top: 22px;    border-top-width: 2px;    border-left-width: 2px; }
+          #boot-splash .bs-fr.tr { right: 22px; top: 22px;    border-top-width: 2px;    border-right-width: 2px; }
+          #boot-splash .bs-fr.bl { left: 22px;  bottom: 22px; border-bottom-width: 2px; border-left-width: 2px; }
+          #boot-splash .bs-fr.br { right: 22px; bottom: 22px; border-bottom-width: 2px; border-right-width: 2px; }
+          @keyframes bsFr { from { opacity: 0; transform: scale(1.5); } to { opacity: .8; transform: none; } }
+
+          /* — Thanh trên — */
+          #boot-splash .bs-top {
+            position: absolute; z-index: 6; left: 58px; right: 58px; top: 36px;
+            display: flex; align-items: center; gap: 16px; opacity: 0; animation: bsDown .8s ease .1s forwards;
           }
-          @keyframes bsCard {
-            from { opacity: 0; transform: translateY(-50%) translateX(-30px); }
-            to   { opacity: 1; transform: translateY(-50%); }
+          #boot-splash .bs-mark { width: 42px; height: 42px; flex: none; filter: drop-shadow(0 0 8px var(--glow)); }
+          #boot-splash .bs-bt { font-size: .98rem; font-weight: 600; letter-spacing: .36em; color: #fff; text-shadow: 0 0 14px var(--glow); }
+          #boot-splash .bs-bs { margin-top: 4px; font-family: var(--mono); font-size: .62rem; letter-spacing: .22em; color: var(--dim); }
+          #boot-splash .bs-rule {
+            flex: 1; height: 16px; margin: 0 10px; position: relative; opacity: .85;
+            background: repeating-linear-gradient(90deg, var(--ln) 0 1px, transparent 1px 9px) 0 100% / 100% 7px no-repeat,
+                        linear-gradient(var(--ln), var(--ln)) 0 100% / 100% 1px no-repeat;
           }
-          #boot-splash .bs-top { display: flex; align-items: center; gap: 12px; }
-          #boot-splash .bs-logo {
-            width: 42px; height: 42px; border-radius: 14px; flex-shrink: 0;
-            background: linear-gradient(140deg,#ff8fb1,#a78bfa);
-            display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 10px 24px rgba(190,110,220,.45);
+          #boot-splash .bs-rule::after {
+            content: ""; position: absolute; bottom: -1px; left: 0; width: 46px; height: 3px;
+            background: var(--c1); box-shadow: 0 0 10px var(--c1); animation: bsRuler 3.6s ease-in-out infinite alternate;
           }
-          #boot-splash .bs-logo svg { width: 27px; height: 27px; }
-          #boot-splash .bs-bn { font-size: .9rem; font-weight: 760; color: #fff; }
-          #boot-splash .bs-bs { font-size: .7rem; color: rgba(255,255,255,.58); }
-          #boot-splash .bs-kick {
-            margin-left: auto; font-size: .68rem; font-weight: 750; letter-spacing: .06em; color: #fff;
-            padding: 5px 11px; border-radius: 999px; white-space: nowrap;
-            background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.2);
+          @keyframes bsRuler { from { left: 0; } to { left: calc(100% - 46px); } }
+          #boot-splash .bs-tag {
+            font-family: var(--mono); font-size: .64rem; letter-spacing: .2em; color: var(--c3); white-space: nowrap;
+            padding: 7px 13px; border: 1px solid var(--ln); background: rgba(var(--rgb),.07);
           }
+          #boot-splash .bs-tag i { display: inline-block; width: 6px; height: 6px; margin-right: 9px; background: var(--c1);
+            box-shadow: 0 0 8px var(--c1); animation: bsBlink 1.3s steps(1) infinite; vertical-align: 1px; }
+
+          /* — Lõi HUD ở giữa — */
+          #boot-splash .bs-core {
+            position: absolute; z-index: 4; left: 0; right: 0; top: 80px; bottom: 112px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+          }
+          #boot-splash .bs-hud { position: relative; width: var(--hud); height: var(--hud); flex: none;
+            animation: bsHudIn 1.2s cubic-bezier(.2,.9,.2,1) both; }
+          @keyframes bsHudIn { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: none; } }
+          #boot-splash .bs-hud::before { content: ""; position: absolute; inset: -20%; border-radius: 50%; pointer-events: none;
+            background: radial-gradient(circle, rgba(var(--rgb),.24) 0%, rgba(var(--rgb),.09) 40%, transparent 68%); animation: bsHalo 4.2s ease-in-out infinite; }
+          @keyframes bsHalo { 0%,100% { opacity: .65; transform: scale(.96); } 50% { opacity: 1; transform: scale(1.04); } }
+          #boot-splash .bs-hud > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; will-change: transform; }
+          #boot-splash .r-tk  { filter: drop-shadow(0 0 3px rgba(var(--rgb),.55)); }
+          #boot-splash .r-seg { animation: bsSpin 96s linear infinite; }
+          #boot-splash .r-arc { animation: bsSpin 36s linear infinite reverse; }
+          #boot-splash .r-dot { animation: bsSpin 26s linear infinite; }
+          #boot-splash .r-rx  { filter: drop-shadow(0 0 10px rgba(var(--rgb),.55)); }
+          #boot-splash .k1 { stroke: var(--c1); }
+          #boot-splash .f1 { fill: var(--c1); }
+          #boot-splash .cl { fill-opacity: .1; stroke-width: 1.4; stroke-opacity: .5; animation: bsCoil 2.2s ease-in-out infinite; }
+          @keyframes bsCoil { 0%,100% { fill-opacity: .08; stroke-opacity: .45; } 50% { fill-opacity: .6; stroke-opacity: 1; } }
+          #boot-splash .bs-radar {
+            position: absolute; inset: 5%; border-radius: 50%; animation: bsSpin 6.5s linear infinite;
+            background: conic-gradient(from 0deg, rgba(var(--rgb),0) 0deg, rgba(var(--rgb),0) 245deg,
+                        rgba(var(--rgb),.20) 357deg, rgba(var(--rgb),.7) 360deg);
+            -webkit-mask-image: radial-gradient(circle, transparent 30%, #000 31%, #000 71%, transparent 72%);
+                    mask-image: radial-gradient(circle, transparent 30%, #000 31%, #000 71%, transparent 72%);
+          }
+          #boot-splash .bs-ctr { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 50%; text-align: center; }
+          #boot-splash .bs-pct {
+            font-family: var(--mono); font-weight: 300; font-size: calc(var(--hud) * .092); color: #fff; line-height: 1;
+            letter-spacing: -.03em; font-variant-numeric: tabular-nums; text-shadow: 0 0 18px var(--glow);
+          }
+          #boot-splash .bs-pst {
+            margin-top: calc(var(--hud) * .016); font-size: calc(var(--hud) * .02); letter-spacing: .3em; font-weight: 500; color: var(--c1);
+          }
+          #boot-splash.bs-done .bs-pst { color: #fff; text-shadow: 0 0 12px var(--c1); }
+          #boot-splash .bs-shock { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--c1); opacity: 0; pointer-events: none; }
+          #boot-splash.bs-done .bs-shock { animation: bsShock 1.3s ease-out; }
+          @keyframes bsShock { 0% { opacity: .95; transform: scale(.55); } 100% { opacity: 0; transform: scale(1.7); } }
+
+          /* — Lời chào gõ chữ — */
+          #boot-splash .bs-greet { margin-top: clamp(6px, 2.2vh, 24px); text-align: center; min-height: 92px; }
           #boot-splash .bs-hi {
-            margin-top: 22px; font-size: 2.05rem; font-weight: 840; letter-spacing: -.04em;
-            color: #fff; line-height: 1.1;
+            display: inline-flex; align-items: center; gap: 14px; text-transform: uppercase; white-space: nowrap;
+            font-size: clamp(1.2rem, 3.2vh, 2rem); font-weight: 300; letter-spacing: .22em; color: #fff; text-shadow: 0 0 22px var(--glow);
           }
-          #boot-splash .bs-hi em {
-            font-style: normal; background: linear-gradient(100deg,#ffc9de,#c4b5fd 55%,#93c5fd);
-            -webkit-background-clip: text; background-clip: text; color: transparent;
-          }
-          #boot-splash .bs-sub { margin-top: 9px; font-size: .815rem; font-weight: 600; color: rgba(255,255,255,.7); }
-          #boot-splash .bs-enter {
-            margin-top: 26px; display: flex; align-items: center; gap: 9px;
-            font-size: .82rem; font-weight: 600; color: rgba(255,255,255,.78);
-            opacity: 0; animation: bsFade .45s ease 2s forwards;
-          }
-          #boot-splash .bs-enter kbd {
-            font: inherit; font-weight: 800; color: #fff; background: rgba(255,255,255,.2);
-            border: 1px solid rgba(255,255,255,.3); border-radius: 8px; padding: 4px 12px;
-          }
-          #boot-splash .bs-hint2 {
-            margin-top: 9px; font-size: .72rem; color: rgba(255,255,255,.6);
-            opacity: 0; animation: bsFade .45s ease 2.3s forwards;
-          }
-          @keyframes bsFade { to { opacity: 1; } }
-          #boot-splash .bs-blink { animation: bsBlink 1.6s ease-in-out infinite; }
-          @keyframes bsBlink { 0%,100% { opacity: .4; } 50% { opacity: 1; } }
+          #boot-splash .bs-hi b { font-weight: 600; color: var(--c1); }
+          #boot-splash .bs-caret { display: inline-block; width: .5em; height: 1em; margin-left: 2px; background: var(--c1);
+            box-shadow: 0 0 12px var(--c1); animation: bsBlink .85s steps(1) infinite; }
+          #boot-splash .bs-wave { display: inline-flex; align-items: center; gap: 3px; height: 22px; opacity: .2; transition: opacity .3s; }
+          #boot-splash .bs-wave i { width: 3px; height: 100%; background: var(--c1); box-shadow: 0 0 8px var(--glow); transform: scaleY(.18); }
+          #boot-splash .bs-wave.on { opacity: 1; }
+          #boot-splash .bs-wave.on i { animation: bsWave .8s ease-in-out infinite; }
+          @keyframes bsWave { 0%,100% { transform: scaleY(.18); } 50% { transform: scaleY(1); } }
+          #boot-splash .bs-sub, #boot-splash .bs-enter { opacity: 0; transition: opacity .6s ease; }
+          #boot-splash .bs-sub { margin-top: 10px; font-family: var(--mono); font-size: .72rem; letter-spacing: .14em; color: var(--dim); text-transform: uppercase; text-wrap: balance; }
+          #boot-splash .bs-enter { margin-top: 13px; font-family: var(--mono); font-size: .74rem; letter-spacing: .2em; color: var(--c3); }
+          #boot-splash .bs-enter kbd { font: inherit; font-weight: 700; color: #03121c; background: var(--c1); padding: 3px 10px; margin: 0 6px;
+            box-shadow: 0 0 16px var(--glow); }
+          #boot-splash .bs-enter em { font-style: normal; color: var(--dim); margin-left: 10px; letter-spacing: .1em; }
+          #boot-splash .bs-enter .tc { display: none; }
+          #boot-splash .bs-enter b { display: inline-block; animation: bsBlink 1.4s ease-in-out infinite; font-weight: 400; }
+          #boot-splash .bs-sub.show, #boot-splash .bs-enter.show { opacity: 1; }
 
-          /* Đồng hồ + ngày, góc phải trên */
-          #boot-splash .bs-corner {
-            position: absolute; right: 74px; top: 60px; z-index: 6; text-align: right;
-            animation: bsRight .8s cubic-bezier(.34,1.3,.64,1) .18s both;
+          /* — Hai bảng bên: nhật ký khởi động / thông tin ca — */
+          #boot-splash .bs-panel {
+            position: absolute; z-index: 5; top: 45%; width: clamp(236px, 21vw, 340px); padding: 14px 16px 16px;
+            background: linear-gradient(180deg, rgba(var(--rgb),.085), rgba(var(--rgb),.02)); border: 1px solid var(--ln);
           }
-          @keyframes bsRight { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: none; } }
-          #boot-splash .bs-clock {
-            font-size: 3.9rem; font-weight: 250; color: #fff; letter-spacing: -.04em; line-height: 1;
-            font-variant-numeric: tabular-nums; text-shadow: 0 6px 40px rgba(0,0,0,.5);
+          #boot-splash .bs-panel::before, #boot-splash .bs-panel::after { content: ""; position: absolute; width: 12px; height: 12px; border: 2px solid var(--c1); }
+          #boot-splash .bs-panel::before { left: -1px; top: -1px; border-right: 0; border-bottom: 0; }
+          #boot-splash .bs-panel::after  { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
+          #boot-splash .bs-left  { left: 58px;  transform: translateY(-58%); animation: bsSideL .9s cubic-bezier(.2,.9,.2,1) .3s both; }
+          #boot-splash .bs-right { right: 58px; transform: translateY(-58%); animation: bsSideR .9s cubic-bezier(.2,.9,.2,1) .4s both; }
+          #boot-splash .bs-ph {
+            display: flex; align-items: center; gap: 9px; padding-bottom: 10px; margin-bottom: 8px; border-bottom: 1px solid var(--ln);
+            font-size: .66rem; font-weight: 600; letter-spacing: .26em; color: var(--c1);
           }
-          #boot-splash .bs-date { margin-top: 7px; font-size: .85rem; font-weight: 600; color: rgba(255,255,255,.7); }
+          #boot-splash .bs-ph i { width: 6px; height: 6px; background: var(--c1); box-shadow: 0 0 8px var(--c1); animation: bsBlink 1.2s steps(1) infinite; }
+          #boot-splash .bs-ph span { margin-left: auto; font-family: var(--mono); font-weight: 400; letter-spacing: .1em; color: var(--dim); }
+          #boot-splash .bs-log { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: .66rem; letter-spacing: .03em; }
+          #boot-splash .bs-log li {
+            display: flex; align-items: center; gap: 9px; padding: 8px 0; color: var(--tx); border-bottom: 1px dashed rgba(var(--rgb),.13);
+            opacity: 0; clip-path: inset(0 100% 0 0);
+          }
+          #boot-splash .bs-log li.in { animation: bsLine .42s steps(16) forwards; }
+          @keyframes bsLine { to { opacity: 1; clip-path: inset(0 0 0 0); } }
+          #boot-splash .bs-log li em { font-style: normal; color: var(--c1); opacity: .55; }
+          #boot-splash .bs-log li s { margin-left: auto; text-decoration: none; font-weight: 500; letter-spacing: .14em; color: var(--c1); opacity: 0; }
+          #boot-splash .bs-log li.ok s { opacity: 1; animation: bsOk .6s ease; }
+          @keyframes bsOk { 0% { opacity: 0; } 35% { opacity: 1; text-shadow: 0 0 16px var(--c1); } 100% { text-shadow: 0 0 6px rgba(var(--rgb),.6); } }
+          #boot-splash .bs-eq { display: flex; align-items: flex-end; gap: 3px; height: 28px; margin-top: 13px; }
+          #boot-splash .bs-eq i { flex: 1; height: 100%; transform-origin: 50% 100%; transform: scaleY(.25);
+            background: linear-gradient(0deg, rgba(var(--rgb),.12), var(--c1)); animation: bsEq 1.2s ease-in-out infinite; }
+          @keyframes bsEq { 0%,100% { transform: scaleY(.18); } 50% { transform: scaleY(1); } }
+          #boot-splash .bs-time {
+            font-family: var(--mono); font-weight: 300; font-size: 2.9rem; line-height: 1; color: #fff; letter-spacing: -.03em;
+            text-shadow: 0 0 20px var(--glow); font-variant-numeric: tabular-nums;
+          }
+          #boot-splash .bs-time i { font-style: normal; animation: bsBlink 1s steps(1) infinite; }
+          #boot-splash .bs-kv {
+            display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 8px 0;
+            font-size: .64rem; letter-spacing: .18em; color: var(--dim); border-bottom: 1px dashed rgba(var(--rgb),.13);
+          }
+          #boot-splash .bs-kv b { font-family: var(--mono); font-weight: 500; letter-spacing: .06em; color: var(--tx); text-align: right; }
+          #boot-splash .bs-kv b.on::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 7px; background: var(--c1);
+            border-radius: 50%; box-shadow: 0 0 8px var(--c1); animation: bsBlink 1.5s ease-in-out infinite; vertical-align: 1px; }
+          #boot-splash .bs-prog { position: relative; height: 4px; margin-top: 10px; background: rgba(var(--rgb),.15); }
+          #boot-splash .bs-prog u { position: absolute; left: 0; top: 0; bottom: 0; width: 0; box-shadow: 0 0 10px var(--c1);
+            background: linear-gradient(90deg, var(--c2), var(--c1)); transition: width 1.5s cubic-bezier(.2,.8,.2,1); }
+          #boot-splash .bs-pgl { display: flex; justify-content: space-between; margin-top: 6px; font-family: var(--mono); font-size: .58rem; letter-spacing: .12em; color: var(--dim); }
 
-          /* Thanh số liệu ở đáy */
-          #boot-splash .bs-strip {
-            position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; height: 84px;
-            display: flex; align-items: center; padding: 0 80px;
-            background: linear-gradient(0deg,rgba(6,8,14,.72),rgba(6,8,14,.14));
-            border-top: 1px solid rgba(255,255,255,.13); backdrop-filter: blur(14px);
-            animation: bsUp .6s ease .45s both;
-          }
-          @keyframes bsUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
-          #boot-splash .bs-cell { flex: 1; display: flex; flex-direction: column; gap: 3px; position: relative; }
-          #boot-splash .bs-cell + .bs-cell { padding-left: 32px; }
-          #boot-splash .bs-cell + .bs-cell::before {
-            content: ""; position: absolute; left: 0; top: 5px; bottom: 5px; width: 1px;
-            background: rgba(255,255,255,.14);
-          }
-          #boot-splash .bs-k { font-size: .7rem; font-weight: 640; letter-spacing: .05em; color: rgba(255,255,255,.55); }
-          #boot-splash .bs-v {
-            font-size: 1.36rem; font-weight: 800; color: #fff;
-            font-variant-numeric: tabular-nums; letter-spacing: -.02em;
-          }
-          #boot-splash .bs-v.warn { color: #ffd07a; }
-          #boot-splash .bs-v.mut { color: rgba(255,255,255,.4); font-weight: 600; }
+          /* — Thanh số liệu dưới đáy — */
+          #boot-splash .bs-strip { position: absolute; z-index: 6; left: 58px; right: 58px; bottom: 36px; display: flex; gap: 14px;
+            opacity: 0; animation: bsUp .8s ease .55s forwards; }
+          #boot-splash .bs-cell { position: relative; flex: 1; min-width: 0; padding: 12px 16px 13px;
+            background: linear-gradient(180deg, rgba(var(--rgb),.075), rgba(var(--rgb),.015)); border: 1px solid rgba(var(--rgb),.2); }
+          #boot-splash .bs-cell::before, #boot-splash .bs-cell::after { content: ""; position: absolute; width: 10px; height: 10px; border: 2px solid var(--c1); }
+          #boot-splash .bs-cell::before { left: -1px; top: -1px; border-right: 0; border-bottom: 0; }
+          #boot-splash .bs-cell::after  { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
+          #boot-splash .bs-k { font-size: .6rem; font-weight: 500; letter-spacing: .22em; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          #boot-splash .bs-v { margin-top: 6px; font-family: var(--mono); font-weight: 300; font-size: 1.8rem; line-height: 1; color: #fff;
+            letter-spacing: -.03em; font-variant-numeric: tabular-nums; text-shadow: 0 0 16px var(--glow); }
+          #boot-splash .bs-v.warn { color: var(--amb); text-shadow: 0 0 16px rgba(255,184,77,.55); }
+          #boot-splash .bs-v.mut  { color: rgba(var(--rgb),.4); text-shadow: none; }
 
-          /* Màn hẹp (điện thoại): bỏ đồng hồ, thẻ kính tràn ngang, thanh số liệu gọn lại */
+          /* — Màn thấp / màn hẹp — */
+          @media (max-height: 760px) { #boot-splash { --hud: min(54vh, 46vw, 520px); } #boot-splash .bs-v { font-size: 1.5rem; } }
+          @media (max-height: 640px) {
+            #boot-splash { --hud: min(44vh, 46vw, 400px); }
+            #boot-splash .bs-greet { min-height: 70px; margin-top: 4px; }
+            #boot-splash .bs-hi { font-size: 1.1rem; }
+            #boot-splash .bs-sub { margin-top: 6px; }
+            #boot-splash .bs-enter { margin-top: 8px; }
+            #boot-splash .bs-core { top: 70px; bottom: 96px; }
+            #boot-splash .bs-strip { bottom: 16px; }
+            #boot-splash .bs-cell { padding: 8px 12px 9px; }
+            #boot-splash .bs-v { font-size: 1.25rem; margin-top: 4px; }
+          }
+          @media (max-width: 1080px) { #boot-splash .bs-panel { display: none; } }
+          @media (hover: none) { #boot-splash .bs-enter .kb { display: none; } #boot-splash .bs-enter .tc { display: inline; } }
+          #boot-splash[data-touch] .bs-enter .kb { display: none; } #boot-splash[data-touch] .bs-enter .tc { display: inline; }
           @media (max-width: 820px) {
-            #boot-splash .bs-corner { display: none; }
-            #boot-splash .bs-card { left: 24px; right: 24px; width: auto; padding: 24px 22px 22px; }
-            #boot-splash .bs-hi { font-size: 1.6rem; }
-            #boot-splash .bs-strip { padding: 0 22px; height: 74px; }
+            #boot-splash { --hud: min(78vw, 42vh, 420px); }
+            #boot-splash .bs-top { left: 20px; right: 20px; top: 24px; }
+            #boot-splash .bs-rule, #boot-splash .bs-tag.t2 { display: none; }
+            #boot-splash .bs-fr { width: 34px; height: 34px; }
+            #boot-splash .bs-fr.tl, #boot-splash .bs-fr.bl { left: 10px; }
+            #boot-splash .bs-fr.tr, #boot-splash .bs-fr.br { right: 10px; }
+            #boot-splash .bs-core { top: 76px; bottom: 96px; }
+            #boot-splash .bs-hi { font-size: clamp(1rem, 4.7vw, 1.5rem); letter-spacing: .1em; gap: 8px; white-space: normal; flex-wrap: wrap; justify-content: center; padding: 0 14px; }
+            #boot-splash .bs-wave { display: none; }
+            #boot-splash .bs-sub { font-size: .62rem; letter-spacing: .08em; padding: 0 16px; }
+            #boot-splash .bs-enter { font-size: .66rem; letter-spacing: .12em; }
+            #boot-splash .bs-enter em { display: none; }
+            #boot-splash .bs-bs { white-space: nowrap; letter-spacing: .12em; }
+            #boot-splash .bs-strip { left: 14px; right: 14px; bottom: 18px; gap: 8px; }
+            #boot-splash .bs-cell { padding: 9px 11px 10px; }
             #boot-splash .bs-cell:nth-child(n+4) { display: none; }
-            #boot-splash .bs-cell + .bs-cell { padding-left: 18px; }
-            #boot-splash .bs-k {
-                font-size: .61rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-            }
-            #boot-splash .bs-v { font-size: 1.15rem; }
+            #boot-splash .bs-k { font-size: .52rem; letter-spacing: .14em; }
+            #boot-splash .bs-v { font-size: 1.3rem; }
           }
-        `;
+          @media (prefers-reduced-motion: reduce) {
+            #boot-splash *, #boot-splash *::before, #boot-splash *::after { animation: none !important; transition: none !important; }
+            #boot-splash .bs-top, #boot-splash .bs-strip, #boot-splash .bs-fr, #boot-splash .bs-hud,
+            #boot-splash .bs-panel, #boot-splash .bs-log li { opacity: 1 !important; clip-path: none !important; }
+            #boot-splash .bs-fr { opacity: .8 !important; }
+            #boot-splash .bs-log li s { opacity: 1 !important; }
+            #boot-splash .bs-scan, #boot-splash .bs-radar, #boot-splash .bs-pt { display: none; }
+          }`;
         doc.head.appendChild(css3);
 
+        // ── Dữ liệu hiển thị (đã điền từ Python) ──
+        var BS_SHIFT = '__GREET_SHIFT__', BS_HOURS = '__GREET_HOURS__', BS_DATE = '__GREET_DATE__',
+            BS_CLOCK = '__GREET_CLOCK__', BS_SEASON = '__GREET_SEASON_TEXT__', BS_SUB = '__GREET_SUB__',
+            BS_SHIFT_PCT = __GREET_SHIFT_PCT__;
+        var BS_LOG = ['KHỞI ĐỘNG LÕI HỆ THỐNG', 'NẠP MODULE KBTT · VNM · ĐK14', 'NẠP MODULE REGCARD · ARR',
+                      'KIỂM TRA DỮ LIỆU CA TRỰC', 'XÁC THỰC NGƯỜI VẬN HÀNH: TÂN', 'ĐỒNG BỘ GIAO DIỆN LỄ TÂN'];
+        var BS_LOG_T = [0.35, 0.75, 1.15, 1.55, 1.95, 2.3];                       // giây: thời điểm dòng nhật ký hiện ra
+        var BS_PG = [[0, 0], [0.35, .07], [1.0, .34], [1.7, .62], [2.3, .87], [2.7, .97], [3.0, 1]];  // [giây, tiến độ 0..1]
+        var BS_DONE_T = 3.0;
+
+        // ── Hình học SVG: toạ độ cực, cung, đoạn cuộn dây hình thang ──
+        function P(r, a) { var t = (a - 90) * Math.PI / 180; return (300 + r * Math.cos(t)).toFixed(1) + ' ' + (300 + r * Math.sin(t)).toFixed(1); }
+        function ARC(r, a0, a1) { return 'M' + P(r, a0) + ' A' + r + ' ' + r + ' 0 ' + ((a1 - a0) > 180 ? 1 : 0) + ' 1 ' + P(r, a1); }
+        function SEG(r1, r2, a0, a1) {
+            return 'M' + P(r2, a0) + ' A' + r2 + ' ' + r2 + ' 0 0 1 ' + P(r2, a1) + ' L' + P(r1, a1) +
+                   ' A' + r1 + ' ' + r1 + ' 0 0 0 ' + P(r1, a0) + ' Z';
+        }
+        var coils = '', i, svgArcs = '';
+        for (i = 0; i < 10; i++) {
+            coils += '<path class="cl k1 f1" d="' + SEG(112, 150, i * 36 + 5, i * 36 + 31) + '" style="animation-delay:' + (i * 0.22).toFixed(2) + 's"/>';
+        }
+        [[8, 78], [128, 198], [248, 318]].forEach(function (a) {
+            svgArcs += '<path class="k1" d="' + ARC(236, a[0], a[1]) + '" stroke-width="5" stroke-opacity=".92"/>' +
+                       '<path class="k1" d="M' + P(228, a[0]) + ' L' + P(244, a[0]) + ' M' + P(228, a[1]) + ' L' + P(244, a[1]) + '" stroke-width="1.6"/>';
+        });
+        var lbl = '';
+        [[0, '000'], [90, '090'], [180, '180'], [270, '270']].forEach(function (d) {
+            var q = P(268, d[0]).split(' ');
+            lbl += '<text x="' + q[0] + '" y="' + (parseFloat(q[1]) + 3) + '" text-anchor="middle" class="f1" fill-opacity=".6" style="font:9px var(--mono);letter-spacing:.1em">' + d[1] + '</text>';
+        });
+
+        var HUD =
+          '<div class="bs-radar"></div>' +
+          '<svg class="r-tk" viewBox="0 0 600 600" fill="none">' +
+            '<circle cx="300" cy="300" r="298" class="k1" stroke-opacity=".45" stroke-width="1"/>' +
+            '<circle cx="300" cy="300" r="289" pathLength="360" class="k1" stroke-width="8" stroke-opacity=".42" stroke-dasharray=".4 1.6"/>' +
+            '<circle cx="300" cy="300" r="286" pathLength="360" class="k1" stroke-width="14" stroke-opacity=".9" stroke-dasharray=".7 9.3" stroke-dashoffset=".35"/>' +
+            '<path class="f1" d="M300 13 L292 0 L308 0 Z"/>' + lbl +
+          '</svg>' +
+          '<svg class="r-seg" viewBox="0 0 600 600" fill="none"><g filter="url(#bsGl)">' +
+            '<circle cx="300" cy="300" r="256" pathLength="360" class="k1" stroke-width="2.4" stroke-opacity=".72" ' +
+              'stroke-dasharray="46 6 18 6 82 6 12 6 34 6 98 6 12 6 10 6"/>' +
+          '</g></svg>' +
+          '<svg class="r-arc" viewBox="0 0 600 600" fill="none"><g filter="url(#bsGl)">' +
+            '<circle cx="300" cy="300" r="236" class="k1" stroke-opacity=".3" stroke-width=".8"/>' + svgArcs +
+          '</g></svg>' +
+          '<svg class="r-pg" viewBox="0 0 600 600" fill="none">' +
+            '<defs><linearGradient id="bsGr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--c2)"/><stop offset="1" style="stop-color:var(--c1)"/></linearGradient>' +
+            '<filter id="bsGl" x="-25%" y="-25%" width="150%" height="150%"><feGaussianBlur stdDeviation="3.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>' +
+            '<g transform="rotate(-90 300 300)">' +
+              '<circle cx="300" cy="300" r="212" class="k1" stroke-opacity=".15" stroke-width="7"/>' +
+              '<circle id="bsPg" cx="300" cy="300" r="212" pathLength="360" stroke="url(#bsGr)" stroke-width="7" stroke-dasharray="0 360" filter="url(#bsGl)"/>' +
+            '</g>' +
+            '<circle id="bsHd" cx="300" cy="88" r="6" fill="#fff" filter="url(#bsGl)"/>' +
+          '</svg>' +
+          '<svg class="r-dot" viewBox="0 0 600 600" fill="none">' +
+            '<circle cx="300" cy="300" r="188" pathLength="360" class="k1" stroke-width="3" stroke-linecap="round" stroke-opacity=".75" stroke-dasharray=".01 2.99"/>' +
+            '<circle cx="300" cy="300" r="176" pathLength="360" class="k1" stroke-width="1" stroke-opacity=".5" stroke-dasharray="20 10 4 10"/>' +
+          '</svg>' +
+          '<svg class="r-rx" viewBox="0 0 600 600" fill="none">' +
+            '<defs><radialGradient id="bsCore" cx="50%" cy="50%" r="50%"><stop offset="0" style="stop-color:var(--core0);stop-opacity:.96"/>' +
+            '<stop offset=".8" style="stop-color:var(--core1);stop-opacity:.92"/><stop offset="1" style="stop-color:var(--c1);stop-opacity:.3"/></radialGradient></defs>' +
+            '<circle cx="300" cy="300" r="162" class="k1" stroke-opacity=".5" stroke-width="1.2"/>' + coils +
+            '<circle cx="300" cy="300" r="104" class="k1" stroke-width="2.4" stroke-opacity=".92"/>' +
+            '<circle cx="300" cy="300" r="97" class="k1" stroke-width=".8" stroke-opacity=".6" stroke-dasharray="2 4"/>' +
+            '<circle cx="300" cy="300" r="90" fill="url(#bsCore)" class="k1" stroke-width="1" stroke-opacity=".75"/>' +
+          '</svg>' +
+          '<div class="bs-shock"></div>' +
+          '<div class="bs-ctr"><div class="bs-pct" id="bsPct">0%</div><div class="bs-pst" id="bsPst">ĐANG KHỞI ĐỘNG</div></div>';
+
+        var clk = BS_CLOCK.split(':');
+        var MARK = '<svg class="bs-mark" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="21" class="k1" stroke-width="1.6"/>' +
+                   '<circle cx="24" cy="24" r="15" class="k1" stroke-width="3" stroke-dasharray="5 2.5"/>' +
+                   '<circle cx="24" cy="24" r="6" class="f1"/></svg>';
         var el = doc.createElement('div');
         el.id = 'boot-splash';
         el.setAttribute('data-h', '__GREET_HOUR__');
         el.setAttribute('data-s', '__GREET_SEASON__');
         el.innerHTML =
-            '<div class="bs-bg"></div><div class="bs-hour"></div><div class="bs-season"></div>' +
-            '<div class="bs-scrim"></div><div class="bs-moon"></div>' +
-            '<div class="bs-card">' +
-              '<div class="bs-top">' +
-                '<div class="bs-logo"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><g>' +
-                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#fff"/>' +
-                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffe8f1" transform="rotate(72 50 50)"/>' +
-                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#fff" transform="rotate(144 50 50)"/>' +
-                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#ffe8f1" transform="rotate(216 50 50)"/>' +
-                  '<path d="M50 50 C38 36 40 14 46 9 C48 7 52 7 54 9 C60 14 62 36 50 50 Z" fill="#fff" transform="rotate(288 50 50)"/>' +
-                  '<circle cx="50" cy="50" r="7" fill="#ffd6e6"/>' +
-                '</g></svg></div>' +
-                '<div><div class="bs-bn">Tân Hotel</div><div class="bs-bs">Front Office toolkit</div></div>' +
-                '<span class="bs-kick">__GREET_SEASON_LABEL__</span>' +
-              '</div>' +
-              '<div class="bs-hi">Chào <em>__GREET_SHIFT__</em>, Tân __GREET_EMOJI__</div>' +
-              '<div class="bs-sub">__GREET_SUB__</div>' +
-              '<div class="bs-enter"><span class="bs-blink">&#9654;</span> Nhấn <kbd>Enter</kbd> để vào</div>' +
-              '<div class="bs-hint2">hoặc chạm/bấm chuột vào màn hình</div>' +
-            '</div>' +
-            '<div class="bs-corner">' +
-              '<div class="bs-clock">__GREET_CLOCK__</div>' +
-              '<div class="bs-date">__GREET_DATE__</div>' +
-            '</div>' +
-            '<div class="bs-strip">__GREET_CELLS__</div>';
+          '<div class="bs-bgfx"></div><div class="bs-grid"></div><div class="bs-floor"></div><div class="bs-scan"></div>' +
+          '<div class="bs-lines"></div><div class="bs-vig"></div>' +
+          '<i class="bs-fr tl"></i><i class="bs-fr tr"></i><i class="bs-fr bl"></i><i class="bs-fr br"></i>' +
+          '<div class="bs-top">' + MARK +
+            '<div><div class="bs-bt">TÂN HOTEL</div><div class="bs-bs">FRONT OFFICE · AI CORE</div></div>' +
+            '<div class="bs-rule"></div>' +
+            '<span class="bs-tag t2">' + BS_SEASON + '</span>' +
+            '<span class="bs-tag"><i></i>TRỰC TUYẾN</span>' +
+          '</div>' +
+          '<section class="bs-panel bs-left"><div class="bs-ph"><i></i>NHẬT KÝ KHỞI ĐỘNG<span>SYS.LOG</span></div><ul class="bs-log" id="bsLog"></ul>' +
+            '<div class="bs-eq" id="bsEq"></div></section>' +
+          '<section class="bs-panel bs-right"><div class="bs-ph"><i></i>THÔNG TIN CA TRỰC<span>OPS</span></div>' +
+            '<div class="bs-time">' + clk[0] + '<i>:</i>' + (clk[1] || '00') + '</div>' +
+            '<div class="bs-kv" style="margin-top:10px">NGÀY<b>' + BS_DATE.toUpperCase() + '</b></div>' +
+            '<div class="bs-kv">CA TRỰC<b>' + BS_SHIFT.toUpperCase() + ' · ' + BS_HOURS + '</b></div>' +
+            '<div class="bs-kv">NGƯỜI VẬN HÀNH<b>TÂN</b></div>' +
+            '<div class="bs-kv">TRẠNG THÁI<b class="on">SẴN SÀNG</b></div>' +
+            '<div class="bs-prog"><u id="bsShiftBar"></u></div>' +
+            '<div class="bs-pgl"><span>TIẾN ĐỘ CA</span><span>' + BS_SHIFT_PCT + '%</span></div></section>' +
+          '<div class="bs-core"><div class="bs-hud">' + HUD + '</div>' +
+            '<div class="bs-greet"><div class="bs-hi"><span class="bs-wave" id="bsWave"><i></i><i></i><i></i><i></i><i></i></span>' +
+              '<span id="bsTyped"></span><span class="bs-caret"></span></div>' +
+              '<div class="bs-sub" id="bsSub">' + BS_SUB + '</div>' +
+              '<div class="bs-enter" id="bsEnter"><b>▶</b> <span class="kb">NHẤN <kbd>ENTER</kbd> ĐỂ VÀO HỆ THỐNG<em>hoặc chạm / bấm chuột vào màn hình</em></span>' +
+                '<span class="tc">CHẠM VÀO MÀN HÌNH ĐỂ VÀO HỆ THỐNG</span></div>' +
+            '</div></div>' +
+          '<div class="bs-strip">__GREET_CELLS__</div>';
         doc.body.appendChild(el);
 
-        // ── Hạt rơi theo mùa — thuần transform/opacity, chạy trên GPU ──
-        var BS_PT = {
-          spring:   {n: 26, col: ['#f6a8c9','#f293bc','#f9c1d9'], r: '0 60% 0 60%', sz: [10,18],  dur: [5,9],   a: 'bsFall'},
-          summer:   {n: 32, col: ['#fff4c0','#ffffff','#bff0ff'], r: '50%',         sz: [3,8],    dur: [6,11],  a: 'bsRise'},
-          autumn:   {n: 24, col: ['#e0913f','#c96a2b','#e8b45a'], r: '0 70% 0 70%', sz: [11,19],  dur: [6,10],  a: 'bsFall'},
-          winter:   {n: 70, col: ['rgba(200,225,250,.85)'],       r: '2px',         sz: [1.6,2.8],dur: [1.0,1.9],a: 'bsFall', tall: 9},
-          tet:      {n: 26, col: ['#ffd24a','#ffc107','#ffe27a'], r: '0 60% 0 60%', sz: [10,17],  dur: [5,9],   a: 'bsFall'},
-          trungthu: {n: 13, col: ['#ff9f43','#ffb86b','#ff7f50'], r: '34% 34% 42% 42%', sz: [16,26], dur: [11,18], a: 'bsRise', glow: true},
-          noel:     {n: 80, col: ['#ffffff','#eaf4ff'],           r: '50%',         sz: [3,7],    dur: [6,12],  a: 'bsFall'}
-        }['__GREET_SEASON__'];
-        if (BS_PT) {
-            for (var j = 0; j < BS_PT.n; j++) {
-                var pt = doc.createElement('div');
-                pt.className = 'bs-pt';
-                var sz = BS_PT.sz[0] + Math.random() * (BS_PT.sz[1] - BS_PT.sz[0]);
-                var du = BS_PT.dur[0] + Math.random() * (BS_PT.dur[1] - BS_PT.dur[0]);
-                var col = BS_PT.col[j % BS_PT.col.length];
-                var fill = (BS_PT.r === '50%')
-                    ? 'radial-gradient(circle,' + col + ',transparent 72%)'
-                    : 'radial-gradient(circle at 30% 30%,#fff,' + col + ' 72%)';
-                if (BS_PT.glow) fill = 'radial-gradient(circle at 50% 38%,#fff2c0,' + col + ' 72%)';
-                pt.style.cssText = (BS_PT.a === 'bsRise' ? 'top:112vh;' : 'top:-42px;') +
-                    'left:' + (Math.random() * 100) + 'vw;' +
-                    'width:' + sz + 'px;height:' + (BS_PT.tall ? sz * BS_PT.tall : sz * (BS_PT.glow ? 1.3 : 1)) + 'px;' +
-                    'background:' + fill + ';border-radius:' + BS_PT.r + ';' +
-                    (BS_PT.glow ? 'box-shadow:0 0 18px 4px rgba(255,170,80,.55);' : '') +
-                    '--dx:' + (Math.random() * 180 - 90) + 'px;' +
-                    'animation:' + BS_PT.a + ' ' + du + 's linear ' + (-Math.random() * du) + 's infinite';
-                el.appendChild(pt);
+        // ── Hạt dữ liệu bay lên + cột sóng ở bảng nhật ký ──
+        var j, pt, bars = '';
+        for (j = 0; j < 18; j++) {
+            pt = doc.createElement('div');
+            pt.className = 'bs-pt';
+            var sz = 1.5 + Math.random() * 1.8, du = 9 + Math.random() * 10;
+            pt.style.cssText = 'left:' + (Math.random() * 100) + 'vw;width:' + sz + 'px;height:' + (sz * (Math.random() < .6 ? 1 : 3.5)) + 'px;opacity:' +
+                (0.2 + Math.random() * 0.4) + ';--dx:' + (Math.random() * 120 - 60) + 'px;animation-duration:' + du + 's;animation-delay:' + (-Math.random() * du) + 's';
+            el.appendChild(pt);
+        }
+        for (j = 0; j < 22; j++) { bars += '<i style="animation-duration:' + (0.7 + Math.random() * 0.9).toFixed(2) + 's;animation-delay:' + (-Math.random()).toFixed(2) + 's"></i>'; }
+        var eqEl = doc.getElementById('bsEq'); if (eqEl) eqEl.innerHTML = bars;
+
+        // ── Đếm số ở thanh dưới: chỉ đếm khi ô là số nguyên thật, "—" thì giữ nguyên ──
+        var cellVals = [];
+        Array.prototype.forEach.call(el.querySelectorAll('.bs-strip .bs-v'), function (v) {
+            var raw = (v.textContent || '').trim(), n = parseInt(raw, 10);
+            if (!isNaN(n) && String(n) === raw) { cellVals.push([v, n]); v.textContent = '0'; }
+        });
+        var logEl = doc.getElementById('bsLog'), logLis = [];
+        BS_LOG.forEach(function (txt, k) {
+            var li = doc.createElement('li');
+            li.innerHTML = '<em>' + ('0' + (k + 1)).slice(-2) + '</em><span>' + txt + '</span><s>OK</s>';
+            logEl.appendChild(li); logLis.push(li);
+        });
+        var pgEl = doc.getElementById('bsPg'), hdEl = doc.getElementById('bsHd'), pctEl = doc.getElementById('bsPct'),
+            pstEl = doc.getElementById('bsPst'), typedEl = doc.getElementById('bsTyped'), waveEl = doc.getElementById('bsWave'),
+            subEl = doc.getElementById('bsSub'), enterEl = doc.getElementById('bsEnter'), barEl = doc.getElementById('bsShiftBar');
+        var reduce = false;
+        try { reduce = W.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+
+        function interp(t) {
+            for (var q = 1; q < BS_PG.length; q++) {
+                if (t <= BS_PG[q][0]) { var a = BS_PG[q - 1], b = BS_PG[q]; return a[1] + (b[1] - a[1]) * (t - a[0]) / (b[0] - a[0]); }
             }
+            return 1;
+        }
+        function setProgress(p) {
+            pgEl.setAttribute('stroke-dasharray', (p * 360).toFixed(2) + ' 360');
+            var a = (p * 360 - 90) * Math.PI / 180;
+            hdEl.setAttribute('cx', (300 + 212 * Math.cos(a)).toFixed(1));
+            hdEl.setAttribute('cy', (300 + 212 * Math.sin(a)).toFixed(1));
+            pctEl.textContent = Math.round(p * 100) + '%';
+        }
+        var TXT = ('Chào ' + BS_SHIFT + ', Tân').toUpperCase();
+        var typing = false, typedN = 0, doneAt = null, finished = false, lit = [];
+        function finishText() {
+            typedEl.innerHTML = TXT.replace(BS_SHIFT.toUpperCase(), '<b>' + BS_SHIFT.toUpperCase() + '</b>');
+            waveEl.classList.remove('on'); subEl.classList.add('show'); enterEl.classList.add('show');
+        }
+        function showAll() {   // giảm chuyển động: hiện thẳng trạng thái cuối
+            logLis.forEach(function (li) { li.classList.add('in'); li.classList.add('ok'); });
+            cellVals.forEach(function (c) { c[0].textContent = String(c[1]); });
+            setProgress(1); barEl.style.width = BS_SHIFT_PCT + '%'; pstEl.textContent = 'HỆ THỐNG SẴN SÀNG';
+            el.classList.add('bs-done'); finishText(); finished = true;
+        }
+        var t0 = W.performance.now();
+        function frame() {
+            if (bsDone) return;
+            var t = (W.performance.now() - t0) / 1000;
+            setProgress(interp(t));
+            logLis.forEach(function (li, k) {
+                if (t >= BS_LOG_T[k] && !li.classList.contains('in')) li.classList.add('in');
+                if (t >= BS_LOG_T[k] + 0.3 && !li.classList.contains('ok')) li.classList.add('ok');
+            });
+            if (t > 0.9) {
+                var u = Math.min((t - 0.9) / 1.3, 1), e = 1 - Math.pow(1 - u, 3);
+                cellVals.forEach(function (c) { c[0].textContent = String(Math.round(c[1] * e)); });
+                if (t > 1.0) barEl.style.width = BS_SHIFT_PCT + '%';
+            }
+            if (t >= BS_DONE_T && doneAt === null) {
+                doneAt = t; el.classList.add('bs-done'); pstEl.textContent = 'HỆ THỐNG SẴN SÀNG'; typing = true; waveEl.classList.add('on');
+            }
+            if (typing) {
+                var n = Math.min(TXT.length, Math.floor((t - doneAt) / 0.045));
+                if (n !== typedN) { typedN = n; typedEl.textContent = TXT.slice(0, n); }
+                if (n >= TXT.length) { typing = false; finishText(); }
+            }
+            if (t < BS_DONE_T + 2.2) W.requestAnimationFrame(frame); else finished = true;
         }
 
         // ── Nội dung app hiện dần so le sau khi màn chào tan ──
@@ -3089,7 +3342,7 @@ if not st.session_state.get("_app_scripts_injected"):
                 node.classList.add('tan-rv');
             });
             // Gỡ lớp hiệu ứng sau khi chạy xong để không ảnh hưởng các lần rerun sau
-            window.parent.setTimeout(function(){
+            W.setTimeout(function(){
                 seq.forEach(function(node){
                     node.classList.remove('tan-rv');
                     node.style.animationDelay = '';
@@ -3097,9 +3350,9 @@ if not st.session_state.get("_app_scripts_injected"):
             }, 2200);
         }
 
-        // ── Cổng Enter: chỉ mở sau 2 giây, bấm sớm hơn không có tác dụng ──
+        // ── Cổng Enter: chỉ mở khi dòng khởi động chạy xong, bấm sớm hơn không có tác dụng ──
         var bsArmed = false, bsDone = false;
-        window.parent.setTimeout(function(){ bsArmed = true; }, 2000);
+        W.setTimeout(function(){ bsArmed = true; }, reduce ? 600 : Math.round(BS_DONE_T * 1000));
 
         function bsDismiss() {
             if (bsDone || !bsArmed) return;
@@ -3108,9 +3361,10 @@ if not st.session_state.get("_app_scripts_injected"):
             document.removeEventListener('keydown', bsKey, true);
             el.classList.add('bs-hide');
             bsRevealApp();
-            window.parent.setTimeout(function(){
+            W.setTimeout(function(){
                 if (el.parentNode) el.parentNode.removeChild(el);
-            }, 600);
+                if (css3.parentNode) css3.parentNode.removeChild(css3);
+            }, 850);
         }
         function bsKey(ev) {
             if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar' || ev.key === 'Escape') {
@@ -3123,7 +3377,8 @@ if not st.session_state.get("_app_scripts_injected"):
         document.addEventListener('keydown', bsKey, true);
         el.addEventListener('click', bsDismiss);
         el.addEventListener('touchstart', bsDismiss, {passive: true});
-        try { window.parent.focus(); } catch (e) {}
+        try { W.focus(); } catch (e) {}
+        if (reduce) { showAll(); } else { W.requestAnimationFrame(frame); }
     }
 })();
 </script>
@@ -3138,11 +3393,14 @@ if not st.session_state.get("_app_scripts_injected"):
     _g_season, _g_hourkey = _season_key(), _hour_key()
     _g_thu = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'][_g_now.weekday()]
     if THEME_DAY_START_HOUR <= _g_now.hour < 14:
-        _g_shift, _g_hours, _g_emo = 'ca sáng', '06:00 – 14:00', '🌅'
+        _g_shift, _g_hours, _g_start = 'ca sáng', '06:00 – 14:00', THEME_DAY_START_HOUR
     elif 14 <= _g_now.hour < 22:
-        _g_shift, _g_hours, _g_emo = 'ca chiều', '14:00 – 22:00', '☀️' if _g_hourkey == 'day' else '🌇'
+        _g_shift, _g_hours, _g_start = 'ca chiều', '14:00 – 22:00', 14
     else:
-        _g_shift, _g_hours, _g_emo = 'ca đêm', '22:00 – 06:00', '🌙'
+        _g_shift, _g_hours, _g_start = 'ca đêm', '22:00 – 06:00', 22
+    # Tiến độ ca: phần đã trôi qua của ca 8 tiếng đang trực (0–100%)
+    _g_shift_pct = round(((_g_now.hour * 60 + _g_now.minute - _g_start * 60) % 1440) / 480 * 100)
+    _g_season_text = _re.sub(r'^[^A-Za-zÀ-ỹ]+', '', SEASON_LABEL[_g_season])   # bỏ emoji đầu nhãn mùa
 
     _g_tasks = (_load_progress().get('tasks') or {})
     _g_sum = ((_g_tasks.get('daily') or {}).get('summary') or {})
@@ -3163,13 +3421,14 @@ if not st.session_state.get("_app_scripts_injected"):
                 + _g_cell('CHECK-IN HÔM NAY', None)
                 + _g_cell('VIỆC CHƯA XONG', _g_todo, 'warn' if _g_todo else ''))
 
+    _boot_script = _boot_script.replace('__FONT_CSS__', _splash_font_css())
     for _ph, _val in (
-        ('__GREET_PHOTO__', _season_bg_data_uri(_g_season, _g_theme)),
         ('__GREET_HOUR__', _g_hourkey),
-        ('__GREET_SEASON_LABEL__', SEASON_LABEL[_g_season]),
+        ('__GREET_SEASON_TEXT__', _g_season_text),
         ('__GREET_SEASON__', _g_season),
+        ('__GREET_SHIFT_PCT__', str(_g_shift_pct)),
         ('__GREET_SHIFT__', _g_shift),
-        ('__GREET_EMOJI__', _g_emo),
+        ('__GREET_HOURS__', _g_hours),
         ('__GREET_SUB__', f'{_g_thu}, {_g_now.strftime("%d/%m/%Y")} · {_g_hours} · {_g_todo_txt}'),
         ('__GREET_CLOCK__', _g_now.strftime('%H:%M')),
         ('__GREET_DATE__', f'{_g_thu}, {_g_now.strftime("%d/%m/%Y")}'),
