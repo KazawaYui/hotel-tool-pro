@@ -2366,6 +2366,7 @@ if not st.session_state.get("_app_scripts_injected"):
         --sh: 0 1px 2px rgba(15,23,42,.05), 0 8px 24px rgba(15,23,42,.05);
         --sh-lg: 0 2px 6px rgba(15,23,42,.06), 0 14px 36px rgba(15,23,42,.09);
         --r-lg: 16px; --r-md: 11px; --r-sm: 9px; --r-pill: 999px;
+        --dash-gap: 24px;   /* khe giữa các ô ở Tổng quan (chuẩn 24–32px) */
     }
     html[data-theme="dark"], html[data-theme="dark"] .stApp {
         --bg: #12151d; --surf: #1a1f2b; --surf2: #161b25;
@@ -2502,28 +2503,27 @@ if not st.session_state.get("_app_scripts_injected"):
         border: 1px solid var(--line) !important; box-shadow: none !important;
         font-weight: 640;
     }
-    /* Thanh progress mảnh trong thẻ số liệu */
-    .kpi-bar {height: 3px; border-radius: 3px; background: var(--chip); margin-top: .7rem; overflow: hidden;}
-    .kpi-bar i {display: block; height: 100%; border-radius: 3px; background: var(--acc);}
-    .kpi-bar i.err {background: var(--err);}
     .tan-crumb {color: var(--tx3);}
     .tan-sep {color: var(--tx3); opacity: .6;}
     .tan-topbar-r {margin-left: auto; display: flex; align-items: center; gap: 7px;}
     .tan-h1 {font-size: 1.35rem; font-weight: 790; letter-spacing: -.03em; color: var(--tx);}
-    .tan-h1sub {font-size: 0.78rem; color: var(--tx3); margin: 2px 0 0.7rem;}
+    .tan-h1sub {font-size: 0.78rem; color: var(--tx3); margin: 2px 0 1.5rem;}
 
-    /* ── Thẻ số liệu nhỏ (bento) ── */
-    .kpi-lab {font-size: 0.76rem; color: var(--tx2); font-weight: 640;
-        display: flex; align-items: center; gap: 8px;}
-    .kpi-ic {width: 26px; height: 26px; border-radius: 8px; display: inline-flex;
-        align-items: center; justify-content: center; font-size: 0.78rem; background: var(--chip);}
+    /* ── Ô số liệu nhỏ: nằm ngang, 2 ô xếp chồng cạnh thẻ hero (cao bằng đúng hero) ── */
+    .tan-kpis {display: grid; grid-template-rows: 1fr 1fr; gap: var(--dash-gap);}
+    .tan-kpi {display: flex; align-items: center; gap: 14px; padding: 0 20px; background: var(--surf);
+        border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--sh);}
+    .tan-kpi-m {flex: 1; min-width: 0;}
+    .kpi-lab {font-size: 0.76rem; color: var(--tx2); font-weight: 640;}
+    .kpi-ic {flex: none; width: 40px; height: 40px; border-radius: 10px; display: inline-flex;
+        align-items: center; justify-content: center; font-size: 1.15rem; background: var(--chip);}
     .kpi-ic.err {background: rgba(239,68,68,.14);}
     .kpi-ic.ok {background: rgba(16,185,129,.14);}
     .kpi-ic.acc {background: rgba(99,91,240,.14);}
-    .kpi-val {font-size: 1.85rem; font-weight: 800; letter-spacing: -.035em;
-        line-height: 1; margin-top: 1.5rem; color: var(--tx); font-variant-numeric: tabular-nums;}
+    .kpi-val {font-size: 2rem; font-weight: 800; letter-spacing: -.035em; line-height: 1;
+        margin-left: auto; color: var(--tx); font-variant-numeric: tabular-nums;}
     .kpi-val.err {color: var(--err);}
-    .kpi-sub {font-size: 0.7rem; color: var(--tx3); font-weight: 620; margin-top: .45rem;}
+    .kpi-sub {font-size: 0.7rem; color: var(--tx3); font-weight: 620; margin-top: 2px;}
 
     /* ── Panel (thẻ có tiêu đề + danh sách dòng) ── */
     .pan-h {display: flex; align-items: center; gap: 8px; padding-bottom: .55rem;
@@ -2581,7 +2581,7 @@ if not st.session_state.get("_app_scripts_injected"):
                            url("__LIGHT_BG_DATA_URI__");
         background-size: cover, cover; background-position: center, center right;
         box-shadow: 0 12px 32px rgba(30,25,70,.28);
-        margin-bottom: 1rem;   /* bù margin-bottom -16px mặc định của stMarkdownContainer, nếu không hero tràn khỏi cột */
+        container-type: inline-size;   /* để @container đổi lưới ô con theo bề rộng thẻ */
     }
     html[data-theme="dark"] .tan-hero {
         background-image: linear-gradient(100deg, rgba(16,14,32,.95) 0%, rgba(26,22,50,.74) 46%, rgba(40,32,72,.24) 100%),
@@ -2591,8 +2591,10 @@ if not st.session_state.get("_app_scripts_injected"):
     .tan-hero-lab {font-size: 0.74rem; font-weight: 640; opacity: .88;}
     .tan-hero-val {font-size: 2.55rem; font-weight: 820; letter-spacing: -.04em; line-height: 1; margin-top: .35rem;}
     .tan-hero-sub {font-size: 0.75rem; opacity: .85; font-weight: 600; margin-top: .45rem;}
-    .tan-hero-split {display: flex; gap: 1.6rem; margin-top: .9rem; padding-top: .75rem;
-        border-top: 1px solid rgba(255,255,255,.22); flex-wrap: wrap;}
+    .tan-hero-split {display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 1rem;
+        margin-top: .9rem; padding-top: .75rem; border-top: 1px solid rgba(255,255,255,.22);}
+    @container (max-width: 470px) {.tan-hero-split {grid-template-columns: repeat(2, minmax(0, 1fr));}}
+    .tan-hero-ks {font-size: 0.66rem; opacity: .8; font-weight: 600; margin-top: 1px; white-space: nowrap;}
     .tan-hero-k {font-size: 0.68rem; opacity: .82; font-weight: 620;}
     .tan-hero-v {font-size: 1.1rem; font-weight: 790; margin-top: 1px; letter-spacing: -.02em;}
 
@@ -2773,11 +2775,52 @@ if not st.session_state.get("_app_scripts_injected"):
     .st-key-dash_seeall button {
         background: transparent !important; border: none !important; box-shadow: none !important;
         color: var(--acc) !important; font-size: 0.72rem !important; font-weight: 700 !important;
-        padding: 0 !important; justify-content: flex-end !important; min-height: 0 !important;
+        padding: 0 !important; justify-content: flex-end !important; min-height: 32px !important;
     }
+    .st-key-dash_seeall button > div {justify-content: flex-end !important; width: 100%;}
     .st-key-dash_seeall button:hover {background: transparent !important; text-decoration: underline;}
-    /* Phần tử cuối trong panel tiến độ ghim xuống đáy thẻ như bản dựng */
-    .st-key-dash_tasks > div[data-testid="stElementContainer"]:last-child {margin-top: auto;}
+    /* Chân panel tiến độ nằm liền sát danh sách (2 panel cùng hàng đã cao bằng nhau nên không cần ghim đáy) */
+    .st-key-dash_tasks > div[data-testid="stElementContainer"]:last-child {margin-top: 0.5rem;}
+
+    /* ── Tổng quan: lưới 2 cột, khe 24px, lề khung ngoài 32px ──
+       Hàng 1 là MỘT khối HTML (lưới CSS) nên thẻ hero và cụm 2 ô số liệu luôn cao bằng nhau, cạnh dưới
+       thẳng hàng; hàng 2 là 2 cột Streamlit cùng độ rộng nên rãnh dọc trùng hàng 1. */
+    div[data-testid="stVerticalBlock"][overflow]:has(.tan-row1) {padding: 2rem !important;}
+    .tan-row1 {display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--dash-gap);
+        margin-bottom: 1rem;}   /* bù margin-bottom -16px mặc định của stMarkdownContainer */
+    div[data-testid="stHorizontalBlock"]:has(.st-key-dash_tasks) {gap: var(--dash-gap) !important; margin-top: 0.5rem;}
+    div[data-testid="stHorizontalBlock"]:has(.st-key-dash_tasks) > div[data-testid="stColumn"] {
+        flex: 1 1 calc(50% - var(--dash-gap) / 2) !important; width: calc(50% - var(--dash-gap) / 2) !important;
+        min-width: calc(50% - var(--dash-gap) / 2) !important;
+    }
+    .st-key-dash_tasks, .st-key-dash_alerts {padding: 1.25rem !important;}
+    .st-key-dash_tasks [data-testid="stHorizontalBlock"], .st-key-dash_alerts [data-testid="stHorizontalBlock"] {
+        min-height: 36px; align-items: center; gap: 0.5rem !important;   /* tiêu đề 2 panel cùng trục */
+    }
+    @media (min-width: 641px) {
+        .st-key-dash_tasks [data-testid="stHorizontalBlock"], .st-key-dash_alerts [data-testid="stHorizontalBlock"] {flex-wrap: nowrap !important;}
+        .st-key-dash_tasks [data-testid="stColumn"], .st-key-dash_alerts [data-testid="stColumn"] {min-width: 0 !important;}
+    }
+    /* Khổ vừa (máy tính bảng, hoặc cửa sổ hẹp khi thanh bên đang mở): hero chiếm cả hàng, 2 ô số liệu cạnh nhau, 2 panel xếp dọc */
+    @media (max-width: 1100px) {
+        .tan-row1 {grid-template-columns: 1fr;}
+        .tan-kpis {grid-template-rows: none; grid-template-columns: 1fr 1fr;}
+        .tan-kpi {padding: 16px 20px;}
+        div[data-testid="stHorizontalBlock"]:has(.st-key-dash_tasks) {row-gap: var(--dash-gap) !important;}
+        div[data-testid="stHorizontalBlock"]:has(.st-key-dash_tasks) > div[data-testid="stColumn"] {
+            flex: 1 1 100% !important; width: 100% !important; min-width: 100% !important;
+        }
+    }
+    @media (min-width: 641px) and (max-width: 1100px) {   /* thanh trên: nút giữ đủ nhãn, bỏ chip ngày (đã có ở dòng phụ tiêu đề) */
+        .st-key-tan_topbar [data-testid="stColumn"]:first-child {flex: 1 1 0 !important; min-width: 0 !important; width: auto !important;}
+        .st-key-tan_topbar [data-testid="stColumn"]:not(:first-child) {flex: 0 0 auto !important; min-width: 0 !important; width: auto !important;}
+        .st-key-tan_topbar .stButton button, .st-key-tan_topbar .stDownloadButton button {white-space: nowrap;}
+        .tan-topbar-r {display: none;}
+    }
+    @media (max-width: 640px) {
+        div[data-testid="stVerticalBlock"][overflow]:has(.tan-row1) {padding: 1rem !important;}
+        .tan-kpis {grid-template-columns: 1fr;}
+    }
     div[data-testid="stElementContainer"]:has(iframe[height="1"]) {display: none;}
     div[data-testid="stMainBlockContainer"] hr {border-color: var(--line);}
 
@@ -3591,87 +3634,80 @@ def _render_dashboard():
     _cnt_live = bool((_d or {}).get('dk14_stats'))
 
     def _hero_cell(label, val, sub=''):
-        _s = (f'<div style="font-size:.66rem;opacity:.8;font-weight:600;margin-top:1px">{sub}</div>'
-              if sub else '')
+        _s = f'<div class="tan-hero-ks">{sub}</div>' if sub else ''
         return (f'<div><div class="tan-hero-k">{label}</div>'
                 f'<div class="tan-hero-v">{"—" if val is None else val}</div>{_s}</div>')
 
-    # ── HÀNG 1: thẻ HERO (ảnh mèo) + 2 thẻ số liệu ──
-    _r1a, _r1b, _r1c = st.columns([2, 1, 1], gap="small")
-    with _r1a:
-        if _cnt:
-            _stay, _cout = _cnt['stay'], _cnt['cout']
-            _yday = _yesterday_total()
-            _cmp = ''
-            if _yday:
-                _delta = _stay['total'] - _yday
-                _cmp = (f'▲ {_delta} khách so với hôm qua · ' if _delta > 0 else
-                        f'▼ {abs(_delta)} khách so với hôm qua · ' if _delta < 0 else
-                        'bằng hôm qua · ')
-            _room_txt = f"{_stay['rooms']} phòng có khách · " if _stay['rooms'] else ''
-            _unk_txt = f"{_stay['unk']} khách chưa rõ quốc tịch · " if _stay['unk'] else ''
-            _stale_txt = ("cập nhật trong phiên này" if _cnt_live
-                          else f"số liệu lúc {_cnt.get('time') or '—'}")
-            st.markdown(
-                '<div class="tan-hero">'
-                '<div class="tan-hero-lab">🛏️ Tổng khách lưu trú hôm nay</div>'
-                f'<div class="tan-hero-val">{_stay["total"]}</div>'
-                f'<div class="tan-hero-sub">{_cmp}{_room_txt}{_unk_txt}{_stale_txt}</div>'
-                '<div class="tan-hero-split">'
-                + _hero_cell('🌍 Quốc tế', _stay['intl'], f"{_stay['intl_rooms']} phòng")
-                + _hero_cell('🇻🇳 Việt Nam', _stay['vn'], f"{_stay['vn_rooms']} phòng")
-                + _hero_cell('🔑 Check-in', None)
-                + _hero_cell('🚪 Check-out', _cout['total'],
-                             f"QT {_cout['intl']} khách · {_cout['intl_rooms']} phòng<br>"
-                             f"VN {_cout['vn']} khách · {_cout['vn_rooms']} phòng<br>"
-                             f"Tổng {_cout['rooms']} phòng")
-                + '</div></div>', unsafe_allow_html=True)
-        else:
-            st.markdown(
-                '<div class="tan-hero">'
-                '<div class="tan-hero-lab">👋 Chào ca trực</div>'
-                '<div class="tan-hero-val" style="font-size:1.45rem">Chưa có số liệu hôm nay</div>'
-                '<div class="tan-hero-sub">Xử lý file <b>IH</b> ở <b>Xử lý hàng ngày</b> (làm ĐK14) '
-                '— số khách và phòng đang ở sẽ tự lên đây.</div>'
-                '<div class="tan-hero-split">'
-                '<div><div class="tan-hero-k">🌍 Quốc tế</div><div class="tan-hero-v">—</div></div>'
-                '<div><div class="tan-hero-k">🇻🇳 Việt Nam</div><div class="tan-hero-v">—</div></div>'
-                '<div><div class="tan-hero-k">🔑 Check-in</div><div class="tan-hero-v">—</div></div>'
-                '<div><div class="tan-hero-k">🚪 Check-out</div><div class="tan-hero-v">—</div></div>'
-                '</div></div>', unsafe_allow_html=True)
+    # ── HÀNG 1: thẻ HERO + 2 ô số liệu nằm ngang xếp chồng ──
+    # Cả 3 là HTML thuần nên đặt chung 1 khối lưới CSS (.tan-row1): hero và cụm ô số liệu luôn cao bằng
+    # nhau, cạnh dưới thẳng hàng, không cần chiều cao cố định.
+    if _cnt:
+        _stay, _cout = _cnt['stay'], _cnt['cout']
+        _yday = _yesterday_total()
+        _cmp = ''
+        if _yday:
+            _delta = _stay['total'] - _yday
+            _cmp = (f'▲ {_delta} khách so với hôm qua · ' if _delta > 0 else
+                    f'▼ {abs(_delta)} khách so với hôm qua · ' if _delta < 0 else
+                    'bằng hôm qua · ')
+        _room_txt = f"{_stay['rooms']} phòng có khách · " if _stay['rooms'] else ''
+        _unk_txt = f"{_stay['unk']} khách chưa rõ quốc tịch · " if _stay['unk'] else ''
+        _stale_txt = ("cập nhật trong phiên này" if _cnt_live
+                      else f"số liệu lúc {_cnt.get('time') or '—'}")
+        _hero_html = (
+            '<div class="tan-hero">'
+            '<div class="tan-hero-lab">🛏️ Tổng khách lưu trú hôm nay</div>'
+            f'<div class="tan-hero-val">{_stay["total"]}</div>'
+            f'<div class="tan-hero-sub">{_cmp}{_room_txt}{_unk_txt}{_stale_txt}</div>'
+            '<div class="tan-hero-split">'
+            + _hero_cell('🌍 Quốc tế', _stay['intl'], f"{_stay['intl_rooms']} phòng")
+            + _hero_cell('🇻🇳 Việt Nam', _stay['vn'], f"{_stay['vn_rooms']} phòng")
+            + _hero_cell('🔑 Check-in', None)
+            + _hero_cell('🚪 Check-out', _cout['total'],
+                         f"QT {_cout['intl']} khách · {_cout['intl_rooms']} phòng<br>"
+                         f"VN {_cout['vn']} khách · {_cout['vn_rooms']} phòng<br>"
+                         f"Tổng {_cout['rooms']} phòng")
+            + '</div></div>')
+    else:
+        _hero_html = (
+            '<div class="tan-hero">'
+            '<div class="tan-hero-lab">👋 Chào ca trực</div>'
+            '<div class="tan-hero-val" style="font-size:1.45rem">Chưa có số liệu hôm nay</div>'
+            '<div class="tan-hero-sub">Xử lý file <b>IH</b> ở <b>Xử lý hàng ngày</b> (làm ĐK14) '
+            '— số khách và phòng đang ở sẽ tự lên đây.</div>'
+            '<div class="tan-hero-split">'
+            '<div><div class="tan-hero-k">🌍 Quốc tế</div><div class="tan-hero-v">—</div></div>'
+            '<div><div class="tan-hero-k">🇻🇳 Việt Nam</div><div class="tan-hero-v">—</div></div>'
+            '<div><div class="tan-hero-k">🔑 Check-in</div><div class="tan-hero-v">—</div></div>'
+            '<div><div class="tan-hero-k">🚪 Check-out</div><div class="tan-hero-v">—</div></div>'
+            '</div></div>')
 
-    with _r1b:
-        with st.container(border=True, height=200):
-            _red_n = _hero['red'] if _hero else None
-            _cls = 'err' if _red_n else 'ok'
-            _red_pct = round(100 * _red_n / _hero['total']) if (_hero and _hero.get('total') and _red_n) else 0
-            st.markdown(
-                f'<div class="kpi-lab"><span class="kpi-ic {_cls}">⚠️</span>Lỗi dữ liệu</div>'
-                f'<div class="kpi-val {"err" if _red_n else ""}">{_red_n if _hero else "—"}</div>'
-                f'<div class="kpi-sub">{"cần sửa trước khi nộp" if _red_n else ("dữ liệu sạch" if _hero else "chưa có dữ liệu")}</div>'
-                f'<div class="kpi-bar"><i class="err" style="width:{min(_red_pct, 100)}%"></i></div>',
-                unsafe_allow_html=True)
+    _red_n = _hero['red'] if _hero else None
+    _cls = 'err' if _red_n else 'ok'
+    _rate = st.session_state.get('rate_input') or (_d or {}).get('rate')
+    _kpi_html = (
+        '<div class="tan-kpis">'
+        f'<div class="tan-kpi"><span class="kpi-ic {_cls}">⚠️</span>'
+        '<div class="tan-kpi-m"><div class="kpi-lab">Lỗi dữ liệu</div>'
+        f'<div class="kpi-sub">{"cần sửa trước khi nộp" if _red_n else ("dữ liệu sạch" if _hero else "chưa có dữ liệu")}</div></div>'
+        f'<div class="kpi-val {"err" if _red_n else ""}">{_red_n if _hero else "—"}</div></div>'
+        '<div class="tan-kpi"><span class="kpi-ic acc">💱</span>'
+        '<div class="tan-kpi-m"><div class="kpi-lab">Tỷ giá VCB</div>'
+        f'<div class="kpi-sub">{"USD → VNĐ (chuyển khoản)" if _rate else "lấy tỷ giá ở Xử lý hàng ngày"}</div></div>'
+        f'<div class="kpi-val">{f"{_rate:,.0f}" if _rate else "—"}</div></div>'
+        '</div>')
+    st.markdown(f'<div class="tan-row1">{_hero_html}{_kpi_html}</div>', unsafe_allow_html=True)
 
-    with _r1c:
-        with st.container(border=True, height=200):
-            _rate = st.session_state.get('rate_input') or (_d or {}).get('rate')
-            st.markdown(
-                '<div class="kpi-lab"><span class="kpi-ic acc">💱</span>Tỷ giá VCB</div>'
-                f'<div class="kpi-val" style="font-size:1.5rem">{f"{_rate:,.0f}" if _rate else "—"}</div>'
-                f'<div class="kpi-sub">{"USD → VNĐ (chuyển khoản)" if _rate else "lấy tỷ giá ở Xử lý hàng ngày"}</div>'
-                f'<div class="kpi-bar"><i style="width:{100 if _rate else 0}%"></i></div>',
-                unsafe_allow_html=True)
-
-    # ── HÀNG 2: tiến độ công việc + cảnh báo ──
+    # ── HÀNG 2: tiến độ công việc + cảnh báo (2 panel cao bằng nhau theo nội dung) ──
     _TICK_ON = ('<span style="display:inline-block;width:15px;height:15px;border-radius:5px;'
                 'background:linear-gradient(135deg,#34d399,#059669);color:#fff;font-size:9px;'
                 'line-height:15px;text-align:center;vertical-align:-2px;">✓</span>')
     _TICK_OFF = ('<span style="display:inline-block;width:15px;height:15px;border-radius:5px;'
                  'border:1.5px solid var(--line);vertical-align:-2px;"></span>')
-    _r2a, _r2b = st.columns([1, 1], gap="small")
+    _r2a, _r2b = st.columns(2, gap="medium")
 
     with _r2a:
-        with st.container(border=True, height=360, key='dash_tasks'):
+        with st.container(border=True, height="stretch", key='dash_tasks'):
             _tasks = [
                 ("Xử lý hàng ngày (KBTT · VNM · ĐK14)", _d is not None or _p_daily.get('done'),
                  "daily", None if _d else _p_daily.get('time')),
@@ -3711,7 +3747,7 @@ def _render_dashboard():
                 unsafe_allow_html=True)
 
     with _r2b:
-        with st.container(border=True, height=360, key='dash_alerts'):
+        with st.container(border=True, height="stretch", key='dash_alerts'):
             _alerts = []
             if _hero:
                 if _hero.get('red'):
@@ -3729,8 +3765,13 @@ def _render_dashboard():
                 if _hero.get('unknown_nats'):
                     _alerts.append(('a', '🌐', f"{_hero['unknown_nats']} quốc tịch chưa có mã",
                                     'đã giữ nguyên chữ gốc, cần kiểm tra'))
-            st.markdown(f'<div class="pan-h"><span class="pan-t">⚠️ Cảnh báo</span>'
-                        f'<span class="tan-chip">{len(_alerts)}</span></div>', unsafe_allow_html=True)
+            # cùng cấu trúc hàng tiêu đề + đường kẻ với panel tiến độ để 2 tiêu đề thẳng trục
+            _ah1, _ah2 = st.columns([2.5, 1], vertical_alignment="center")
+            _ah1.markdown(f'<div class="pan-h" style="border:0;padding-bottom:0;margin-bottom:0">'
+                          f'<span class="pan-t">⚠️ Cảnh báo</span>'
+                          f'<span class="tan-chip">{len(_alerts)}</span></div>', unsafe_allow_html=True)
+            st.markdown('<div style="border-bottom:1px solid var(--line2);margin:0 0 .35rem"></div>',
+                        unsafe_allow_html=True)
             if _alerts:
                 st.markdown(''.join(
                     f'<div class="pan-al {_k}"><div class="pan-al-ic">{_ic}</div>'
