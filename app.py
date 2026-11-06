@@ -2358,9 +2358,11 @@ if not st.session_state.get("_app_scripts_injected"):
         --ease: cubic-bezier(0.4, 0, 0.2, 1);
         --bg: #f6f7fa; --surf: #ffffff; --surf2: #fafbfc;
         --line: #e7e9ef; --line2: #f0f2f6; --chip: #f2f4f8;
-        --tx: #0f172a; --tx2: #5b6478; --tx3: #98a1b3;
+        --tx: #0f172a; --tx2: #475467; --tx3: #667085;
         --acc: #4f46e5; --acc2: #7c3aed;
         --ok: #0d9668; --warn: #d97706; --err: #dc2626;
+        /* màu CHỮ trên nền chip nhạt (đậm hơn màu nền/viền để đạt ≥4.5:1) */
+        --ok-tx: #067a55; --warn-tx: #a14a06; --err-tx: #b91c1c;
         --sh: 0 1px 2px rgba(15,23,42,.05), 0 8px 24px rgba(15,23,42,.05);
         --sh-lg: 0 2px 6px rgba(15,23,42,.06), 0 14px 36px rgba(15,23,42,.09);
         --r-lg: 16px; --r-md: 11px; --r-sm: 9px; --r-pill: 999px;
@@ -2368,9 +2370,10 @@ if not st.session_state.get("_app_scripts_injected"):
     html[data-theme="dark"], html[data-theme="dark"] .stApp {
         --bg: #12151d; --surf: #1a1f2b; --surf2: #161b25;
         --line: #262d3b; --line2: #212734; --chip: #242b39;
-        --tx: #eef2fa; --tx2: #a3adc2; --tx3: #727d95;
+        --tx: #eef2fa; --tx2: #a3adc2; --tx3: #8a94ab;
         --acc: #8b93f8; --acc2: #a78bfa;
         --ok: #34d399; --warn: #fbbf24; --err: #f87171;
+        --ok-tx: #34d399; --warn-tx: #fbbf24; --err-tx: #f87171;
         --sh: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.32);
         --sh-lg: 0 2px 8px rgba(0,0,0,.35), 0 18px 44px rgba(0,0,0,.42);
     }
@@ -2414,6 +2417,11 @@ if not st.session_state.get("_app_scripts_injected"):
     }
     section[data-testid="stSidebar"] .stButton button[kind="primary"] [data-testid="stIconMaterial"] {
         background: linear-gradient(135deg, var(--acc), var(--acc2)); color: #fff;
+    }
+    /* Biểu tượng + nhãn 3 mục điều hướng thẳng cột trái (mặc định Streamlit căn giữa nội dung nút) */
+    :is(.st-key-nav_dashboard, .st-key-nav_daily, .st-key-nav_regcard) button > div,
+    :is(.st-key-nav_dashboard, .st-key-nav_daily, .st-key-nav_regcard) button > div > span {
+        justify-content: flex-start !important; width: 100%;
     }
     /* Badge số bên phải mục nav (số điền động ở khối style tiêm mỗi lần rerun) */
     section[data-testid="stSidebar"] .stButton button::after {
@@ -2573,6 +2581,7 @@ if not st.session_state.get("_app_scripts_injected"):
                            url("__LIGHT_BG_DATA_URI__");
         background-size: cover, cover; background-position: center, center right;
         box-shadow: 0 12px 32px rgba(30,25,70,.28);
+        margin-bottom: 1rem;   /* bù margin-bottom -16px mặc định của stMarkdownContainer, nếu không hero tràn khỏi cột */
     }
     html[data-theme="dark"] .tan-hero {
         background-image: linear-gradient(100deg, rgba(16,14,32,.95) 0%, rgba(26,22,50,.74) 46%, rgba(40,32,72,.24) 100%),
@@ -2590,9 +2599,9 @@ if not st.session_state.get("_app_scripts_injected"):
     /* ── Chip trạng thái ── */
     .tan-chip {display:inline-block; font-size:0.64rem; font-weight:740; padding:2px 8px;
         border-radius: var(--r-pill); background: var(--chip); color: var(--tx2);}
-    .tan-chip.ok {background: rgba(16,185,129,.14); color: var(--ok);}
-    .tan-chip.warn {background: rgba(245,158,11,.15); color: var(--warn);}
-    .tan-chip.err {background: rgba(239,68,68,.13); color: var(--err);}
+    .tan-chip.ok {background: rgba(16,185,129,.14); color: var(--ok-tx);}
+    .tan-chip.warn {background: rgba(245,158,11,.15); color: var(--warn-tx);}
+    .tan-chip.err {background: rgba(239,68,68,.13); color: var(--err-tx);}
 
     /* ── Ô nhập ── */
     [data-testid="stTextInputRootElement"],
@@ -2700,6 +2709,9 @@ if not st.session_state.get("_app_scripts_injected"):
     div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"]:hover, .stDownloadButton button:hover {
         filter: brightness(1.06); background: linear-gradient(135deg, var(--acc), var(--acc2));
     }
+    /* Giao diện tối: nền nút là tím nhạt nên chữ phải tối (6.5:1) thay vì trắng (2.75:1) */
+    html[data-theme="dark"] div[data-testid="stMainBlockContainer"] .stButton button[kind="primary"] *,
+    html[data-theme="dark"] .stDownloadButton button * {color: #0f172a !important;}
 
     /* ── Metric ── */
     div[data-testid="stMetric"] {
@@ -2769,13 +2781,15 @@ if not st.session_state.get("_app_scripts_injected"):
     div[data-testid="stElementContainer"]:has(iframe[height="1"]) {display: none;}
     div[data-testid="stMainBlockContainer"] hr {border-color: var(--line);}
 
-    .stButton button:focus-visible, .stDownloadButton button:focus-visible {
-        outline: 3px solid rgba(99,91,240,.4); outline-offset: 2px;
+    /* Viền focus bàn phím: màu đặc --acc (≥3:1 trên cả nền sáng lẫn tối), dày 2px, cách 2px */
+    .stApp a:focus-visible, .stApp button:focus-visible, .stApp summary:focus-visible,
+    .stApp [role="tab"]:focus-visible, .stApp [role="button"]:focus-visible {
+        outline: 2px solid var(--acc) !important; outline-offset: 2px !important;
     }
 
     @media (max-width: 768px) {
         div[data-testid="stMainBlockContainer"] {padding-left: 1rem; padding-right: 1rem;}
-        .st-key-tan_topbar {margin: -2rem -1rem 0.9rem; width: calc(100% + 2rem); padding: 0.45rem 1rem;}
+        .st-key-tan_topbar {margin: -4.6rem -1rem 0.9rem !important; width: calc(100% + 2rem) !important; padding: 0.45rem 1rem !important;}
         .tan-hero-val {font-size: 2rem;}
         .tan-hero-split {gap: 1.1rem;}
         div[data-testid="stMetric"] {padding: 0.6rem 0.7rem 0.55rem;}
@@ -3308,11 +3322,12 @@ with st.container(key="tan_topbar"):
                              file_name=f"bao_cao_ngay_{_tb_rp_date}.xlsx",
                              mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                              use_container_width=True, key="tb_report_dl")
-    else:
+    elif st.session_state.menu == "dashboard":
         _tbm.button("⇩ Xuất báo cáo", key="tb_report_off", use_container_width=True, disabled=True,
                     help="Mở Tổng quan ca trực và chạy ít nhất một công cụ để xuất báo cáo ngày")
-    _tbr.button("⚡ Xử lý hàng ngày", key="tb_go_daily", use_container_width=True,
-                type="primary", on_click=go_menu, args=("daily",))
+    if st.session_state.menu != "daily":    # đang ở Xử lý hàng ngày thì không cần lối tắt tới chính nó
+        _tbr.button("⚡ Xử lý hàng ngày", key="tb_go_daily", use_container_width=True,
+                    type="primary", on_click=go_menu, args=("daily",))
 
 # ── Tạo file ARR từ file Arrival (Book) Smile ──────────────────────────────
 def build_arr(book_bytes):
@@ -3646,8 +3661,6 @@ def _render_dashboard():
                 f'<div class="kpi-sub">{"USD → VNĐ (chuyển khoản)" if _rate else "lấy tỷ giá ở Xử lý hàng ngày"}</div>'
                 f'<div class="kpi-bar"><i style="width:{100 if _rate else 0}%"></i></div>',
                 unsafe_allow_html=True)
-
-    st.write("")
 
     # ── HÀNG 2: tiến độ công việc + cảnh báo ──
     _TICK_ON = ('<span style="display:inline-block;width:15px;height:15px;border-radius:5px;'
@@ -4013,7 +4026,8 @@ def _render_daily():
                              f"+ 🟡 **{_n_yel}** vấn đề nên kiểm tra lại.")
                 else:
                     st.warning(f"🟡 **{_n_yel}** vấn đề nên kiểm tra lại (không chặn nộp hồ sơ).")
-                st.dataframe(_iss, use_container_width=True, hide_index=True)
+                st.dataframe(_iss.assign(**{'Mức độ': _iss['Mức độ'].map({'🔴': '🔴 Lỗi', '🟡': '🟡 Cảnh báo'}).fillna(_iss['Mức độ'])}),
+                             use_container_width=True, hide_index=True)
             elif _iss is not None:
                 st.success("✅ Kiểm tra dữ liệu: không phát hiện vấn đề nào.")
 
