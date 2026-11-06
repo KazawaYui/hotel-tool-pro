@@ -2365,7 +2365,9 @@ if not st.session_state.get("_app_scripts_injected"):
         --ok-tx: #067a55; --warn-tx: #a14a06; --err-tx: #b91c1c;
         --sh: 0 1px 2px rgba(15,23,42,.05), 0 8px 24px rgba(15,23,42,.05);
         --sh-lg: 0 2px 6px rgba(15,23,42,.06), 0 14px 36px rgba(15,23,42,.09);
-        --r-lg: 16px; --r-md: 11px; --r-sm: 9px; --r-pill: 999px;
+        --r-lg: 16px; --r-md: 12px; --r-sm: 8px; --r-pill: 999px;   /* bo góc theo bậc: khung ngoài 16 → ô 12 → dòng/ô nhập 8 */
+        /* thang chữ (1 bộ duy nhất): 12 chỉ cho huy hiệu · 14 chữ phụ · 16 chữ chính/nút · 20 tiêu đề mục · 24 tiêu đề trang · 28 số liệu · 40 số lớn */
+        --fs-xs: 12px; --fs-sm: 14px; --fs-md: 16px; --fs-lg: 20px; --fs-xl: 24px; --fs-2xl: 28px; --fs-3xl: 40px;
         --dash-gap: 24px;   /* khe giữa các ô ở Tổng quan (chuẩn 24–32px) */
     }
     html[data-theme="dark"], html[data-theme="dark"] .stApp {
@@ -2398,7 +2400,7 @@ if not st.session_state.get("_app_scripts_injected"):
     section[data-testid="stSidebar"] .stButton button {
         background: transparent; border: 1px solid transparent;
         border-radius: var(--r-sm);
-        color: var(--tx2); font-weight: 560; text-align: left;
+        color: var(--tx2); font-weight: 600; text-align: left;
         justify-content: flex-start; padding: 0.5rem 0.6rem;
         box-shadow: none; transition: background 0.12s var(--ease), color 0.12s var(--ease);
     }
@@ -2412,9 +2414,9 @@ if not st.session_state.get("_app_scripts_injected"):
     }
     /* Icon mỗi mục nav nằm trong ô chip; mục đang mở thì chip đổi sang gradient */
     section[data-testid="stSidebar"] .stButton button [data-testid="stIconMaterial"] {
-        background: var(--chip); border-radius: 7px; padding: 4px;
+        background: var(--chip); border-radius: var(--r-sm); padding: 4px;
         width: 23px; height: 23px; display: inline-flex; align-items: center;
-        justify-content: center; font-size: 15px !important; margin-right: 2px;
+        justify-content: center; font-size: var(--fs-sm) !important; margin-right: 2px;
     }
     section[data-testid="stSidebar"] .stButton button[kind="primary"] [data-testid="stIconMaterial"] {
         background: linear-gradient(135deg, var(--acc), var(--acc2)); color: #fff;
@@ -2426,38 +2428,38 @@ if not st.session_state.get("_app_scripts_injected"):
     }
     /* Badge số bên phải mục nav (số điền động ở khối style tiêm mỗi lần rerun) */
     section[data-testid="stSidebar"] .stButton button::after {
-        margin-left: auto; font-size: 0.62rem; font-weight: 800; color: var(--tx2);
+        margin-left: auto; font-size: var(--fs-xs); font-weight: 700; color: var(--tx2);
         background: var(--chip); padding: 1px 7px; border-radius: var(--r-pill);
     }
     /* Khung nền cho cụm nút gạt giao diện (hàng cột duy nhất trong sidebar) */
     section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] {
-        background: var(--chip); border-radius: 10px; padding: 3px; gap: 3px !important;
+        background: var(--chip); border-radius: var(--r-md); padding: 3px; gap: 3px !important;
     }
     section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] .stButton button {
         justify-content: center; text-align: center; padding: 0.36rem 0.2rem;
-        font-size: 0.72rem; font-weight: 680; border: none;
+        font-size: var(--fs-xs); font-weight: 600; border: none;
     }
     section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] .stButton button[kind="primary"] {
         background: var(--surf) !important; color: var(--tx) !important;
         border-color: transparent !important; box-shadow: 0 1px 3px rgba(15,23,42,.16) !important;
     }
     .sb-brand {padding: 0.1rem 0.3rem 0.9rem; border-bottom: 1px solid var(--line2); margin-bottom: 0.5rem;}
-    .sb-mascot {background: linear-gradient(140deg,#ff8fb1,#c084fc); border-radius: 9px;
+    .sb-mascot {background: linear-gradient(140deg,#ff8fb1,#c084fc); border-radius: var(--r-sm);
         padding: 4px; box-shadow: 0 4px 12px rgba(200,120,220,.35);}
-    .sb-brand-title {color: var(--tx); font-weight: 730; font-size: 0.92rem; letter-spacing: -.015em;}
+    .sb-brand-title {color: var(--tx); font-weight: 700; font-size: var(--fs-md); letter-spacing: -.015em;}
     .sb-mascot {display:inline-block; width:22px; height:22px; vertical-align:-5px; margin-right:5px;
         animation: flowerSway 3.4s ease-in-out infinite;}
     .sb-mascot svg {width:100%; height:100%;}
-    .sb-brand-sub {color: var(--tx3); font-size: 0.7rem; margin-top: 1px;}
-    .sb-section {color: var(--tx3); font-size: 0.6rem; font-weight: 800;
+    .sb-brand-sub {color: var(--tx3); font-size: var(--fs-sm); margin-top: 1px;}
+    .sb-section {color: var(--tx3); font-size: var(--fs-sm); font-weight: 700;
         text-transform: uppercase; letter-spacing: 0.1em; padding: 0.8rem 0.55rem 0.3rem;}
     .sb-user {display:flex; align-items:center; gap:9px; padding-top:0.8rem;
         margin-top:0.5rem; border-top: 1px solid var(--line2);}
     .sb-av {width:28px; height:28px; border-radius:50%; flex-shrink:0; color:#fff;
         background: linear-gradient(135deg,#818cf8,#c084fc);
-        display:flex; align-items:center; justify-content:center; font-size:0.72rem; font-weight:760;}
-    .sb-un {font-size:0.76rem; font-weight:680; color: var(--tx);}
-    .sb-ur {font-size:0.66rem; color: var(--tx3);}
+        display:flex; align-items:center; justify-content:center; font-size:var(--fs-xs); font-weight:700;}
+    .sb-un {font-size: var(--fs-md); font-weight: 600; color: var(--tx);}
+    .sb-ur {font-size: var(--fs-sm); color: var(--tx3);}
     @keyframes flowerSway {
         0%, 100% {transform: rotate(-8deg);}
         50%      {transform: rotate(8deg);}
@@ -2487,7 +2489,7 @@ if not st.session_state.get("_app_scripts_injected"):
     /* ── Top bar: breadcrumb + trạng thái ── */
     .tan-topbar {
         display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-        font-size: 0.82rem; color: var(--tx); padding: 0.15rem 0 0.15rem;
+        font-size: var(--fs-sm); color: var(--tx); padding: 0.15rem 0 0.15rem;
     }
     /* Thanh top bar: nền liền khối + viền dưới, tràn ra sát 2 mép khung nội dung */
     /* Khung nội dung có padding 96px trên / 80px hai bên — kéo âm đúng bằng đó
@@ -2501,63 +2503,64 @@ if not st.session_state.get("_app_scripts_injected"):
     .st-key-tb_report_dl button, .st-key-tb_report_off button {
         background: var(--surf) !important; color: var(--tx) !important;
         border: 1px solid var(--line) !important; box-shadow: none !important;
-        font-weight: 640;
+        font-weight: 600;
     }
     .tan-crumb {color: var(--tx3);}
     .tan-sep {color: var(--tx3); opacity: .6;}
     .tan-topbar-r {margin-left: auto; display: flex; align-items: center; gap: 7px;}
-    .tan-h1 {font-size: 1.35rem; font-weight: 790; letter-spacing: -.03em; color: var(--tx);}
-    .tan-h1sub {font-size: 0.78rem; color: var(--tx3); margin: 2px 0 1.5rem;}
+    .tan-h1 {font-size: var(--fs-xl); font-weight: 700; letter-spacing: -.03em; color: var(--tx);}
+    .tan-h1sub { font-weight: 400;font-size: var(--fs-sm); color: var(--tx3); margin: 2px 0 1.5rem;}
 
     /* ── Ô số liệu nhỏ: nằm ngang, 2 ô xếp chồng cạnh thẻ hero (cao bằng đúng hero) ── */
     .tan-kpis {display: grid; grid-template-rows: 1fr 1fr; gap: var(--dash-gap);}
     .tan-kpi {display: flex; align-items: center; gap: 14px; padding: 0 20px; background: var(--surf);
         border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--sh);}
     .tan-kpi-m {flex: 1; min-width: 0;}
-    .kpi-lab {font-size: 0.76rem; color: var(--tx2); font-weight: 640;}
-    .kpi-ic {flex: none; width: 40px; height: 40px; border-radius: 10px; display: inline-flex;
-        align-items: center; justify-content: center; font-size: 1.15rem; background: var(--chip);}
+    .kpi-lab {font-size: var(--fs-sm); color: var(--tx2); font-weight: 600;}
+    .kpi-ic {flex: none; width: 40px; height: 40px; border-radius: var(--r-md); display: inline-flex;
+        align-items: center; justify-content: center; font-size: var(--fs-md); background: var(--chip);}
     .kpi-ic.err {background: rgba(239,68,68,.14);}
     .kpi-ic.ok {background: rgba(16,185,129,.14);}
     .kpi-ic.acc {background: rgba(99,91,240,.14);}
-    .kpi-val {font-size: 2rem; font-weight: 800; letter-spacing: -.035em; line-height: 1;
+    .kpi-val {font-size: var(--fs-2xl); font-weight: 700; letter-spacing: -.035em; line-height: 1;
         margin-left: auto; color: var(--tx); font-variant-numeric: tabular-nums;}
     .kpi-val.err {color: var(--err);}
-    .kpi-sub {font-size: 0.7rem; color: var(--tx3); font-weight: 620; margin-top: 2px;}
+    .kpi-sub {font-size: var(--fs-sm); color: var(--tx3); font-weight: 400; margin-top: 2px;}
 
     /* ── Panel (thẻ có tiêu đề + danh sách dòng) ── */
     .pan-h {display: flex; align-items: center; gap: 8px; padding-bottom: .55rem;
         margin-bottom: .5rem; border-bottom: 1px solid var(--line2);}
-    .pan-t {font-size: 0.85rem; font-weight: 730; letter-spacing: -.015em; color: var(--tx);}
-    .pan-row {display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.82rem;}
+    .pan-t {font-size: var(--fs-md); font-weight: 700; letter-spacing: -.015em; color: var(--tx);}
+    .pan-row {display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--fs-sm);}
     .pan-task {display: flex; align-items: center; gap: 9px; padding: .62rem .1rem;
-        font-size: 0.82rem; border-bottom: 1px solid var(--line2);}
+        font-size: var(--fs-md); border-bottom: 1px solid var(--line2);}
     .pan-task:last-of-type {border-bottom: 0;}
-    .pan-time {margin-left: auto; font-size: 0.7rem; color: var(--tx3); font-weight: 650;
+    .pan-time {margin-left: auto; font-size: var(--fs-sm); color: var(--tx3); font-weight: 400;
         font-variant-numeric: tabular-nums;}
-    .pan-rt {color: var(--tx); font-weight: 560;}
-    .pan-mut {font-size: 0.7rem; color: var(--tx3); font-weight: 620;}
+    .pan-rt {color: var(--tx); font-weight: 600;}
+    .pan-mut {font-size: var(--fs-sm); color: var(--tx3); font-weight: 400;}
     .pan-line {display: flex; align-items: center; justify-content: space-between;
-        gap: 10px; padding: .48rem 0; font-size: 0.8rem; color: var(--tx2);
+        gap: 10px; padding: .48rem 0; font-size: var(--fs-sm); color: var(--tx2);
         border-bottom: 1px solid var(--line2);}
     .pan-line:last-child {border-bottom: 0;}
-    .pan-v {font-weight: 750; color: var(--tx); font-variant-numeric: tabular-nums;}
-    .pan-empty {font-size: 0.78rem; color: var(--tx3); line-height: 1.55; padding: .3rem 0 .7rem;}
+    .pan-v {font-weight: 700; color: var(--tx); font-variant-numeric: tabular-nums;}
+    .pan-empty {font-size: var(--fs-sm); color: var(--tx3); line-height: 1.55; padding: .3rem 0 .7rem;}
     .pan-foot {margin-top: auto; padding-top: .35rem;}
     /* Hộp cảnh báo trong panel (đúng kiểu ô nhắc việc của bản dựng) */
-    .pan-al {display: flex; gap: 9px; padding: .6rem .65rem; border-radius: 11px;
+    .pan-al {display: flex; gap: 9px; padding: .6rem .65rem; border-radius: var(--r-sm);
         margin-bottom: .45rem; border: 1px solid;}
     .pan-al.r {background: rgba(239,68,68,.10); border-color: rgba(239,68,68,.26);}
     .pan-al.a {background: rgba(245,158,11,.10); border-color: rgba(245,158,11,.26);}
-    .pan-al-ic {font-size: 0.85rem; line-height: 1.2;}
-    .pan-al-t {font-size: 0.78rem; font-weight: 680; color: var(--tx); line-height: 1.35;}
-    .pan-al-m {font-size: 0.68rem; color: var(--tx3); margin-top: 2px; line-height: 1.35;}
+    .pan-al-ic {font-size: var(--fs-sm); line-height: 1.2;}
+    .pan-al-t {font-size: var(--fs-md); font-weight: 600; color: var(--tx); line-height: 1.35;}
+    .pan-al-m {font-size: var(--fs-sm); color: var(--tx3); margin-top: 2px; line-height: 1.35;}
 
     /* ── Nhãn mục ── */
     .section-label {
-        font-size: 0.63rem; font-weight: 800; color: var(--tx3);
-        text-transform: uppercase; letter-spacing: 0.09em; margin-bottom: 0.6rem;
+        font-size: var(--fs-lg); font-weight: 700; color: var(--tx);
+        letter-spacing: -.01em; margin-bottom: 0.75rem; display: flex; align-items: center;
     }
+    .section-label .mi {font-size: var(--fs-2xl); margin-right: 8px; color: var(--acc);}
 
     /* ── Thẻ nội dung (st.container(border=True)) ──
        Bản Streamlit này KHÔNG còn testid "stVerticalBlockBorderWrapper";
@@ -2566,7 +2569,7 @@ if not st.session_state.get("_app_scripts_injected"):
     div[data-testid="stVerticalBlock"][overflow],
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background: var(--surf); border: 1px solid var(--line) !important;
-        border-radius: 14px !important; box-shadow: var(--sh);
+        border-radius: var(--r-md) !important; box-shadow: var(--sh);
         transition: box-shadow 0.15s var(--ease);
     }
     div[data-testid="stVerticalBlock"][overflow]:hover,
@@ -2588,18 +2591,18 @@ if not st.session_state.get("_app_scripts_injected"):
                            url("__DARK_BG_DATA_URI__");
         box-shadow: 0 14px 36px rgba(0,0,0,.45);
     }
-    .tan-hero-lab {font-size: 0.74rem; font-weight: 640; opacity: .88;}
-    .tan-hero-val {font-size: 2.55rem; font-weight: 820; letter-spacing: -.04em; line-height: 1; margin-top: .35rem;}
-    .tan-hero-sub {font-size: 0.75rem; opacity: .85; font-weight: 600; margin-top: .45rem;}
+    .tan-hero-lab {font-size: var(--fs-sm); font-weight: 600; opacity: .88;}
+    .tan-hero-val {font-size: var(--fs-3xl); font-weight: 700; letter-spacing: -.04em; line-height: 1; margin-top: .35rem;}
+    .tan-hero-sub {font-size: var(--fs-sm); opacity: .85; font-weight: 400; margin-top: .45rem;}
     .tan-hero-split {display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 1rem;
         margin-top: .9rem; padding-top: .75rem; border-top: 1px solid rgba(255,255,255,.22);}
     @container (max-width: 470px) {.tan-hero-split {grid-template-columns: repeat(2, minmax(0, 1fr));}}
-    .tan-hero-ks {font-size: 0.66rem; opacity: .8; font-weight: 600; margin-top: 1px; white-space: nowrap;}
-    .tan-hero-k {font-size: 0.68rem; opacity: .82; font-weight: 620;}
-    .tan-hero-v {font-size: 1.1rem; font-weight: 790; margin-top: 1px; letter-spacing: -.02em;}
+    .tan-hero-ks {font-size: var(--fs-sm); opacity: .8; font-weight: 400; margin-top: 1px; white-space: nowrap;}
+    .tan-hero-k {font-size: var(--fs-sm); opacity: .82; font-weight: 600;}
+    .tan-hero-v {font-size: var(--fs-lg); font-weight: 700; margin-top: 1px; letter-spacing: -.02em;}
 
     /* ── Chip trạng thái ── */
-    .tan-chip {display:inline-block; font-size:0.64rem; font-weight:740; padding:2px 8px;
+    .tan-chip {display:inline-block; font-size: var(--fs-xs); font-weight: 600; padding:2px 8px;
         border-radius: var(--r-pill); background: var(--chip); color: var(--tx2);}
     .tan-chip.ok {background: rgba(16,185,129,.14); color: var(--ok-tx);}
     .tan-chip.warn {background: rgba(245,158,11,.15); color: var(--warn-tx);}
@@ -2632,7 +2635,7 @@ if not st.session_state.get("_app_scripts_injected"):
     div:has(> [role="listbox"]) {background: var(--surf) !important;}
     [role="option"] {color: var(--tx) !important;}
     [role="option"][aria-selected="true"], [role="option"]:hover {background: var(--chip) !important;}
-    [data-testid="stWidgetLabel"] p {color: var(--tx2) !important; font-weight: 600; font-size: 0.8rem;}
+    [data-testid="stWidgetLabel"] p {color: var(--tx2) !important; font-weight: 600 !important; font-size: var(--fs-sm) !important;}
 
     /* ── st.date_input: khung ô nhập của BaseWeb hardcode nền sáng
        (rgb(237,240,245)), không kế thừa theme — vẫn trắng dù đã bật tối. ── */
@@ -2687,12 +2690,12 @@ if not st.session_state.get("_app_scripts_injected"):
     div[data-testid="stFileUploader"] button {
         background: var(--surf) !important; color: var(--tx) !important;
         border: 1px solid var(--line) !important; box-shadow: none !important;
-        border-radius: var(--r-sm) !important; font-weight: 640;
+        border-radius: var(--r-sm) !important; font-weight: 600;
     }
 
     /* ── Nút ── */
     div[data-testid="stMainBlockContainer"] .stButton button, .stDownloadButton button {
-        border-radius: var(--r-md); font-weight: 660; border: 1px solid var(--line);
+        border-radius: var(--r-md); font-weight: 600; border: 1px solid var(--line);
         background: var(--surf); color: var(--tx);
         box-shadow: none;
         transition: background 0.12s var(--ease), border-color 0.12s var(--ease), transform 0.1s var(--ease);
@@ -2717,17 +2720,17 @@ if not st.session_state.get("_app_scripts_injected"):
 
     /* ── Metric ── */
     div[data-testid="stMetric"] {
-        background: var(--surf); border: 1px solid var(--line); border-radius: 13px;
+        background: var(--surf); border: 1px solid var(--line); border-radius: var(--r-md);
         padding: 0.85rem 0.95rem 0.75rem; box-shadow: var(--sh);
         transition: box-shadow 0.15s var(--ease);
     }
     div[data-testid="stMetric"]:hover {box-shadow: var(--sh-lg);}
     div[data-testid="stMetricValue"], div[data-testid="stMetricValue"] * {
-        font-weight: 780 !important; color: var(--tx) !important; letter-spacing: -.03em;
+        font-weight: 700 !important; color: var(--tx) !important; letter-spacing: -.03em;
         font-variant-numeric: tabular-nums;
     }
     div[data-testid="stMetricLabel"], div[data-testid="stMetricLabel"] * {
-        font-size: 0.76rem !important; color: var(--tx2) !important; font-weight: 620 !important;
+        font-size: var(--fs-xs) !important; color: var(--tx2) !important; font-weight: 600 !important;
     }
 
     /* ── Cảnh báo ── */
@@ -2736,7 +2739,7 @@ if not st.session_state.get("_app_scripts_injected"):
     /* ── Form / expander / bảng ── */
     div[data-testid="stForm"] {
         background: var(--surf); border: 1px solid var(--line);
-        border-radius: 14px; padding: 1rem 1.1rem; box-shadow: var(--sh);
+        border-radius: var(--r-md); padding: 1rem 1.1rem; box-shadow: var(--sh);
     }
     div[data-testid="stExpander"] {background: var(--surf); border-radius: var(--r-md);}
     /* Streamlit tô nền xám sáng cho summary khi expander ĐANG MỞ — ở chế độ tối
@@ -2774,8 +2777,8 @@ if not st.session_state.get("_app_scripts_injected"):
     /* Link "Xem tất cả" ở đầu panel: nút nhưng nhìn như link, đúng bản dựng */
     .st-key-dash_seeall button {
         background: transparent !important; border: none !important; box-shadow: none !important;
-        color: var(--acc) !important; font-size: 0.72rem !important; font-weight: 700 !important;
-        padding: 0 !important; justify-content: flex-end !important; min-height: 32px !important;
+        color: var(--acc) !important; font-size: var(--fs-sm) !important; font-weight: 600 !important;
+        padding: 0 !important; justify-content: flex-end !important; min-height: 44px !important;   /* vùng bấm ≥44px */
     }
     .st-key-dash_seeall button > div {justify-content: flex-end !important; width: 100%;}
     .st-key-dash_seeall button:hover {background: transparent !important; text-decoration: underline;}
@@ -2795,7 +2798,7 @@ if not st.session_state.get("_app_scripts_injected"):
     }
     .st-key-dash_tasks, .st-key-dash_alerts {padding: 1.25rem !important;}
     .st-key-dash_tasks [data-testid="stHorizontalBlock"], .st-key-dash_alerts [data-testid="stHorizontalBlock"] {
-        min-height: 36px; align-items: center; gap: 0.5rem !important;   /* tiêu đề 2 panel cùng trục */
+        min-height: 44px; align-items: center; gap: 0.5rem !important;   /* tiêu đề 2 panel cùng trục */
     }
     @media (min-width: 641px) {
         .st-key-dash_tasks [data-testid="stHorizontalBlock"], .st-key-dash_alerts [data-testid="stHorizontalBlock"] {flex-wrap: nowrap !important;}
@@ -2833,10 +2836,37 @@ if not st.session_state.get("_app_scripts_injected"):
     @media (max-width: 768px) {
         div[data-testid="stMainBlockContainer"] {padding-left: 1rem; padding-right: 1rem;}
         .st-key-tan_topbar {margin: -4.6rem -1rem 0.9rem !important; width: calc(100% + 2rem) !important; padding: 0.45rem 1rem !important;}
-        .tan-hero-val {font-size: 2rem;}
+        .tan-hero-val {font-size: var(--fs-2xl);}
         .tan-hero-split {gap: 1.1rem;}
         div[data-testid="stMetric"] {padding: 0.6rem 0.7rem 0.55rem;}
     }
+
+    /* ── Biểu tượng Material Symbols dùng trong HTML (thay emoji; font đã được Streamlit nạp sẵn) ── */
+    .mi {font-family: "Material Symbols Rounded"; font-weight: 400; font-style: normal; font-size: 1.3em; line-height: 1;
+        letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap; direction: ltr;
+        font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased; vertical-align: -0.24em; margin-right: 6px;
+        font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;}
+    .kpi-ic .mi {margin: 0; font-size: 22px; vertical-align: middle;}
+    .pan-al-ic .mi {margin: 0; font-size: 22px; vertical-align: top;}
+    .tan-chip .mi {font-size: 14px; margin-right: 4px;}
+
+    /* ── Thang chữ + vùng bấm ≥44px cho thanh bên, thanh trên và widget Streamlit ── */
+    section[data-testid="stSidebar"] .stButton button {min-height: 44px;}
+    section[data-testid="stSidebar"] .stButton button p {font-size: var(--fs-md); font-weight: 600;}
+    :is(.st-key-theme_btn_auto, .st-key-theme_btn_light, .st-key-theme_btn_dark) button p {font-size: var(--fs-sm) !important;}
+    .st-key-tan_topbar button p {font-size: var(--fs-md); font-weight: 600;}
+    div[data-testid="stMainBlockContainer"] .stButton button p, .stDownloadButton button p {font-size: var(--fs-md) !important; font-weight: 600 !important;}
+    div[data-testid="stMainBlockContainer"] .stButton button, .stDownloadButton button {min-height: 44px;}
+    .st-key-dash_seeall button p {font-size: var(--fs-sm) !important;}
+    [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * {font-size: var(--fs-sm) !important;}
+    .stTextInput input, .stNumberInput input, .stTextArea textarea, [data-testid="stDateInputField"] {font-size: var(--fs-md) !important;}
+    [data-testid="stFileUploaderDropzone"] *, [data-testid="stFileUploaderFile"] * {font-size: var(--fs-sm) !important;}
+    [data-testid="stAlert"] p, [data-testid="stAlert"] li {font-size: var(--fs-md) !important;}
+    [data-testid="stExpander"] summary p {font-size: var(--fs-md) !important; font-weight: 600 !important;}
+    [data-testid="stMetricValue"], [data-testid="stMetricValue"] * {font-size: var(--fs-2xl) !important; font-weight: 700 !important;}
+    /* bo góc theo bậc: khung ngoài của trang 16 → thẻ/ô 12 → hộp tải file 8 */
+    div[data-testid="stMainBlockContainer"] > div[data-testid="stVerticalBlock"] > div[data-testid="stLayoutWrapper"] > div[data-testid="stVerticalBlock"][overflow] {border-radius: var(--r-lg) !important;}
+    [data-testid="stFileUploaderDropzone"] {border-radius: var(--r-sm) !important;}
 
     @media (prefers-reduced-motion: reduce) {
         .sb-mascot, #bg-sakura-layer .petal,
@@ -3354,22 +3384,22 @@ with st.container(key="tan_topbar"):
         f'<div class="tan-topbar"><span class="tan-crumb">Tân Hotel</span>'
         f'<span class="tan-sep">/</span><b>{_page_name}</b>'
         f'<span class="tan-topbar-r">'
-        f'<span class="tan-chip">📅 {_tb_now.strftime("%d/%m/%Y")}</span></span></div>',
+        f'<span class="tan-chip"><span class="mi">calendar_today</span> {_tb_now.strftime("%d/%m/%Y")}</span></span></div>',
         unsafe_allow_html=True)
     if _tb_report:
         _tb_rp_date = (_tb_d or {}).get('date_str') or today_vn().strftime('%d_%m')
         _tb_wb = build_daily_report(_tb_rp_date.replace('_', '/'),
                                     _tb_d if _tb_d and _tb_d.get('has_xlsx') else None,
                                     (_tb_rc or {}).get('arr_stats'))
-        _tbm.download_button("⇩ Xuất báo cáo", wb_to_bytes(_tb_wb),
+        _tbm.download_button("Xuất báo cáo", wb_to_bytes(_tb_wb), icon=":material/download:",
                              file_name=f"bao_cao_ngay_{_tb_rp_date}.xlsx",
                              mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                              use_container_width=True, key="tb_report_dl")
     elif st.session_state.menu == "dashboard":
-        _tbm.button("⇩ Xuất báo cáo", key="tb_report_off", use_container_width=True, disabled=True,
+        _tbm.button("Xuất báo cáo", icon=":material/download:", key="tb_report_off", use_container_width=True, disabled=True,
                     help="Mở Tổng quan ca trực và chạy ít nhất một công cụ để xuất báo cáo ngày")
     if st.session_state.menu != "daily":    # đang ở Xử lý hàng ngày thì không cần lối tắt tới chính nó
-        _tbr.button("⚡ Xử lý hàng ngày", key="tb_go_daily", use_container_width=True,
+        _tbr.button("Xử lý hàng ngày", icon=":material/bolt:", key="tb_go_daily", use_container_width=True,
                     type="primary", on_click=go_menu, args=("daily",))
 
 # ── Tạo file ARR từ file Arrival (Book) Smile ──────────────────────────────
@@ -3656,14 +3686,14 @@ def _render_dashboard():
                       else f"số liệu lúc {_cnt.get('time') or '—'}")
         _hero_html = (
             '<div class="tan-hero">'
-            '<div class="tan-hero-lab">🛏️ Tổng khách lưu trú hôm nay</div>'
+            '<div class="tan-hero-lab"><span class="mi">bed</span> Tổng khách lưu trú hôm nay</div>'
             f'<div class="tan-hero-val">{_stay["total"]}</div>'
             f'<div class="tan-hero-sub">{_cmp}{_room_txt}{_unk_txt}{_stale_txt}</div>'
             '<div class="tan-hero-split">'
-            + _hero_cell('🌍 Quốc tế', _stay['intl'], f"{_stay['intl_rooms']} phòng")
-            + _hero_cell('🇻🇳 Việt Nam', _stay['vn'], f"{_stay['vn_rooms']} phòng")
-            + _hero_cell('🔑 Check-in', None)
-            + _hero_cell('🚪 Check-out', _cout['total'],
+            + _hero_cell('<span class="mi">public</span> Quốc tế', _stay['intl'], f"{_stay['intl_rooms']} phòng")
+            + _hero_cell('<span class="mi">flag</span> Việt Nam', _stay['vn'], f"{_stay['vn_rooms']} phòng")
+            + _hero_cell('<span class="mi">key</span> Check-in', None)
+            + _hero_cell('<span class="mi">logout</span> Check-out', _cout['total'],
                          f"QT {_cout['intl']} khách · {_cout['intl_rooms']} phòng<br>"
                          f"VN {_cout['vn']} khách · {_cout['vn_rooms']} phòng<br>"
                          f"Tổng {_cout['rooms']} phòng")
@@ -3671,15 +3701,15 @@ def _render_dashboard():
     else:
         _hero_html = (
             '<div class="tan-hero">'
-            '<div class="tan-hero-lab">👋 Chào ca trực</div>'
+            '<div class="tan-hero-lab"><span class="mi">waving_hand</span> Chào ca trực</div>'
             '<div class="tan-hero-val" style="font-size:1.45rem">Chưa có số liệu hôm nay</div>'
             '<div class="tan-hero-sub">Xử lý file <b>IH</b> ở <b>Xử lý hàng ngày</b> (làm ĐK14) '
             '— số khách và phòng đang ở sẽ tự lên đây.</div>'
             '<div class="tan-hero-split">'
-            '<div><div class="tan-hero-k">🌍 Quốc tế</div><div class="tan-hero-v">—</div></div>'
-            '<div><div class="tan-hero-k">🇻🇳 Việt Nam</div><div class="tan-hero-v">—</div></div>'
-            '<div><div class="tan-hero-k">🔑 Check-in</div><div class="tan-hero-v">—</div></div>'
-            '<div><div class="tan-hero-k">🚪 Check-out</div><div class="tan-hero-v">—</div></div>'
+            '<div><div class="tan-hero-k"><span class="mi">public</span> Quốc tế</div><div class="tan-hero-v">—</div></div>'
+            '<div><div class="tan-hero-k"><span class="mi">flag</span> Việt Nam</div><div class="tan-hero-v">—</div></div>'
+            '<div><div class="tan-hero-k"><span class="mi">key</span> Check-in</div><div class="tan-hero-v">—</div></div>'
+            '<div><div class="tan-hero-k"><span class="mi">logout</span> Check-out</div><div class="tan-hero-v">—</div></div>'
             '</div></div>')
 
     _red_n = _hero['red'] if _hero else None
@@ -3687,11 +3717,11 @@ def _render_dashboard():
     _rate = st.session_state.get('rate_input') or (_d or {}).get('rate')
     _kpi_html = (
         '<div class="tan-kpis">'
-        f'<div class="tan-kpi"><span class="kpi-ic {_cls}">⚠️</span>'
+        f'<div class="tan-kpi"><span class="kpi-ic {_cls}"><span class="mi">warning</span></span>'
         '<div class="tan-kpi-m"><div class="kpi-lab">Lỗi dữ liệu</div>'
         f'<div class="kpi-sub">{"cần sửa trước khi nộp" if _red_n else ("dữ liệu sạch" if _hero else "chưa có dữ liệu")}</div></div>'
         f'<div class="kpi-val {"err" if _red_n else ""}">{_red_n if _hero else "—"}</div></div>'
-        '<div class="tan-kpi"><span class="kpi-ic acc">💱</span>'
+        '<div class="tan-kpi"><span class="kpi-ic acc"><span class="mi">currency_exchange</span></span>'
         '<div class="tan-kpi-m"><div class="kpi-lab">Tỷ giá VCB</div>'
         f'<div class="kpi-sub">{"USD → VNĐ (chuyển khoản)" if _rate else "lấy tỷ giá ở Xử lý hàng ngày"}</div></div>'
         f'<div class="kpi-val">{f"{_rate:,.0f}" if _rate else "—"}</div></div>'
@@ -3699,11 +3729,11 @@ def _render_dashboard():
     st.markdown(f'<div class="tan-row1">{_hero_html}{_kpi_html}</div>', unsafe_allow_html=True)
 
     # ── HÀNG 2: tiến độ công việc + cảnh báo (2 panel cao bằng nhau theo nội dung) ──
-    _TICK_ON = ('<span style="display:inline-block;width:15px;height:15px;border-radius:5px;'
-                'background:linear-gradient(135deg,#34d399,#059669);color:#fff;font-size:9px;'
-                'line-height:15px;text-align:center;vertical-align:-2px;">✓</span>')
-    _TICK_OFF = ('<span style="display:inline-block;width:15px;height:15px;border-radius:5px;'
-                 'border:1.5px solid var(--line);vertical-align:-2px;"></span>')
+    _TICK_ON = ('<span class="mi" style="margin:0;display:inline-flex;align-items:center;justify-content:center;'
+                'width:20px;height:20px;border-radius:var(--r-sm);background:linear-gradient(135deg,#34d399,#059669);'
+                'color:#fff;font-size:16px;vertical-align:-5px;">check</span>')
+    _TICK_OFF = ('<span style="display:inline-block;width:20px;height:20px;border-radius:var(--r-sm);'
+                 'border:1.5px solid var(--line);vertical-align:-5px;"></span>')
     _r2a, _r2b = st.columns(2, gap="medium")
 
     with _r2a:
@@ -3731,7 +3761,7 @@ def _render_dashboard():
             for _label, _done, _target, _stale_time in _tasks:
                 _chip = ('<span class="tan-chip ok">Xong</span>' if _done
                          else '<span class="tan-chip">Chưa chạy</span>')
-                _tm = _stale_time or ('✓' if _done else '—')
+                _tm = _stale_time or ('<span class="mi" style="margin:0">check</span>' if _done else '—')
                 _row_html.append(
                     f'<div class="pan-task">{_TICK_ON if _done else _TICK_OFF}'
                     f'<span class="pan-rt">{_label}</span>{_chip}'
@@ -3751,24 +3781,24 @@ def _render_dashboard():
             _alerts = []
             if _hero:
                 if _hero.get('red'):
-                    _alerts.append(('r', '🔴', f"{_hero['red']} vấn đề cần sửa",
+                    _alerts.append(('r', '<span class="mi" style="color:var(--err)">error</span>', f"{_hero['red']} vấn đề cần sửa",
                                     'phải xử lý trước khi nộp hồ sơ công an'))
                 if _hero.get('visa_watch'):
-                    _alerts.append(('a', '🛂', f"{_hero['visa_watch']} khách sắp hết hạn tạm trú",
+                    _alerts.append(('a', '<span class="mi">badge</span>', f"{_hero['visa_watch']} khách sắp hết hạn tạm trú",
                                     'kiểm tra ở Xử lý hàng ngày'))
                 if _hero.get('yellow'):
-                    _alerts.append(('a', '🟡', f"{_hero['yellow']} vấn đề nên kiểm tra",
+                    _alerts.append(('a', '<span class="mi" style="color:var(--warn)">warning</span>', f"{_hero['yellow']} vấn đề nên kiểm tra",
                                     'không chặn nộp hồ sơ'))
                 if _hero.get('invalid_ids'):
-                    _alerts.append(('a', '🪪', f"{_hero['invalid_ids']} khách chưa có hộ chiếu thật",
+                    _alerts.append(('a', '<span class="mi">id_card</span>', f"{_hero['invalid_ids']} khách chưa có hộ chiếu thật",
                                     'đã để trống số giấy tờ trong KBTT'))
                 if _hero.get('unknown_nats'):
-                    _alerts.append(('a', '🌐', f"{_hero['unknown_nats']} quốc tịch chưa có mã",
+                    _alerts.append(('a', '<span class="mi">public</span>', f"{_hero['unknown_nats']} quốc tịch chưa có mã",
                                     'đã giữ nguyên chữ gốc, cần kiểm tra'))
             # cùng cấu trúc hàng tiêu đề + đường kẻ với panel tiến độ để 2 tiêu đề thẳng trục
             _ah1, _ah2 = st.columns([2.5, 1], vertical_alignment="center")
             _ah1.markdown(f'<div class="pan-h" style="border:0;padding-bottom:0;margin-bottom:0">'
-                          f'<span class="pan-t">⚠️ Cảnh báo</span>'
+                          f'<span class="pan-t"><span class="mi">warning</span> Cảnh báo</span>'
                           f'<span class="tan-chip">{len(_alerts)}</span></div>', unsafe_allow_html=True)
             st.markdown('<div style="border-bottom:1px solid var(--line2);margin:0 0 .35rem"></div>',
                         unsafe_allow_html=True)
@@ -3778,7 +3808,7 @@ def _render_dashboard():
                     f'<div><div class="pan-al-t">{_t}</div><div class="pan-al-m">{_m}</div></div></div>'
                     for _k, _ic, _t, _m in _alerts), unsafe_allow_html=True)
             elif _hero:
-                st.markdown('<div class="pan-empty">✅ Không có cảnh báo nào — dữ liệu hôm nay sạch.</div>',
+                st.markdown('<div class="pan-empty"><span class="mi" style="color:var(--ok)">check_circle</span> Không có cảnh báo nào — dữ liệu hôm nay sạch.</div>',
                             unsafe_allow_html=True)
             else:
                 st.markdown('<div class="pan-empty">Cảnh báo sẽ hiện sau khi chạy '
@@ -3792,8 +3822,10 @@ if st.session_state.menu == "dashboard":
 # ── Daily processing screen ───────────────────────────────────────────────
 @st.fragment
 def _render_daily():
-    st.write("")
-    st.markdown('<div class="section-label">⚙️ Cài đặt</div>', unsafe_allow_html=True)
+    st.markdown('<div class="tan-h1">Xử lý hàng ngày</div>'
+                '<div class="tan-h1sub">Tải file khách và file IH, kiểm tra dữ liệu rồi tải về KBTT · VNM · ĐK14</div>',
+                unsafe_allow_html=True)
+    st.markdown('<div class="section-label"><span class="mi">settings</span>Cài đặt</div>', unsafe_allow_html=True)
     with st.container(border=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -3805,21 +3837,21 @@ def _render_daily():
                     st.session_state.rate_input = _rates['USD']
                     _eur = f" · EUR {_rates['EUR']:,.2f}" if _rates.get('EUR') else ''
                     st.session_state['vcb_note'] = (
-                        f"✅ Tỷ giá chuyển khoản VCB lúc {_ts}: USD {_rates['USD']:,.2f}{_eur} "
+                        f"Tỷ giá chuyển khoản VCB lúc {_ts}: USD {_rates['USD']:,.2f}{_eur} "
                         f"— đã điền USD vào ô tỷ giá.")
                 except Exception as _e:
                     st.session_state['vcb_note'] = (
-                        f"⚠️ Không lấy được tỷ giá VCB ({_e}) — nhập tay như bình thường.")
-            rate = st.number_input("💱 Tỷ giá USD/EUR → VNĐ", step=0.01, format="%.2f", key="rate_input")
-            st.button("🔄 Lấy tỷ giá VCB (chuyển khoản)", on_click=_apply_vcb_rate, key="btn_vcb")
+                        f"Không lấy được tỷ giá VCB ({_e}) — nhập tay như bình thường.")
+            rate = st.number_input("Tỷ giá USD/EUR → VNĐ", step=0.01, format="%.2f", key="rate_input")
+            st.button("Lấy tỷ giá VCB (chuyển khoản)", icon=":material/sync:", on_click=_apply_vcb_rate, key="btn_vcb")
             if st.session_state.get('vcb_note'):
                 st.caption(st.session_state['vcb_note'])
         with col2:
             today = today_vn()
-            date_str = st.text_input("📅 Ngày (dùng cho tên file)", value=f"{today.day}_{today.month:02d}")
+            date_str = st.text_input("Ngày (dùng cho tên file)", value=f"{today.day}_{today.month:02d}")
 
     st.write("")
-    st.markdown('<div class="section-label">🚔 Cài đặt ĐK14</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label"><span class="mi">local_police</span>Cài đặt ĐK14</div>', unsafe_allow_html=True)
     with st.container(border=True):
         col_n, col_c = st.columns(2)
         with col_n:
@@ -3832,7 +3864,7 @@ def _render_daily():
                 help="Dùng cho ô 'Từ ngày' ở đầu sổ, và cho khách thiếu ngày đến trong file nguồn.")
 
     st.write("")
-    st.markdown('<div class="section-label">📂 Tải file lên</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label"><span class="mi">upload_file</span>Tải file lên</div>', unsafe_allow_html=True)
     with st.container(border=True):
         col_x, col_s = st.columns(2)
         with col_x:
@@ -3846,7 +3878,7 @@ def _render_daily():
 
     st.write("")
 
-    if st.button("⚡ Bắt đầu xử lý", type="primary", disabled=(xlsx_file is None and xls_file is None), use_container_width=True):
+    if st.button("Bắt đầu xử lý", icon=":material/bolt:", type="primary", disabled=(xlsx_file is None and xls_file is None), use_container_width=True):
         with st.spinner("Đang xử lý..."):
             try:
                 progress = st.progress(0, text="Bắt đầu...")
@@ -3863,7 +3895,7 @@ def _render_daily():
                     try:
                         visa_map = parse_visa_file(visa_file.read())
                     except Exception as _ve:
-                        st.warning(f"⚠️ Không đọc được file visa: {_ve}")
+                        st.warning(f"Không đọc được file visa: {_ve}", icon=":material/warning:")
 
                 out_files = {}   # tên file → bytes: dùng cho ZIP + nút tải từng file riêng
                 _issues = None; _visa_watch = []
@@ -3914,8 +3946,8 @@ def _render_daily():
                         out_files[f'KhachVietNam_{date_str}.xlsx']   = wb_to_bytes(wb_vn)
                         out_files[f'ho_so_KBTT_NNN_{date_str}.xlsx'] = wb_to_bytes(wb_kbtt)
                         out_files[f'thong_bao_luu_tru_VNM_{date_str}.xlsx'] = wb_to_bytes(wb_vnm)
-                        files_made += ["📄 converted (file chung)", "🌍 KhachQuocTe", "🇻🇳 KhachVietNam",
-                                       "📝 KBTT NNN", "📑 Thông báo lưu trú VNM"]
+                        files_made += ["converted (file chung)", "KhachQuocTe", "KhachVietNam",
+                                       "KBTT NNN", "Thông báo lưu trú VNM"]
 
                     # ── Xử lý file ĐK14 (độc lập, chỉ cần file nguồn IH) ──
                     if xls_file:
@@ -3925,7 +3957,7 @@ def _render_daily():
                          dk14_issues, dk14_map, dk14_stats) = build_dk14(xls_bytes, dk_notifier, dk_checkin)
                         out_files[f'dk14_{date_str}.xlsx'] = dk14_bytes
                         has_dk14 = True
-                        files_made.append("🚔 ĐK14")
+                        files_made.append("ĐK14")
 
                     for _ofn, _ofb in out_files.items():
                         zf.writestr(_ofn, _ofb)
@@ -4013,22 +4045,22 @@ def _render_daily():
                 _progress_update(_mark_daily_done)
             except Exception as e:
                 st.session_state.pop('daily_results', None)
-                st.error(f"❌ Lỗi: {e}")
+                st.error(f"Lỗi: {e}", icon=":material/error:")
                 st.exception(e)
 
     _dr = st.session_state.get('daily_results')
     if _dr:
-        st.success("✅ Xử lý hoàn tất!")
+        st.success("Xử lý hoàn tất!", icon=":material/check_circle:")
         if _dr['has_xlsx']:
             c1,c2,c3,c4 = st.columns(4)
             c1.metric("Tổng khách", _dr['total'])
             c2.metric("Quốc tế", _dr['intl'])
             c3.metric("Việt Nam", _dr['vn'])
             c4.metric("GKS + GBL", f"{_dr['gks']} + {_dr['gbl']}")
-            st.info(f"💱 Đã quy đổi tỷ giá cho **{_dr['conv']}** ô (tỷ giá {_dr.get('rate', 0):,.2f})")
+            st.info(f"Đã quy đổi tỷ giá cho **{_dr['conv']}** ô (tỷ giá {_dr.get('rate', 0):,.2f})", icon=":material/currency_exchange:")
             _cnt_rep = _dr.get('cnt_report') or []
             if _cnt_rep:
-                with st.expander(f"🚪 Đã tự động chia giá {len(_cnt_rep)} cặp phòng connecting", expanded=False):
+                with st.expander(f"Đã tự động chia giá {len(_cnt_rep)} cặp phòng connecting", icon=":material/call_split:", expanded=False):
                     st.caption("Phòng connecting chung mã checkin nhưng chỉ 1 phòng có giá — đã chia đều "
                                "(lệch 1 đồng thì phòng số nhỏ hơn nhận phần làm tròn xuống).")
                     st.dataframe(pd.DataFrame([
@@ -4037,22 +4069,24 @@ def _render_daily():
                          'Tổng gốc': r['total']} for r in _cnt_rep]),
                         use_container_width=True, hide_index=True)
             if _dr['unknown_nats']:
-                st.warning("⚠️ Quốc tịch chưa có mã (giữ nguyên tên, cần kiểm tra): " + ", ".join(_dr['unknown_nats']))
+                st.warning("Quốc tịch chưa có mã (giữ nguyên tên, cần kiểm tra): " + ", ".join(_dr['unknown_nats']), icon=":material/warning:")
             if _dr.get('visa_used'):
-                st.info(f"🛂 Đã điền date visa cho **{_dr['visa_matched']}/{_dr['intl']}** khách quốc tế "
-                        f"(khớp theo hộ chiếu/tên từ file Visa rời bạn đã upload).")
+                st.info(f"Đã điền date visa cho **{_dr['visa_matched']}/{_dr['intl']}** khách quốc tế "
+                        f"(khớp theo hộ chiếu/tên từ file Visa rời bạn đã upload).", icon=":material/badge:")
                 if _dr.get('visa_skipped_vn'):
-                    st.caption(f"ℹ️ Đã tự động bỏ qua {_dr['visa_skipped_vn']} khách Việt Nam trong file visa (không cần thời hạn tạm trú).")
+                    st.caption(f"Đã tự động bỏ qua {_dr['visa_skipped_vn']} khách Việt Nam trong file visa (không cần thời hạn tạm trú).")
                 if _dr.get('visa_unmatched'):
-                    st.warning("⚠️ Không tìm thấy date visa cho (cột tạm trú để trống): "
-                               + ", ".join(_dr['visa_unmatched']))
+                    st.warning("Không tìm thấy date visa cho (cột tạm trú để trống): "
+                               + ", ".join(_dr['visa_unmatched']), icon=":material/warning:")
             if _dr.get('kbtt_invalid_ids'):
-                st.warning("⚠️ Số giấy tờ chỉ là mã tạm (chưa có hộ chiếu thật) — đã để trống trong hồ sơ KBTT, "
-                           "cần bổ sung số hộ chiếu thật trước khi nộp cho: " + ", ".join(_dr['kbtt_invalid_ids']))
+                st.warning("Số giấy tờ chỉ là mã tạm (chưa có hộ chiếu thật) — đã để trống trong hồ sơ KBTT, "
+                           "cần bổ sung số hộ chiếu thật trước khi nộp cho: " + ", ".join(_dr['kbtt_invalid_ids']),
+                           icon=":material/warning:")
             if _dr.get('vnm_ward_unmatched'):
-                st.warning("⚠️ Không tự tra được mã Phường/Xã (đã giữ nguyên chữ gốc trong file VNM, "
+                st.warning("Không tự tra được mã Phường/Xã (đã giữ nguyên chữ gốc trong file VNM, "
                            "cần chọn lại theo danh mục): "
-                           + ", ".join(f"{n} ('{p}')" for n, p in _dr['vnm_ward_unmatched']))
+                           + ", ".join(f"{n} ('{p}')" for n, p in _dr['vnm_ward_unmatched']),
+                           icon=":material/warning:")
 
             # ── Kiểm tra chất lượng dữ liệu trước khi nộp hồ sơ ──
             _iss = _dr.get('issues')
@@ -4060,23 +4094,23 @@ def _render_daily():
                 _n_red = int((_iss['Mức độ'] == '🔴').sum())
                 _n_yel = int((_iss['Mức độ'] == '🟡').sum())
                 st.write("")
-                st.markdown('<div class="section-label">✅ Kiểm tra dữ liệu trước khi nộp hồ sơ</div>',
+                st.markdown('<div class="section-label"><span class="mi">fact_check</span>Kiểm tra dữ liệu trước khi nộp hồ sơ</div>',
                            unsafe_allow_html=True)
                 if _n_red:
-                    st.error(f"🔴 **{_n_red}** vấn đề cần sửa trước khi nộp hồ sơ công an "
-                             f"+ 🟡 **{_n_yel}** vấn đề nên kiểm tra lại.")
+                    st.error(f"**{_n_red}** vấn đề cần sửa trước khi nộp hồ sơ công an "
+                             f"và **{_n_yel}** vấn đề nên kiểm tra lại.", icon=":material/error:")
                 else:
-                    st.warning(f"🟡 **{_n_yel}** vấn đề nên kiểm tra lại (không chặn nộp hồ sơ).")
+                    st.warning(f"**{_n_yel}** vấn đề nên kiểm tra lại (không chặn nộp hồ sơ).", icon=":material/warning:")
                 st.dataframe(_iss.assign(**{'Mức độ': _iss['Mức độ'].map({'🔴': '🔴 Lỗi', '🟡': '🟡 Cảnh báo'}).fillna(_iss['Mức độ'])}),
                              use_container_width=True, hide_index=True)
             elif _iss is not None:
-                st.success("✅ Kiểm tra dữ liệu: không phát hiện vấn đề nào.")
+                st.success("Kiểm tra dữ liệu: không phát hiện vấn đề nào.", icon=":material/check_circle:")
 
             # ── Cảnh báo visa/tạm trú sắp hết hạn ──
             _vw = _dr.get('visa_watch') or []
             if _vw:
                 st.write("")
-                st.markdown('<div class="section-label">🛂 Cảnh báo hạn tạm trú / visa</div>', unsafe_allow_html=True)
+                st.markdown('<div class="section-label"><span class="mi">badge</span>Cảnh báo hạn tạm trú / visa</div>', unsafe_allow_html=True)
                 _vw_days = st.slider("Cảnh báo khách còn lưu trú mà visa hết hạn trong vòng (ngày)",
                                      1, 30, 3, key="visa_warn_days")
                 _cutoff = today_vn() + datetime.timedelta(days=_vw_days)
@@ -4092,12 +4126,12 @@ def _render_daily():
                                      'Ngày đi dự kiến': (_dep.strftime('%d/%m/%Y') if _dep else '—')})
                 if _soon:
                     _df_soon = pd.DataFrame(_soon).sort_values('Còn')
-                    st.error(f"🔴 **{len(_soon)}** khách cần gia hạn/rời đi trước khi tạm trú hết hạn:")
+                    st.error(f"**{len(_soon)}** khách cần gia hạn/rời đi trước khi tạm trú hết hạn:", icon=":material/error:")
                     st.dataframe(_df_soon, use_container_width=True, hide_index=True)
                 else:
-                    st.success(f"✅ Không có khách nào hết hạn tạm trú trong {_vw_days} ngày tới.")
+                    st.success(f"Không có khách nào hết hạn tạm trú trong {_vw_days} ngày tới.", icon=":material/check_circle:")
         elif _dr['has_dk14']:
-            st.info("ℹ️ Chỉ tạo file ĐK14 (không có file XLSX dữ liệu khách).")
+            st.info("Chỉ tạo file ĐK14 (không có file XLSX dữ liệu khách).", icon=":material/info:")
 
         if _dr.get('has_dk14'):
             _dk_iss = _dr.get('dk14_issues') or []
@@ -4119,7 +4153,7 @@ def _render_daily():
                         ('phuong', 'G — Phường'), ('addressDetail', 'G — Địa chỉ chi tiết'),
                         ('arrival', 'H — Thời gian đến'), ('departure', 'I — Thời gian đi'),
                         ('room', 'J — Số phòng'), ('notifier', 'K — Người thông báo')]
-                with st.expander("🔎 Cột đã tự nhận diện trong file nguồn", expanded=False):
+                with st.expander("Cột đã tự nhận diện trong file nguồn", icon=":material/search:", expanded=False):
                     for _k, _lb in _LBL:
                         _i = _dcols.get(_k)
                         if _i is None:
@@ -4129,22 +4163,22 @@ def _render_daily():
                     _miss = [k for k in ('name', 'dob', 'gender', 'id', 'arrival', 'departure', 'room')
                              if k not in _dcols]
                     if _miss:
-                        st.warning("⚠️ Không tìm thấy cột: " + ", ".join(_miss))
+                        st.warning("Không tìm thấy cột: " + ", ".join(_miss), icon=":material/warning:")
 
             if _dk_iss:
-                _ICON = {'fix': '🔧', 'warn': '⚠️', 'skip': '⏭️'}
-                with st.expander(f"📋 Nhật ký {len(_dk_iss)} dòng đã sửa / cần xem lại", expanded=bool(_n_warn)):
+                _ICON = {'fix': 'Đã sửa', 'warn': 'Cần xem', 'skip': 'Bỏ qua'}
+                with st.expander(f"Nhật ký {len(_dk_iss)} dòng đã sửa / cần xem lại", icon=":material/list_alt:", expanded=bool(_n_warn)):
                     st.dataframe(pd.DataFrame(
-                        [{'': _ICON.get(t, ''), 'Dòng': r, 'Tên': n, 'Nội dung': msg}
+                        [{'Loại': _ICON.get(t, ''), 'Dòng': r, 'Tên': n, 'Nội dung': msg}
                          for t, r, n, msg in _dk_iss]),
                         use_container_width=True, hide_index=True)
             else:
-                st.success("✅ ĐK14: không phát hiện vấn đề nào trong dữ liệu nguồn.")
+                st.success("ĐK14: không phát hiện vấn đề nào trong dữ liệu nguồn.", icon=":material/check_circle:")
 
         st.markdown("**File đã tạo:** " + " · ".join(_dr['files_made']))
 
         st.download_button(
-            label="⬇️ Tải về tất cả file (ZIP)",
+            label="Tải về tất cả file (ZIP)", icon=":material/download:",
             data=_dr['zip'],
             file_name=f"hotel_{_dr['date_str']}.zip",
             mime="application/zip",
@@ -4154,9 +4188,9 @@ def _render_daily():
 
         # ── Tải riêng từng file (không cần giải nén ZIP) ──
         if _dr.get('files'):
-            with st.expander("⬇️ Tải riêng từng file"):
+            with st.expander("Tải riêng từng file", icon=":material/download:"):
                 for _fn, _fb in _dr['files'].items():
-                    st.download_button(f"⬇️ {_fn}", _fb, file_name=_fn,
+                    st.download_button(_fn, _fb, icon=":material/download:", file_name=_fn,
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True, key=f"dl_single_{_fn}")
 
@@ -4166,8 +4200,9 @@ if st.session_state.menu == "daily":
 # ── Regcard screen ────────────────────────────────────────────────────────
 @st.fragment
 def _render_regcard():
-    st.write("")
-    st.markdown('<div class="section-label">🖨️ Tạo Registration Card + file ARR</div>', unsafe_allow_html=True)
+    st.markdown('<div class="tan-h1">Regcard + ARR</div>'
+                '<div class="tan-h1sub">Tạo Registration Card (PDF) và file ARR từ file Arrival Smile</div>',
+                unsafe_allow_html=True)
     st.caption("Điền dữ liệu từ file Arrival Smile lên mẫu Regcard PDF gốc, đồng thời tạo file ARR "
                "(đúng định dạng ARR Converter — nhóm Conf# · đếm phòng · Cà Thẻ / Thu Tiền / Xem Lại BU / FOC Late C/O) — ra cùng lúc 2 file.")
 
@@ -4179,7 +4214,7 @@ def _render_regcard():
 
     st.write("")
 
-    if st.button("🖨️ Tạo Regcard PDF + file ARR", type="primary", disabled=rc_file is None, use_container_width=True):
+    if st.button("Tạo Regcard PDF + file ARR", icon=":material/print:", type="primary", disabled=rc_file is None, use_container_width=True):
         with st.spinner("Đang tạo Regcard PDF và file ARR..."):
             try:
                 rc_bytes = rc_file.read()
@@ -4209,33 +4244,33 @@ def _render_regcard():
                 _progress_update(_mark_regcard_done)
             except Exception as e:
                 st.session_state.pop('rc_results', None)
-                st.error(f"❌ Lỗi: {e}")
+                st.error(f"Lỗi: {e}", icon=":material/error:")
                 st.exception(e)
 
     # Kết quả lưu trong session — 2 nút tải không biến mất sau khi bấm 1 nút
     _res = st.session_state.get('rc_results')
     if _res:
         if _res['count'] == 0:
-            st.warning("⚠️ Không tìm thấy khách nào để tạo regcard. Kiểm tra lại file.")
+            st.warning("Không tìm thấy khách nào để tạo regcard. Kiểm tra lại file.", icon=":material/warning:")
         else:
-            st.success(f"✅ Đã tạo {_res['count']} regcard"
-                       + (" + file ARR!" if _res['arr'] else "!"))
+            st.success(f"Đã tạo {_res['count']} regcard"
+                       + (" + file ARR!" if _res['arr'] else "!"), icon=":material/check_circle:")
             if _res['arr_stats']:
                 a1, a2, a3, a4, a5 = st.columns(5)
-                a1.metric("🖨️ Regcard", _res['count'])
-                a2.metric("📦 Booking", _res['arr_stats']['bookings'])
-                a3.metric("💳 Cà Thẻ", _res['arr_stats']['ca_the'])
-                a4.metric("💵 Thu Tiền", _res['arr_stats']['thu_tien'])
-                a5.metric("⚠️ Xem Lại BU", _res['arr_stats']['xem_lai_bu'])
+                a1.metric("Regcard", _res['count'])
+                a2.metric("Booking", _res['arr_stats']['bookings'])
+                a3.metric("Cà Thẻ", _res['arr_stats']['ca_the'])
+                a4.metric("Thu Tiền", _res['arr_stats']['thu_tien'])
+                a5.metric("Xem Lại BU", _res['arr_stats']['xem_lai_bu'])
                 if _res['arr_stats'].get('foc_lco'):
-                    st.caption(f"🛎️ FOC Late C/O: {_res['arr_stats']['foc_lco']} booking")
+                    st.caption(f"FOC Late C/O: {_res['arr_stats']['foc_lco']} booking")
             else:
                 st.metric("Số regcard", _res['count'])
 
             d1, d2 = st.columns(2)
             with d1:
                 st.download_button(
-                    label=f"⬇️ Tải {_res['count']} Regcard (PDF)",
+                    label=f"Tải {_res['count']} Regcard (PDF)", icon=":material/download:",
                     data=_res['pdf'],
                     file_name=f"regcards_{_res['date']}.pdf",
                     mime="application/pdf",
@@ -4243,13 +4278,13 @@ def _render_regcard():
             with d2:
                 if _res['arr']:
                     st.download_button(
-                        label="⬇️ Tải file ARR (Excel)",
+                        label="Tải file ARR (Excel)", icon=":material/download:",
                         data=_res['arr'],
                         file_name=f"Arr {_res['arr_date']}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True, type="primary", key="dl_rc_arr")
             if _res['arr_err']:
-                st.warning(f"⚠️ Không tạo được file ARR: {_res['arr_err']}")
+                st.warning(f"Không tạo được file ARR: {_res['arr_err']}", icon=":material/warning:")
 
 if st.session_state.menu == "regcard":
     _render_regcard()
