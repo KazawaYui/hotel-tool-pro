@@ -2360,7 +2360,7 @@ if not st.session_state.get("_app_scripts_injected"):
         --line: #e7e9ef; --line2: #f0f2f6; --chip: #f2f4f8;
         --tx: #0f172a; --tx2: #475467; --tx3: #667085;
         --acc: #4f46e5; --acc2: #7c3aed;
-        --ok: #0d9668; --warn: #d97706; --err: #dc2626;
+        --ok: #0d9668; --warn: #d97706; --err: #dc2626; --info: #2563eb;
         /* màu CHỮ trên nền chip nhạt (đậm hơn màu nền/viền để đạt ≥4.5:1) */
         --ok-tx: #067a55; --warn-tx: #a14a06; --err-tx: #b91c1c;
         --sh: 0 1px 2px rgba(15,23,42,.05), 0 8px 24px rgba(15,23,42,.05);
@@ -2375,7 +2375,7 @@ if not st.session_state.get("_app_scripts_injected"):
         --line: #262d3b; --line2: #212734; --chip: #242b39;
         --tx: #eef2fa; --tx2: #a3adc2; --tx3: #8a94ab;
         --acc: #8b93f8; --acc2: #a78bfa;
-        --ok: #34d399; --warn: #fbbf24; --err: #f87171;
+        --ok: #34d399; --warn: #fbbf24; --err: #f87171; --info: #60a5fa;
         --ok-tx: #34d399; --warn-tx: #fbbf24; --err-tx: #f87171;
         --sh: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.32);
         --sh-lg: 0 2px 8px rgba(0,0,0,.35), 0 18px 44px rgba(0,0,0,.42);
@@ -2764,6 +2764,66 @@ if not st.session_state.get("_app_scripts_injected"):
     html[data-theme="dark"] [data-testid="stRadio"] label {color: var(--tx) !important;}
     /* Thẻ hero luôn nền tối nên chữ bên trong luôn trắng ở cả 2 chế độ */
     .tan-hero, .tan-hero * {color: #fff !important;}
+
+    /* ── Giao diện tối: bảng màu riêng cho các thành phần Streamlit tự vẽ ──
+       Giao diện tối của app chỉ là lớp CSS phủ lên chủ đề SÁNG gốc của Streamlit (config.toml: base="light"),
+       nên thành phần nào Streamlit tự tô màu vẫn mang nền sáng của chủ đề gốc, trong khi chữ đã bị ép sang
+       màu sáng ở trên. Streamlit 1.67 còn đổi nền hộp thông báo từ trong suốt sang pastel ĐẶC (#F1FBF6,
+       #EDF5FF, #FFFAE5, #FFF1F2) → chữ sáng trên nền pastel, độ tương phản ~1:1 (không đọc được).
+       Khai báo màu tường minh cho từng thành phần để không phụ thuộc phiên bản Streamlit. */
+    /* Hộp thông báo (st.success/info/warning/error/exception): nền tối pha màu theo loại + viền mảnh
+       (viền = bóng trong để không đổi chiều cao hộp), chữ sáng, icon theo màu loại. Ngoài màu, mỗi loại
+       còn có icon riêng và nội dung chữ nên không dựa vào màu để truyền nghĩa. */
+    html[data-theme="dark"] [data-testid="stAlertContainer"] {color: var(--tx) !important;}
+    html[data-theme="dark"] [data-testid="stAlertContainer"] pre {border-color: var(--line) !important;}
+    html[data-theme="dark"] [data-testid="stAlertContainer"]:has([data-testid="stAlertContentSuccess"]) {
+        background: rgba(52,211,153,.12) !important; box-shadow: inset 0 0 0 1px rgba(52,211,153,.32);}
+    html[data-theme="dark"] [data-testid="stAlertContainer"]:has([data-testid="stAlertContentInfo"]) {
+        background: rgba(96,165,250,.12) !important; box-shadow: inset 0 0 0 1px rgba(96,165,250,.32);}
+    html[data-theme="dark"] [data-testid="stAlertContainer"]:has([data-testid="stAlertContentWarning"]) {
+        background: rgba(251,191,36,.12) !important; box-shadow: inset 0 0 0 1px rgba(251,191,36,.32);}
+    html[data-theme="dark"] [data-testid="stAlertContainer"]:has([data-testid="stAlertContentError"]) {
+        background: rgba(248,113,113,.13) !important; box-shadow: inset 0 0 0 1px rgba(248,113,113,.34);}
+    html[data-theme="dark"] [data-testid="stAlertContainer"]:has([data-testid="stAlertContentSuccess"]) [data-testid="stAlertDynamicIcon"] {color: var(--ok) !important;}
+    html[data-theme="dark"] [data-testid="stAlertContainer"]:has([data-testid="stAlertContentInfo"]) [data-testid="stAlertDynamicIcon"] {color: var(--info) !important;}
+    html[data-theme="dark"] [data-testid="stAlertContainer"]:has([data-testid="stAlertContentWarning"]) [data-testid="stAlertDynamicIcon"] {color: var(--warn) !important;}
+    html[data-theme="dark"] [data-testid="stAlertContainer"]:has([data-testid="stAlertContentError"]) [data-testid="stAlertDynamicIcon"] {color: var(--err) !important;}
+    /* Chú giải (tooltip) của dấu ? ở widget: nền sáng + chữ sáng → không đọc được */
+    html[data-theme="dark"] [data-testid="stTooltipContent"] {
+        background: var(--surf2) !important; color: var(--tx) !important; box-shadow: inset 0 0 0 1px var(--line);}
+    /* Thanh tiến độ: phần chưa chạy là vệt gần trắng */
+    html[data-theme="dark"] [data-testid="stProgressBarTrack"] {background: var(--line) !important;}
+    /* Vòng xoay st.spinner: cung xoay lấy màu chữ gốc (#3d4451) → xám tối trên nền tối (1.6:1), gần như vô hình */
+    html[data-theme="dark"] [data-testid="stSpinner"] span > span {
+        border-color: rgba(238,242,250,.22) !important; border-top-color: var(--acc) !important;}
+    /* Chip tên file vừa chọn trong ô tải file: nền xám sáng → nền chip tối, chữ rõ */
+    html[data-theme="dark"] [data-testid="stFileChip"] {background: var(--chip) !important;}
+    html[data-theme="dark"] [data-testid="stFileChipName"] {color: var(--tx) !important;}
+    html[data-theme="dark"] [data-testid="stFileChipName"] + div {color: var(--tx2) !important;}
+    /* Chú thích (st.caption): Streamlit hạ độ đục xuống 0.6 → chữ #8a94ab thành ~2.8:1; để đủ rõ thì trả về 1 */
+    html[data-theme="dark"] [data-testid="stCaptionContainer"] {opacity: 1;}
+    /* Bảng st.dataframe vẽ bằng canvas theo chủ đề sáng gốc nên CSS màu không với tới: đảo màu cả vùng lưới
+       (nền sáng → tối, chữ tối → sáng) rồi xoay sắc độ 180° để các màu đỏ/vàng/xanh giữ nguyên sắc. */
+    html[data-theme="dark"] [data-testid="stDataFrameResizable"] {filter: invert(1) hue-rotate(180deg);}
+    /* Biểu tượng mục điều hướng đang mở: ô nền tím nhạt ở giao diện tối nên glyph phải tối (như nút chính) */
+    html[data-theme="dark"] section[data-testid="stSidebar"] .stButton button[kind="primary"] [data-testid="stIconMaterial"] {color: #0f172a !important;}
+    /* Lịch chọn ngày (st.date_input): Streamlit mới không còn dùng BaseWeb nên các quy tắc div[data-baseweb="calendar"]
+       ở trên hết tác dụng — khung lịch (nằm trong portal NGOÀI .stApp) vẫn nền sáng + chữ tối của chủ đề gốc */
+    html[data-theme="dark"] [data-testid="stDateInputCalendar"] {background: var(--surf) !important; color: var(--tx) !important;}
+    html[data-theme="dark"] [data-testid="stDateInputCalendar"] :is(h2, th, button, [role="button"]) {color: var(--tx) !important;}
+    html[data-theme="dark"] [data-testid="stDateInputCalendar"] [role="button"][data-outside-month] {color: var(--tx3) !important;}
+    html[data-theme="dark"] [data-testid="stDateInputCalendar"] [role="button"][data-selected] {background: var(--acc) !important; color: #0f172a !important;}
+    /* Các popup của bảng (menu cột bấm ⋮, Statistics, Format, Show/hide columns) cũng nền sáng + chữ tối. Nội dung
+       của chúng là DOM thường (chữ + biểu tượng + vạch ngăn + ô tick) nên đảo màu phần nội dung thay vì dò từng
+       phần tử; khung ngoài tô riêng để bóng đổ không bị đảo thành quầng sáng. Chọn theo tiền tố/hậu tố testid
+       để popup mới cùng họ cũng được phủ. */
+    html[data-theme="dark"] [data-testid^="stDataFrame"][data-testid$="Menu"] {background: var(--surf) !important; border-color: var(--line) !important;}
+    html[data-theme="dark"] [data-testid^="stDataFrame"][data-testid$="Menu"] > * {filter: invert(1) hue-rotate(180deg);}
+    /* Xem bảng toàn màn hình (nút ⛶): khung phủ kín màn hình mang nền sáng của chủ đề gốc */
+    html[data-theme="dark"] [data-testid="stFullScreenFrame"]:has([aria-label="Close fullscreen"]) {background: var(--surf) !important;}
+    /* "Xuất báo cáo" trên thanh trên là nút PHỤ (nền --surf, có viền): quy tắc "chữ tối cho nút tải" ở trên là
+       dành cho nút chính nền tím nhạt, áp vào đây thành chữ tối trên nền tối (1.08:1) — trả về chữ sáng */
+    html[data-theme="dark"] .st-key-tb_report_dl button, html[data-theme="dark"] .st-key-tb_report_dl button * {color: var(--tx) !important;}
 
     /* ── Bố cục ── */
     div[data-testid="stMainBlockContainer"] {max-width: 1320px; padding: 4.6rem 1.6rem 2.5rem;}
@@ -4101,7 +4161,11 @@ def _render_daily():
                              f"và **{_n_yel}** vấn đề nên kiểm tra lại.", icon=":material/error:")
                 else:
                     st.warning(f"**{_n_yel}** vấn đề nên kiểm tra lại (không chặn nộp hồ sơ).", icon=":material/warning:")
-                st.dataframe(_iss.assign(**{'Mức độ': _iss['Mức độ'].map({'🔴': '🔴 Lỗi', '🟡': '🟡 Cảnh báo'}).fillna(_iss['Mức độ'])}),
+                # st.dataframe vẽ bằng canvas; ở giao diện tối app đảo màu cả lưới (xem CSS "Giao diện tối") nên emoji
+                # sáng (🟡) bị đảo thành chấm nâu tối → giao diện tối chỉ dùng chữ, giao diện sáng giữ chấm màu.
+                _sev_lbl = ({'🔴': 'Lỗi', '🟡': 'Cảnh báo'} if _compute_effective_theme() == 'dark'
+                            else {'🔴': '🔴 Lỗi', '🟡': '🟡 Cảnh báo'})
+                st.dataframe(_iss.assign(**{'Mức độ': _iss['Mức độ'].map(_sev_lbl).fillna(_iss['Mức độ'])}),
                              use_container_width=True, hide_index=True)
             elif _iss is not None:
                 st.success("Kiểm tra dữ liệu: không phát hiện vấn đề nào.", icon=":material/check_circle:")
