@@ -2377,6 +2377,7 @@ if not st.session_state.get("_app_scripts_injected"):
         --acc: #8b93f8; --acc2: #a78bfa;
         --ok: #34d399; --warn: #fbbf24; --err: #f87171; --info: #60a5fa;
         --ok-tx: #34d399; --warn-tx: #fbbf24; --err-tx: #f87171;
+        --ctl-bd: #66708a;   /* viền ô nhập: ≥3:1 so với nền thẻ (#1a1f2b) và nền ô (#161b25) — WCAG 1.4.11 */
         --sh: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.32);
         --sh-lg: 0 2px 8px rgba(0,0,0,.35), 0 18px 44px rgba(0,0,0,.42);
     }
@@ -2455,7 +2456,7 @@ if not st.session_state.get("_app_scripts_injected"):
         text-transform: uppercase; letter-spacing: 0.1em; padding: 0.8rem 0.55rem 0.3rem;}
     .sb-user {display:flex; align-items:center; gap:9px; padding-top:0.8rem;
         margin-top:0.5rem; border-top: 1px solid var(--line2);}
-    .sb-av {width:28px; height:28px; border-radius:50%; flex-shrink:0; color:#fff;
+    .sb-av {width:28px; height:28px; border-radius:50%; flex-shrink:0; color:#0f172a;   /* chữ tối trên nền tím nhạt (≥5:1); chữ trắng chỉ ~2.8:1 */
         background: linear-gradient(135deg,#818cf8,#c084fc);
         display:flex; align-items:center; justify-content:center; font-size:var(--fs-xs); font-weight:700;}
     .sb-un {font-size: var(--fs-md); font-weight: 600; color: var(--tx);}
@@ -2807,6 +2808,13 @@ if not st.session_state.get("_app_scripts_injected"):
     html[data-theme="dark"] [data-testid="stDataFrameResizable"] {filter: invert(1) hue-rotate(180deg);}
     /* Biểu tượng mục điều hướng đang mở: ô nền tím nhạt ở giao diện tối nên glyph phải tối (như nút chính) */
     html[data-theme="dark"] section[data-testid="stSidebar"] .stButton button[kind="primary"] [data-testid="stIconMaterial"] {color: #0f172a !important;}
+    /* Viền ô nhập: Streamlit giữ viền "gần trắng" #EDF0F5 của chủ đề sáng (ở nền sáng gần như vô hình) → ở nền tối
+       thành đường trắng chói. Đổi sang xám xanh ≥3:1; trạng thái focus (viền màu chủ đạo) giữ nguyên nhờ :not(:focus-within). */
+    html[data-theme="dark"] :is([data-testid="stTextInputRootElement"], [data-testid="stTextAreaRootElement"],
+        [data-testid="stNumberInputContainer"], [data-testid="stDateInputField"]):not(:focus-within) {border-color: var(--ctl-bd) !important;}
+    /* Expander: viền #D5DAE4 của chủ đề sáng → viền thẻ chuẩn của app, cùng họ với các thẻ khác */
+    html[data-theme="dark"] [data-testid="stExpander"] details {border-color: var(--line) !important;}
+    html[data-theme="dark"] [data-testid="stExpanderDetails"] {border-top-color: var(--line) !important;}
     /* Lịch chọn ngày (st.date_input): Streamlit mới không còn dùng BaseWeb nên các quy tắc div[data-baseweb="calendar"]
        ở trên hết tác dụng — khung lịch (nằm trong portal NGOÀI .stApp) vẫn nền sáng + chữ tối của chủ đề gốc */
     html[data-theme="dark"] [data-testid="stDateInputCalendar"] {background: var(--surf) !important; color: var(--tx) !important;}
@@ -3789,9 +3797,11 @@ def _render_dashboard():
     st.markdown(f'<div class="tan-row1">{_hero_html}{_kpi_html}</div>', unsafe_allow_html=True)
 
     # ── HÀNG 2: tiến độ công việc + cảnh báo (2 panel cao bằng nhau theo nội dung) ──
+    # Ô tick "xong": nền --ok + dấu tick màu nền thẻ (--surf) → sáng: tick trắng trên xanh đậm, tối: tick tối trên xanh
+    # nhạt, đều ≥3:1 (trước đây tick trắng trên dải xanh nhạt #34d399→#059669 chỉ ~2.6:1)
     _TICK_ON = ('<span class="mi" style="margin:0;display:inline-flex;align-items:center;justify-content:center;'
-                'width:20px;height:20px;border-radius:var(--r-sm);background:linear-gradient(135deg,#34d399,#059669);'
-                'color:#fff;font-size:16px;vertical-align:-5px;">check</span>')
+                'width:20px;height:20px;border-radius:var(--r-sm);background:var(--ok);'
+                'color:var(--surf);font-size:16px;vertical-align:-5px;">check</span>')
     _TICK_OFF = ('<span style="display:inline-block;width:20px;height:20px;border-radius:var(--r-sm);'
                  'border:1.5px solid var(--line);vertical-align:-5px;"></span>')
     _r2a, _r2b = st.columns(2, gap="medium")
