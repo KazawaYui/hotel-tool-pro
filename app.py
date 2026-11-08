@@ -2425,15 +2425,51 @@ if not st.session_state.get("_app_scripts_injected"):
         each('[role="listbox"] [role="option"]', function (t, s) { if (MO[s]) setText(t, 'Tháng ' + MO[s]); });
     }
 
-    function sweep() { fixAttrs(); fixText(); }
+    // ── Cấu trúc cho trình đọc màn hình (không đổi hình dáng): ngôn ngữ trang, tiêu đề thật, vùng điều hướng, mục đang mở ──
+    function fixStructure() {
+        var h = D.documentElement;
+        if (h.getAttribute('lang') !== 'vi') h.setAttribute('lang', 'vi');
+        // tên panel Tổng quan là mục cấp 2 (không nhảy cấp h1 → h3)
+        [['.tan-h1', '1'], ['.section-label', '2'], ['.pan-t', '2']].forEach(function (p) {
+            D.querySelectorAll(p[0]).forEach(function (e) {
+                if (e.getAttribute('role') !== 'heading') e.setAttribute('role', 'heading');
+                if (e.getAttribute('aria-level') !== p[1]) e.setAttribute('aria-level', p[1]);
+            });
+        });
+        // biểu tượng Material trong HTML của app chỉ để trang trí: không để trình đọc đọc tên biểu tượng ("settings Cài đặt")
+        D.querySelectorAll('.mi:not([aria-hidden])').forEach(function (e) { e.setAttribute('aria-hidden', 'true'); });
+        var nav = D.querySelector('.st-key-nav');
+        if (nav) {
+            if (nav.getAttribute('role') !== 'navigation') nav.setAttribute('role', 'navigation');
+            if (nav.getAttribute('aria-label') !== 'Điều hướng chính') nav.setAttribute('aria-label', 'Điều hướng chính');
+        }
+        ['dashboard', 'daily', 'regcard'].forEach(function (k) {
+            var b = D.querySelector('.st-key-nav_' + k + ' button');
+            if (!b) return;
+            if (b.getAttribute('kind') === 'primary') { if (b.getAttribute('aria-current') !== 'page') b.setAttribute('aria-current', 'page'); }
+            else if (b.hasAttribute('aria-current')) b.removeAttribute('aria-current');
+        });
+        // huy hiệu số cạnh "Xử lý hàng ngày" được vẽ bằng CSS (::after) nên trình đọc không biết nghĩa của nó → gắn nhãn
+        var db = D.querySelector('.st-key-nav_daily button');
+        if (db) {
+            var m = /^["'](\d+)["']$/.exec(getComputedStyle(db, '::after').content || '');
+            var lab = m ? 'Xử lý hàng ngày, đã xử lý ' + m[1] + ' khách' : null;
+            if (lab && db.getAttribute('aria-label') !== lab) { db.setAttribute('aria-label', lab); db.setAttribute('title', 'Đã xử lý ' + m[1] + ' khách'); db.setAttribute('data-tan-badge', '1'); }
+            else if (!lab && db.hasAttribute('data-tan-badge')) { db.removeAttribute('aria-label'); db.removeAttribute('title'); db.removeAttribute('data-tan-badge'); }
+        }
+    }
+
+    function sweep() { fixAttrs(); fixText(); fixStructure(); }
     var pend = false;
     function sched() {
         if (pend) return;
         pend = true;
         (window.requestAnimationFrame || window.setTimeout)(function () { pend = false; try { sweep(); } catch (e) {} });
     }
-    new MutationObserver(sched).observe(D.body, {childList: true, subtree: true, characterData: true,
-                                                 attributes: true, attributeFilter: ['aria-label', 'title']});
+    var mo = new MutationObserver(sched);
+    mo.observe(D.body, {childList: true, subtree: true, characterData: true, attributes: true,
+                        attributeFilter: ['aria-label', 'title', 'kind']});
+    mo.observe(D.head, {childList: true, subtree: true, characterData: true});   // huy hiệu số nằm trong <style id="tan-badge-style">
     sched();
 })();
 '''
@@ -2702,7 +2738,7 @@ if not st.session_state.get("_app_scripts_injected"):
     .tan-hero-split {display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 1rem;
         margin-top: .9rem; padding-top: .75rem; border-top: 1px solid rgba(255,255,255,.22);}
     @container (max-width: 470px) {.tan-hero-split {grid-template-columns: repeat(2, minmax(0, 1fr));}}
-    .tan-hero-ks {font-size: var(--fs-sm); opacity: .8; font-weight: 400; margin-top: 1px; white-space: nowrap;}
+    .tan-hero-ks {font-size: var(--fs-sm); opacity: .8; font-weight: 400; margin-top: 1px; overflow-wrap: anywhere;}
     .tan-hero-k {font-size: var(--fs-sm); opacity: .82; font-weight: 600;}
     .tan-hero-v {font-size: var(--fs-lg); font-weight: 700; margin-top: 1px; letter-spacing: -.02em;}
 
@@ -3044,13 +3080,14 @@ if not st.session_state.get("_app_scripts_injected"):
     .flow-step {display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-sm); font-weight: 600; color: var(--tx2);}
     .flow-step span {display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
         border-radius: 50%; font-size: var(--fs-xs); font-weight: 700; background: var(--chip); color: var(--tx2);}
-    .flow-step.done span {background: var(--ok); color: var(--surf);}
+    .flow-step.done span {background: var(--ok-tx); color: var(--surf);}   /* --ok-tx: nền xanh đủ đậm để dấu ✓ trắng ≥4.5:1 (--ok chỉ 3.8:1) */
     .flow-step.now {color: var(--tx);}
     .flow-step.now span {background: linear-gradient(135deg, var(--acc), var(--acc2)); color: #fff;}
     html[data-theme="dark"] .flow-step.now span {color: #0f172a;}
+    html[data-theme="dark"] .flow-step.done span {color: var(--surf);}   /* quy tắc chữ chung của chế độ tối (span → màu chữ sáng) đè lên dấu ✓ → 1.7:1; trả về chữ tối trên nền xanh */
     .flow-sep {width: 32px; height: 2px; background: var(--line); border-radius: 2px;}
     /* khung đặt chỗ (đầu trang / form) chỉ để sắp thứ tự hiển thị — không phải thẻ: bỏ viền, nền, lề để khỏi thành "thẻ trong thẻ" */
-    div[data-testid="stVerticalBlock"][overflow]:is(.st-key-daily_head, .st-key-daily_form, .st-key-rc_head, .st-key-rc_form) {
+    div[data-testid="stVerticalBlock"][overflow]:is(.st-key-daily_head, .st-key-daily_form, .st-key-rc_head, .st-key-rc_form, .st-key-nav) {
         background: transparent; border: none !important; border-radius: 0 !important; box-shadow: none; padding: 0 !important;}
     div[data-testid="stVerticalBlock"][overflow]:is(.st-key-daily_sum, .st-key-rc_sum) {padding: 12px 16px !important;}
     .flow-sum {display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem;}
@@ -3146,7 +3183,17 @@ if not st.session_state.get("_app_scripts_injected"):
     :is([data-testid="stNumberInputStepDown"], [data-testid="stNumberInputStepUp"])::after {width: 100%; height: 44px;}
     :is([data-testid="stSidebarCollapseButton"] button, [data-testid="stExpandSidebarButton"])::after {width: 44px; height: 44px;}
     [data-testid="stBaseButton-borderlessIcon"]::after {left: -5px; right: 0; top: -5px; bottom: -5px; width: auto; height: auto; transform: none;}   /* sát mép phải khung cuộn: không mở sang phải */
-    [data-testid="stExpander"] summary {min-height: 44px;}   /* hàng tiêu đề expander cao ≥44px (trước 38px) */
+    [data-testid="stExpander"] summary {min-height: 44px;}
+    /* Chữ hướng dẫn trong khung tải file (đã Việt hoá, dài hơn bản gốc) và nhãn ô số liệu: xuống dòng thay vì bị cắt thành "…" khi hàng hẹp */
+    [data-testid="stFileUploaderDropzoneInstructions"], [data-testid="stFileUploaderDropzoneInstructions"] :is(div, span) {
+        white-space: normal !important; overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere;
+        color: var(--tx2) !important;}   /* chữ hướng dẫn: xám của Streamlit chỉ 4.1:1 → màu chữ phụ của app (7.4:1) */
+    [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] :is(div, p) {
+        white-space: normal !important; overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere;}
+    /* Giãn chữ (WCAG 1.4.12): nhãn nút gạt "Tự động | Sáng | Tối" và nút thu gọn thanh bên co giãn theo chữ, không bị cắt */
+    section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] .stButton button :is([data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] p) {
+        white-space: normal !important; overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere;}
+    [data-testid="stSidebarCollapseButton"] button {height: auto; min-height: 28px; line-height: 1;}   /* hàng tiêu đề expander cao ≥44px (trước 38px) */
     /* Biểu tượng dấu ? và nút lịch: Streamlit tô cứng rgba(61,68,81,.6) → ở nền tối gần như vô hình (≈1.7:1), ở nền sáng chỉ ≈3.3:1 */
     [data-testid="stTooltipHoverTarget"] svg {stroke: var(--tx2) !important;}
     [data-testid="stDateInputCalendarButton"] {color: var(--tx2) !important;}
@@ -3418,6 +3465,12 @@ if not st.session_state.get("_app_scripts_injected"):
             '</div>' +
             '<div class="bs-strip">__GREET_CELLS__</div>';
         doc.body.appendChild(el);
+        // Ngữ nghĩa hộp thoại cho trình đọc màn hình (trước đây là một lớp phủ không tên, không nhận tiêu điểm)
+        el.setAttribute('role', 'dialog');
+        el.setAttribute('aria-modal', 'true');
+        el.setAttribute('aria-label', 'Màn chào Tân Hotel — nhấn Enter để vào');
+        el.setAttribute('tabindex', '-1');
+        try { el.focus({preventScroll: true}); } catch (e) {}
 
         // ── Hạt rơi theo mùa — thuần transform/opacity, chạy trên GPU ──
         var BS_PT = {
@@ -3634,18 +3687,19 @@ with st.sidebar:
     ''', unsafe_allow_html=True)
 
     st.markdown('<div class="sb-section">Công cụ</div>', unsafe_allow_html=True)
-    st.button("Tổng quan ca trực", key="nav_dashboard", use_container_width=True,
-              icon=":material/dashboard:",
-              type="primary" if st.session_state.menu == "dashboard" else "secondary",
-              on_click=go_menu, args=("dashboard",))
-    st.button("Xử lý hàng ngày", key="nav_daily", use_container_width=True,
-              icon=":material/checklist:",
-              type="primary" if st.session_state.menu == "daily" else "secondary",
-              on_click=go_menu, args=("daily",))
-    st.button("Regcard + ARR", key="nav_regcard", use_container_width=True,
-              icon=":material/print:",
-              type="primary" if st.session_state.menu == "regcard" else "secondary",
-              on_click=go_menu, args=("regcard",))
+    with st.container(key="nav"):   # khối có khoá để script gắn role="navigation" (vùng điều hướng) + aria-current cho mục đang mở
+        st.button("Tổng quan ca trực", key="nav_dashboard", use_container_width=True,
+                  icon=":material/dashboard:",
+                  type="primary" if st.session_state.menu == "dashboard" else "secondary",
+                  on_click=go_menu, args=("dashboard",))
+        st.button("Xử lý hàng ngày", key="nav_daily", use_container_width=True,
+                  icon=":material/checklist:",
+                  type="primary" if st.session_state.menu == "daily" else "secondary",
+                  on_click=go_menu, args=("daily",))
+        st.button("Regcard + ARR", key="nav_regcard", use_container_width=True,
+                  icon=":material/print:",
+                  type="primary" if st.session_state.menu == "regcard" else "secondary",
+                  on_click=go_menu, args=("regcard",))
 
     st.markdown('<div class="sb-section">Giao diện</div>', unsafe_allow_html=True)
     # Nút gạt 3 trạng thái (segmented) thay cho ô chọn — nhìn gọn và bấm 1 lần
