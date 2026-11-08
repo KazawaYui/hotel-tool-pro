@@ -2369,6 +2369,7 @@ if not st.session_state.get("_app_scripts_injected"):
         /* thang chữ (1 bộ duy nhất): 12 chỉ cho huy hiệu · 14 chữ phụ · 16 chữ chính/nút · 20 tiêu đề mục · 24 tiêu đề trang · 28 số liệu · 40 số lớn */
         --fs-xs: 12px; --fs-sm: 14px; --fs-md: 16px; --fs-lg: 20px; --fs-xl: 24px; --fs-2xl: 28px; --fs-3xl: 40px;
         --dash-gap: 24px;   /* khe giữa các ô ở Tổng quan (chuẩn 24–32px) */
+        --ctl-bd: #818b9e;   /* viền điều khiển (ô nhập, nút phụ, khung tải file, expander): 3.4:1 trên nền trắng, 3.2:1 trên nền trang — WCAG 1.4.11 */
     }
     html[data-theme="dark"], html[data-theme="dark"] .stApp {
         --bg: #12151d; --surf: #1a1f2b; --surf2: #161b25;
@@ -2504,7 +2505,7 @@ if not st.session_state.get("_app_scripts_injected"):
     /* Nút "Xuất báo cáo" trên thanh là nút phụ (nút chính là Xử lý hàng ngày) */
     .st-key-tb_report_dl button, .st-key-tb_report_off button {
         background: var(--surf) !important; color: var(--tx) !important;
-        border: 1px solid var(--line) !important; box-shadow: none !important;
+        border: 1px solid var(--ctl-bd) !important; box-shadow: none !important;
         font-weight: 600;
     }
     .tan-crumb {color: var(--tx3);}
@@ -2683,7 +2684,7 @@ if not st.session_state.get("_app_scripts_injected"):
 
     /* ── Tải file ── */
     div[data-testid="stFileUploader"] {
-        background: var(--surf2); border: 1px dashed var(--line); border-radius: var(--r-md);
+        background: var(--surf2); border: 1px dashed var(--ctl-bd); border-radius: var(--r-md);
         padding: 0.5rem; box-shadow: none;
         transition: border-color 0.12s var(--ease);
     }
@@ -2691,19 +2692,19 @@ if not st.session_state.get("_app_scripts_injected"):
     div[data-testid="stFileUploader"] section {background: transparent; border: none;}
     div[data-testid="stFileUploader"] button {
         background: var(--surf) !important; color: var(--tx) !important;
-        border: 1px solid var(--line) !important; box-shadow: none !important;
+        border: 1px solid var(--ctl-bd) !important; box-shadow: none !important;
         border-radius: var(--r-sm) !important; font-weight: 600;
     }
 
     /* ── Nút ── */
     div[data-testid="stMainBlockContainer"] .stButton button, .stDownloadButton button {
-        border-radius: var(--r-md); font-weight: 600; border: 1px solid var(--line);
-        background: var(--surf); color: var(--tx);
+        border-radius: var(--r-md); font-weight: 600; border: 1px solid var(--ctl-bd);
+        background: var(--chip); color: var(--tx);
         box-shadow: none;
         transition: background 0.12s var(--ease), border-color 0.12s var(--ease), transform 0.1s var(--ease);
     }
     div[data-testid="stMainBlockContainer"] .stButton button:hover, .stDownloadButton button:hover {
-        background: var(--chip); border-color: var(--line);
+        background: var(--line); border-color: var(--ctl-bd);
     }
     div[data-testid="stMainBlockContainer"] .stButton button:active, .stDownloadButton button:active {
         transform: scale(0.985);
@@ -2811,12 +2812,12 @@ if not st.session_state.get("_app_scripts_injected"):
     html[data-theme="dark"] section[data-testid="stSidebar"] .stButton button[kind="primary"] [data-testid="stIconMaterial"] {color: #0f172a !important;}
     /* Popover (vd. "Tải riêng từng file"): khung nội dung nằm trong portal NGOÀI .stApp, nền sáng của chủ đề gốc → nền thẻ */
     html[data-theme="dark"] [data-testid="stPopoverBody"] {background: var(--surf) !important; color: var(--tx) !important; border: 1px solid var(--line) !important;}
-    /* Viền ô nhập: Streamlit giữ viền "gần trắng" #EDF0F5 của chủ đề sáng (ở nền sáng gần như vô hình) → ở nền tối
-       thành đường trắng chói. Đổi sang xám xanh ≥3:1; trạng thái focus (viền màu chủ đạo) giữ nguyên nhờ :not(:focus-within). */
-    html[data-theme="dark"] :is([data-testid="stTextInputRootElement"], [data-testid="stTextAreaRootElement"],
+    /* Viền ô nhập: Streamlit giữ viền "gần trắng" #EDF0F5 của chủ đề sáng (1.14:1 ở nền sáng — gần như vô hình; ở nền tối
+       thành đường trắng chói). Đổi sang xám xanh ≥3:1 cho CẢ HAI chế độ; trạng thái focus (viền màu chủ đạo) giữ nguyên nhờ :not(:focus-within). */
+    :is([data-testid="stTextInputRootElement"], [data-testid="stTextAreaRootElement"],
         [data-testid="stNumberInputContainer"], [data-testid="stDateInputField"]):not(:focus-within) {border-color: var(--ctl-bd) !important;}
-    /* Expander: viền #D5DAE4 của chủ đề sáng → viền thẻ chuẩn của app, cùng họ với các thẻ khác */
-    html[data-theme="dark"] [data-testid="stExpander"] details {border-color: var(--line) !important;}
+    /* Expander: viền #D5DAE4 của chủ đề sáng (1.4:1) → cùng màu viền điều khiển ≥3:1; đường kẻ ngăn bên trong giữ màu nhạt của thẻ */
+    [data-testid="stExpander"] details {border-color: var(--ctl-bd) !important;}
     html[data-theme="dark"] [data-testid="stExpanderDetails"] {border-top-color: var(--line) !important;}
     /* Lịch chọn ngày (st.date_input): Streamlit mới không còn dùng BaseWeb nên các quy tắc div[data-baseweb="calendar"]
        ở trên hết tác dụng — khung lịch (nằm trong portal NGOÀI .stApp) vẫn nền sáng + chữ tối của chủ đề gốc */
@@ -2958,9 +2959,9 @@ if not st.session_state.get("_app_scripts_injected"):
     .flow-status {display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--fs-md); font-weight: 700; color: var(--ok-tx); margin-bottom: 1rem;}
     .flow-status .mi {margin: 0; font-size: 24px;}
     /* nút mở popover ("Tải riêng từng file") không phải .stButton nên không dính luật nút phụ (ở chế độ tối thành ô sáng, chữ không đọc được) — dựng cùng kiểu */
-    [data-testid="stPopoverButton"] {background: var(--surf) !important; color: var(--tx) !important; border: 1px solid var(--line) !important;
+    [data-testid="stPopoverButton"] {background: var(--chip) !important; color: var(--tx) !important; border: 1px solid var(--ctl-bd) !important;
         border-radius: var(--r-md) !important; box-shadow: none !important; min-height: 44px;}
-    [data-testid="stPopoverButton"]:hover {background: var(--chip) !important;}
+    [data-testid="stPopoverButton"]:hover {background: var(--line) !important;}
     [data-testid="stPopoverButton"] * {color: var(--tx) !important;}
     [data-testid="stPopoverButton"] p {font-size: var(--fs-md) !important; font-weight: 600 !important;}
     /* thanh hành động: dính ở đầu khung cuộn (đặt sticky cả trên khối lẫn lớp bọc của nó vì lớp bọc mới là con trực tiếp của thẻ trang) */
@@ -3026,6 +3027,31 @@ if not st.session_state.get("_app_scripts_injected"):
     /* bo góc theo bậc: khung ngoài của trang 16 → thẻ/ô 12 → hộp tải file 8 */
     div[data-testid="stMainBlockContainer"] > div[data-testid="stVerticalBlock"] > div[data-testid="stLayoutWrapper"] > div[data-testid="stVerticalBlock"][overflow] {border-radius: var(--r-lg) !important;}
     [data-testid="stFileUploaderDropzone"] {border-radius: var(--r-sm) !important;}
+
+    /* ── Vùng bấm của các nút nhỏ do Streamlit dựng (dấu ?, ×, +, lịch, −/+, thu gọn thanh bên): chỉ 16–32px → mở rộng bằng
+       ::after trong suốt, KHÔNG đổi hình dáng. Chỗ có nút/ô khác sát cạnh chỉ mở tới 32px (không đè vùng bấm của nhau;
+       WCAG 2.5.8 cần ≥24px), chỗ trống mới mở tới 44px. ── */
+    :is([data-testid="stTooltipHoverTarget"] button, [data-testid="stDateInputCalendarButton"],
+        [data-testid="stFileChip"] [data-testid="stBaseButton-minimal"], [data-testid="stBaseButton-borderlessIcon"],
+        [data-testid="stNumberInputStepDown"], [data-testid="stNumberInputStepUp"],
+        [data-testid="stSidebarCollapseButton"] button, [data-testid="stExpandSidebarButton"]) {position: relative; overflow: visible;}
+    :where([data-testid="stTooltipHoverTarget"] button, [data-testid="stDateInputCalendarButton"],
+        [data-testid="stFileChip"] [data-testid="stBaseButton-minimal"], [data-testid="stBaseButton-borderlessIcon"],
+        [data-testid="stNumberInputStepDown"], [data-testid="stNumberInputStepUp"],
+        [data-testid="stSidebarCollapseButton"] button, [data-testid="stExpandSidebarButton"])::after {
+        content: ""; position: absolute; left: 50%; top: 50%; width: 32px; height: 32px; transform: translate(-50%, -50%);}   /* :where → độ ưu tiên thấp để các dòng chỉnh riêng bên dưới thắng */
+    [data-testid="stDateInputCalendarButton"]::after {width: 32px; height: 44px;}   /* cao bằng ô ngày; không lấn sang số năm bên cạnh */
+    :is([data-testid="stNumberInputStepDown"], [data-testid="stNumberInputStepUp"])::after {width: 100%; height: 44px;}
+    :is([data-testid="stSidebarCollapseButton"] button, [data-testid="stExpandSidebarButton"])::after {width: 44px; height: 44px;}
+    [data-testid="stBaseButton-borderlessIcon"]::after {left: -5px; right: 0; top: -5px; bottom: -5px; width: auto; height: auto; transform: none;}   /* sát mép phải khung cuộn: không mở sang phải */
+    [data-testid="stExpander"] summary {min-height: 44px;}   /* hàng tiêu đề expander cao ≥44px (trước 38px) */
+    /* Biểu tượng dấu ? và nút lịch: Streamlit tô cứng rgba(61,68,81,.6) → ở nền tối gần như vô hình (≈1.7:1), ở nền sáng chỉ ≈3.3:1 */
+    [data-testid="stTooltipHoverTarget"] svg {stroke: var(--tx2) !important;}
+    [data-testid="stDateInputCalendarButton"] {color: var(--tx2) !important;}
+    [data-testid="stDateInputCalendarButton"] svg {fill: var(--tx2) !important;}
+    /* ô nhập cao 44px = cao bằng nút (ui-principles: hàng ô nhập + nút cùng chiều cao; vùng bấm ≥44px) */
+    :is([data-testid="stTextInputRootElement"], [data-testid="stNumberInputContainer"], [data-testid="stDateInputField"]) {min-height: 44px;}
+    :is([data-testid="stTextInputRootElement"], [data-testid="stNumberInputContainer"]) input {min-height: 42px;}
 
     @media (prefers-reduced-motion: reduce) {
         .sb-mascot, #bg-sakura-layer .petal,
