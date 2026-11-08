@@ -2336,6 +2336,108 @@ if not st.session_state.get("_app_scripts_injected"):
     # + màn khởi động) gộp trong 1 lệnh st.iframe duy nhất, tiêm đúng 1 lần
     # mỗi phiên — mọi animation chỉ dùng transform/opacity (chạy trên GPU
     # compositor), không backdrop-filter, không chạy lại khi rerun.
+    # ── Việt hoá chữ do Streamlit tự sinh (khung tải file, gợi ý ô nhập, lịch, nhãn truy cập) ─────────────────────
+    # Script này được gắn vào <head> của TRANG CHA (xem _boot_script) chứ không chạy trong iframe: iframe tiêm một lần
+    # bị gỡ ở lượt rerun kế tiếp nên MutationObserver tạo trong đó sẽ chết theo, còn script ở trang cha sống suốt phiên.
+    # Chỉ đổi nội dung chữ / thuộc tính aria-label của nút, KHÔNG thay nút DOM của React; mọi phép đổi đều "lũy đẳng"
+    # (chạy lại không đổi thêm) nên không gây vòng lặp. Streamlit đổi cấu trúc thì chỉ mất hiệu lực, không làm vỡ trang.
+    _UI_FIX_JS = r'''
+(function () {
+    if (window.__tanUiFix) return;
+    window.__tanUiFix = true;
+    var D = document;
+    var ATTR = {
+        'Decrement': 'Giảm', 'Increment': 'Tăng', 'Choose date': 'Chọn ngày', 'Sidebar': 'Thanh bên',
+        'Collapse sidebar': 'Thu gọn thanh bên', 'Expand sidebar': 'Mở thanh bên', 'file upload': 'Tải file lên',
+        'Add files': 'Thêm file', 'Previous month': 'Tháng trước', 'Next month': 'Tháng sau', 'Next': 'Tiếp',
+        'month': 'Chọn tháng', 'year': 'Chọn năm', 'Show/hide columns': 'Hiện/ẩn cột', 'Download as CSV': 'Tải về CSV',
+        'Search': 'Tìm kiếm', 'Fullscreen': 'Toàn màn hình', 'Close fullscreen': 'Đóng toàn màn hình'
+    };
+    var TIP = {'Show/hide columns': 'Hiện/ẩn cột', 'Download as CSV': 'Tải về CSV', 'Search': 'Tìm kiếm',
+               'Fullscreen': 'Toàn màn hình', 'Close fullscreen': 'Đóng toàn màn hình'};
+    var WD = {Sunday: 'Chủ nhật', Monday: 'Thứ hai', Tuesday: 'Thứ ba', Wednesday: 'Thứ tư', Thursday: 'Thứ năm',
+              Friday: 'Thứ sáu', Saturday: 'Thứ bảy'};
+    var MO = {January: 1, February: 2, March: 3, April: 4, May: 5, June: 6, July: 7, August: 8, September: 9,
+              October: 10, November: 11, December: 12};
+    var DOW = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    var SEG = {day: 'ngày', month: 'tháng', year: 'năm'};
+
+    function trAttr(v) {
+        if (ATTR.hasOwnProperty(v)) return ATTR[v];
+        var m;
+        if ((m = /^Help for (.+)$/.exec(v))) return 'Trợ giúp: ' + m[1];
+        if ((m = /^Remove (.+)$/.exec(v))) return 'Xoá ' + m[1];
+        if ((m = /^(day|month|year), (.+)$/.exec(v))) return SEG[m[1]] + ', ' + m[2];
+        if ((m = /^Choose date, ([A-Za-z]+) (\d{4})$/.exec(v)) && MO[m[1]]) return 'Chọn ngày, tháng ' + MO[m[1]] + ' năm ' + m[2];
+        if ((m = /^(Today, )?([A-Za-z]+), ([A-Za-z]+) (\d{1,2}), (\d{4})( selected)?$/.exec(v)) && WD[m[2]] && MO[m[3]])
+            return (m[1] ? 'Hôm nay, ' : '') + WD[m[2]] + ', ' + m[4] + ' tháng ' + MO[m[3]] + ', ' + m[5] + (m[6] ? ' (đang chọn)' : '');
+        return v;
+    }
+    function setText(node, v) { if (node && node.nodeValue !== v) node.nodeValue = v; }
+    function firstText(e) {
+        for (var c = e.firstChild; c; c = c.nextSibling) { if (c.nodeType === 3 && c.nodeValue.trim()) return c; }
+        return null;
+    }
+    function each(sel, fn, root) {
+        (root || D).querySelectorAll(sel).forEach(function (e) { var t = firstText(e); if (t) fn(t, t.nodeValue.trim(), e); });
+    }
+
+    function fixAttrs() {
+        D.querySelectorAll('[aria-label],[title]').forEach(function (e) {
+            ['aria-label', 'title'].forEach(function (a) {
+                var v = e.getAttribute(a);
+                if (!v) return;
+                var t = trAttr(v);
+                if (t !== v) e.setAttribute(a, t);
+            });
+        });
+    }
+    function fixText() {
+        each('[data-testid="stSkipToContent"]', function (t, s) { if (s === 'Skip to main content') setText(t, 'Bỏ qua tới nội dung chính'); });
+        each('[data-testid="stFileUploaderDropzone"] button p, [data-testid="stFileUploaderDropzone"] button span',
+             function (t, s) { if (s === 'Upload') setText(t, 'Chọn file'); });
+        // dòng "100MB per file • XLS, XLSX" do React dựng thành NHIỀU nút chữ trong cùng một thẻ span → gộp vào nút đầu, xoá phần còn lại
+        D.querySelectorAll('[data-testid="stFileUploaderDropzoneInstructions"] span').forEach(function (e) {
+            var m = /^(?:Limit )?(\d+(?:\.\d+)?\s?[KMGT]?B) per file(?:\s*[•·]\s*([A-Za-z0-9 ,]+))?$/i.exec(e.textContent.trim());
+            if (!m) return;
+            var types = m[2] ? ' · ' + m[2].split(/\s*,\s*/).map(function (x) { return '.' + x.toLowerCase(); }).join(', ') : '';
+            var nodes = [];
+            for (var c = e.firstChild; c; c = c.nextSibling) { if (c.nodeType === 3) nodes.push(c); }
+            if (!nodes.length) return;
+            setText(nodes[0], 'hoặc kéo thả vào đây · tối đa ' + m[1] + '/file' + types);
+            for (var i = 1; i < nodes.length; i++) setText(nodes[i], '');
+        });
+        each('[data-testid="InputInstructions"], [data-testid="InputInstructions"] *', function (t, s) {
+            if (s === 'Press Enter to apply') setText(t, 'Nhấn Enter để áp dụng');
+        });
+        each('[data-testid="stTooltipContent"], [data-testid="stTooltipContent"] *', function (t, s) { if (TIP.hasOwnProperty(s)) setText(t, TIP[s]); });
+        D.querySelectorAll('[data-testid="stDateInputCalendar"]').forEach(function (c) {
+            c.querySelectorAll('th').forEach(function (th, i) {
+                var t = firstText(th);
+                if (t && DOW[i] && /^[A-Z]$/.test(t.nodeValue.trim())) setText(t, DOW[i]);
+            });
+            each('button[aria-label="month"], button[aria-label="Chọn tháng"]', function (t, s) { if (MO[s]) setText(t, 'Tháng ' + MO[s]); }, c);
+            each('h2', function (t, s) {
+                var m = /^(Choose date, )?([A-Za-z]+) (\d{4})$/.exec(s);
+                if (m && MO[m[2]]) setText(t, (m[1] ? 'Chọn ngày, ' : '') + 'tháng ' + MO[m[2]] + ' năm ' + m[3]);
+            }, c);
+        });
+        each('[role="listbox"] [role="option"]', function (t, s) { if (MO[s]) setText(t, 'Tháng ' + MO[s]); });
+    }
+
+    function sweep() { fixAttrs(); fixText(); }
+    var pend = false;
+    function sched() {
+        if (pend) return;
+        pend = true;
+        (window.requestAnimationFrame || window.setTimeout)(function () { pend = false; try { sweep(); } catch (e) {} });
+    }
+    new MutationObserver(sched).observe(D.body, {childList: true, subtree: true, characterData: true,
+                                                 attributes: true, attributeFilter: ['aria-label', 'title']});
+    sched();
+})();
+'''
+
     _boot_script = """
 <script>
 (function(){
@@ -2832,7 +2934,7 @@ if not st.session_state.get("_app_scripts_injected"):
     html[data-theme="dark"] [data-testid^="stDataFrame"][data-testid$="Menu"] {background: var(--surf) !important; border-color: var(--line) !important;}
     html[data-theme="dark"] [data-testid^="stDataFrame"][data-testid$="Menu"] > * {filter: invert(1) hue-rotate(180deg);}
     /* Xem bảng toàn màn hình (nút ⛶): khung phủ kín màn hình mang nền sáng của chủ đề gốc */
-    html[data-theme="dark"] [data-testid="stFullScreenFrame"]:has([aria-label="Close fullscreen"]) {background: var(--surf) !important;}
+    html[data-theme="dark"] [data-testid="stFullScreenFrame"]:has([aria-label="Close fullscreen"], [aria-label="Đóng toàn màn hình"]) {background: var(--surf) !important;}
     /* "Xuất báo cáo" trên thanh trên là nút PHỤ (nền --surf, có viền): quy tắc "chữ tối cho nút tải" ở trên là
        dành cho nút chính nền tím nhạt, áp vào đây thành chữ tối trên nền tối (1.08:1) — trả về chữ sáng */
     html[data-theme="dark"] .st-key-tb_report_dl button, html[data-theme="dark"] .st-key-tb_report_dl button * {color: var(--tx) !important;}
@@ -3068,6 +3170,11 @@ if not st.session_state.get("_app_scripts_injected"):
     }
     `;
     doc.head.appendChild(css);
+    // Việt hoá chữ tự sinh + trợ năng: script gắn vào <head> TRANG CHA nên sống suốt phiên (xem _UI_FIX_JS)
+    var uiFix = doc.createElement('script');
+    uiFix.id = 'tan-ui-fix';
+    uiFix.textContent = __UI_FIX_JS__;
+    doc.head.appendChild(uiFix);
 
     // ── Hoa anh đào rơi liên tục ở nền — thuần transform/opacity, vô hại hiệu năng ──
     if (!doc.getElementById('bg-sakura-layer')) {
@@ -3400,6 +3507,7 @@ if not st.session_state.get("_app_scripts_injected"):
 })();
 </script>
 """
+    _boot_script = _boot_script.replace('__UI_FIX_JS__', json.dumps(_UI_FIX_JS))
     _boot_script = _boot_script.replace('__DARK_BG_DATA_URI__', _dark_bg_data_uri())
     _boot_script = _boot_script.replace('__LIGHT_BG_DATA_URI__', _light_bg_data_uri())
 
