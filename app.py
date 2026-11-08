@@ -2493,12 +2493,13 @@ if not st.session_state.get("_app_scripts_injected"):
         font-size: var(--fs-sm); color: var(--tx); padding: 0.15rem 0 0.15rem;
     }
     /* Thanh top bar: nền liền khối + viền dưới, tràn ra sát 2 mép khung nội dung */
-    /* Khung nội dung có padding 96px trên / 80px hai bên — kéo âm đúng bằng đó
-       để thanh chạy sát mép, cộng width bù lại phần margin âm hai bên. */
+    /* Khung nội dung có padding 4.6rem trên / 1.5rem hai bên — kéo âm đúng bằng đó
+       để thanh chạy sát mép, cộng width bù lại phần margin âm hai bên.
+       (lề trong của thanh đặt riêng ở khối "Bố cục" bên dưới: 12×16px) */
     .st-key-tan_topbar {
         background: var(--surf); border-bottom: 1px solid var(--line);
-        margin: -4.6rem -1.6rem 1.1rem !important; width: calc(100% + 3.2rem) !important;
-        max-width: none !important; padding: 0.5rem 1.6rem !important;
+        margin: -4.6rem -1.5rem 1.1rem !important; width: calc(100% + 3rem) !important;
+        max-width: none !important;
     }
     /* Nút "Xuất báo cáo" trên thanh là nút phụ (nút chính là Xử lý hàng ngày) */
     .st-key-tb_report_dl button, .st-key-tb_report_off button {
@@ -2722,7 +2723,7 @@ if not st.session_state.get("_app_scripts_injected"):
     /* ── Metric ── */
     div[data-testid="stMetric"] {
         background: var(--surf); border: 1px solid var(--line); border-radius: var(--r-md);
-        padding: 0.85rem 0.95rem 0.75rem; box-shadow: var(--sh);
+        padding: 12px 16px; box-shadow: var(--sh);
         transition: box-shadow 0.15s var(--ease);
     }
     div[data-testid="stMetric"]:hover {box-shadow: var(--sh-lg);}
@@ -2834,14 +2835,20 @@ if not st.session_state.get("_app_scripts_injected"):
     html[data-theme="dark"] .st-key-tb_report_dl button, html[data-theme="dark"] .st-key-tb_report_dl button * {color: var(--tx) !important;}
 
     /* ── Bố cục ── */
-    div[data-testid="stMainBlockContainer"] {max-width: 1320px; padding: 4.6rem 1.6rem 2.5rem;}
+    div[data-testid="stMainBlockContainer"] {max-width: 1320px; padding: 4.6rem 1.5rem 2.5rem;}
     section[data-testid="stSidebar"] {width: 252px !important; min-width: 252px !important;}
-    /* Khe giữa các thẻ = 13px như bản dựng (trừ cụm nút giao diện ở sidebar) */
-    div[data-testid="stMain"] div[data-testid="stHorizontalBlock"] {gap: 0.82rem;}
-    /* Padding trong thẻ có viền: gọn lại cho khớp bản dựng */
+    /* Thu gọn thanh bên phải NHẢ chỗ: luật 252px ở trên giữ nguyên bề rộng cả khi đã thu gọn nên cột trống 252px
+       vẫn chiếm chỗ, nút thu gọn không có tác dụng (nội dung không rộng ra). */
+    section[data-testid="stSidebar"][data-collapsed="true"] {width: 0 !important; min-width: 0 !important; border-right-width: 0 !important;}
+    /* Khe giữa các cột/thẻ ngang = 16px (lưới 4px; trùng khe dọc mặc định của Streamlit) */
+    div[data-testid="stMain"] div[data-testid="stHorizontalBlock"] {gap: 1rem;}
+    /* Lề trong thẻ có viền: lề ngoài PHẢI lớn hơn khe giữa các phần tử (16px) thì nhóm mới tách rõ —
+       khung trang 32px · thẻ con 24px · thanh trên 12×16px (spacing-principles: outer padding > inner gap). */
     div[data-testid="stVerticalBlock"][overflow] {
-        padding: 0.85rem 1rem !important; display: flex; flex-direction: column;
+        padding: 24px !important; display: flex; flex-direction: column;
     }
+    div[data-testid="stVerticalBlock"][overflow]:has(.tan-h1) {padding: 32px !important;}
+    div[data-testid="stVerticalBlock"][overflow].st-key-tan_topbar {padding: 12px 16px !important;}
     /* Link "Xem tất cả" ở đầu panel: nút nhưng nhìn như link, đúng bản dựng */
     .st-key-dash_seeall button {
         background: transparent !important; border: none !important; box-shadow: none !important;
@@ -2864,7 +2871,6 @@ if not st.session_state.get("_app_scripts_injected"):
         flex: 1 1 calc(50% - var(--dash-gap) / 2) !important; width: calc(50% - var(--dash-gap) / 2) !important;
         min-width: calc(50% - var(--dash-gap) / 2) !important;
     }
-    .st-key-dash_tasks, .st-key-dash_alerts {padding: 1.25rem !important;}
     .st-key-dash_tasks [data-testid="stHorizontalBlock"], .st-key-dash_alerts [data-testid="stHorizontalBlock"] {
         min-height: 44px; align-items: center; gap: 0.5rem !important;   /* tiêu đề 2 panel cùng trục */
     }
@@ -2882,14 +2888,32 @@ if not st.session_state.get("_app_scripts_injected"):
             flex: 1 1 100% !important; width: 100% !important; min-width: 100% !important;
         }
     }
+    .tan-row1 {container-type: inline-size;}
+    @container (max-width: 600px) {.tan-kpis {grid-template-columns: 1fr;}}   /* hàng hẹp (thanh bên mở ở 820px): thẻ KPI không bị bóp còn ~210px, chữ không gãy 5 dòng */
     @media (min-width: 641px) and (max-width: 1100px) {   /* thanh trên: nút giữ đủ nhãn, bỏ chip ngày (đã có ở dòng phụ tiêu đề) */
         .st-key-tan_topbar [data-testid="stColumn"]:first-child {flex: 1 1 0 !important; min-width: 0 !important; width: auto !important;}
         .st-key-tan_topbar [data-testid="stColumn"]:not(:first-child) {flex: 0 0 auto !important; min-width: 0 !important; width: auto !important;}
         .st-key-tan_topbar .stButton button, .st-key-tan_topbar .stDownloadButton button {white-space: nowrap;}
         .tan-topbar-r {display: none;}
     }
+    @media (max-width: 1100px) {
+        div[data-testid="stVerticalBlock"][overflow]:has(.tan-h1) {padding: 24px !important;}
+    }
+    @media (max-width: 640px) {   /* điện thoại: thanh trên 1 hàng (tên trang + nút biểu tượng 44px) thay vì 3 hàng xếp chồng cao 161px */
+        .st-key-tan_topbar [data-testid="stHorizontalBlock"] {flex-wrap: nowrap !important; align-items: center !important; gap: 8px !important;}
+        .st-key-tan_topbar [data-testid="stColumn"] {flex: 0 0 auto !important; width: auto !important; min-width: 0 !important;}
+        .st-key-tan_topbar [data-testid="stColumn"]:first-child {flex: 1 1 0 !important;}
+        .st-key-tan_topbar .stButton button, .st-key-tan_topbar .stDownloadButton button {
+            position: relative; width: 44px !important; min-width: 44px !important; padding: 0 !important;}
+        /* ẩn chữ nút bằng cách thu về 1px (KHÔNG dùng display:none) để trình đọc màn hình vẫn đọc được tên nút */
+        .st-key-tan_topbar button p {position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden;
+            clip: rect(0 0 0 0); white-space: nowrap;}
+        .tan-topbar-r {display: none;}
+    }
     @media (max-width: 640px) {
-        div[data-testid="stVerticalBlock"][overflow]:has(.tan-row1) {padding: 1rem !important;}
+        /* điện thoại: lề khung trang 20px (> khe 16px); thẻ con 16px với khe 12px để lề vẫn lớn hơn khe */
+        div[data-testid="stVerticalBlock"][overflow]:has(.tan-h1) {padding: 20px !important;}
+        div[data-testid="stVerticalBlock"][overflow]:not(:has(.tan-h1)):not(.st-key-tan_topbar) {padding: 16px !important; gap: 12px !important;}
         .tan-kpis {grid-template-columns: 1fr;}
     }
     div[data-testid="stElementContainer"]:has(iframe[height="1"]) {display: none;}
@@ -2903,10 +2927,11 @@ if not st.session_state.get("_app_scripts_injected"):
 
     @media (max-width: 768px) {
         div[data-testid="stMainBlockContainer"] {padding-left: 1rem; padding-right: 1rem;}
-        .st-key-tan_topbar {margin: -4.6rem -1rem 0.9rem !important; width: calc(100% + 2rem) !important; padding: 0.45rem 1rem !important;}
+        .st-key-tan_topbar {margin: -4.6rem -1rem 0.9rem !important; width: calc(100% + 2rem) !important;}
+        div[data-testid="stVerticalBlock"][overflow].st-key-tan_topbar {padding: 8px 16px !important;}
         .tan-hero-val {font-size: var(--fs-2xl);}
         .tan-hero-split {gap: 1.1rem;}
-        div[data-testid="stMetric"] {padding: 0.6rem 0.7rem 0.55rem;}
+        div[data-testid="stMetric"] {padding: 8px 12px;}
     }
 
     /* ── Biểu tượng Material Symbols dùng trong HTML (thay emoji; font đã được Streamlit nạp sẵn) ── */
@@ -2925,6 +2950,10 @@ if not st.session_state.get("_app_scripts_injected"):
     .st-key-tan_topbar button p {font-size: var(--fs-md); font-weight: 600;}
     div[data-testid="stMainBlockContainer"] .stButton button p, .stDownloadButton button p {font-size: var(--fs-md) !important; font-weight: 600 !important;}
     div[data-testid="stMainBlockContainer"] .stButton button, .stDownloadButton button {min-height: 44px;}
+    /* nhãn nút dài (khổ hẹp, tên file dài) phải xuống dòng, không bị cắt thành "chuyể…"; thanh trên giữ 1 dòng như cũ */
+    div[data-testid="stMainBlockContainer"] :is(.stButton, .stDownloadButton) button [data-testid="stMarkdownContainer"] {
+        white-space: normal !important; overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere; text-align: center;}
+    .st-key-tan_topbar button [data-testid="stMarkdownContainer"] {white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important;}
     .st-key-dash_seeall button p {font-size: var(--fs-sm) !important;}
     [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * {font-size: var(--fs-sm) !important;}
     .stTextInput input, .stNumberInput input, .stTextArea textarea, [data-testid="stDateInputField"] {font-size: var(--fs-md) !important;}
