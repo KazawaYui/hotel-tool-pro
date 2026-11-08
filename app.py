@@ -3188,8 +3188,8 @@ if not st.session_state.get("_app_scripts_injected"):
     [data-testid="stFileUploaderDropzoneInstructions"], [data-testid="stFileUploaderDropzoneInstructions"] :is(div, span) {
         white-space: normal !important; overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere;
         color: var(--tx2) !important;}   /* chữ hướng dẫn: xám của Streamlit chỉ 4.1:1 → màu chữ phụ của app (7.4:1) */
-    [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] :is(div, p) {
-        white-space: normal !important; overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere;}
+    [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] :is(div, p), [data-testid="stMetricValue"] :is(div, p) {
+        white-space: normal !important; overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere;}   /* giá trị "0 + 0" ở 820px: chữ giãn thì xuống dòng, không bị cắt thành "…" */
     /* Giãn chữ (WCAG 1.4.12): nhãn nút gạt "Tự động | Sáng | Tối" và nút thu gọn thanh bên co giãn theo chữ, không bị cắt */
     section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] .stButton button :is([data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] p) {
         white-space: normal !important; overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere;}
