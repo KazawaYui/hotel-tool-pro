@@ -2336,6 +2336,144 @@ if not st.session_state.get("_app_scripts_injected"):
     # + màn khởi động) gộp trong 1 lệnh st.iframe duy nhất, tiêm đúng 1 lần
     # mỗi phiên — mọi animation chỉ dùng transform/opacity (chạy trên GPU
     # compositor), không backdrop-filter, không chạy lại khi rerun.
+    # ── Việt hoá chữ do Streamlit tự sinh (khung tải file, gợi ý ô nhập, lịch, nhãn truy cập) ─────────────────────
+    # Script này được gắn vào <head> của TRANG CHA (xem _boot_script) chứ không chạy trong iframe: iframe tiêm một lần
+    # bị gỡ ở lượt rerun kế tiếp nên MutationObserver tạo trong đó sẽ chết theo, còn script ở trang cha sống suốt phiên.
+    # Chỉ đổi nội dung chữ / thuộc tính aria-label của nút, KHÔNG thay nút DOM của React; mọi phép đổi đều "lũy đẳng"
+    # (chạy lại không đổi thêm) nên không gây vòng lặp. Streamlit đổi cấu trúc thì chỉ mất hiệu lực, không làm vỡ trang.
+    _UI_FIX_JS = r'''
+(function () {
+    if (window.__tanUiFix) return;
+    window.__tanUiFix = true;
+    var D = document;
+    var ATTR = {
+        'Decrement': 'Giảm', 'Increment': 'Tăng', 'Choose date': 'Chọn ngày', 'Sidebar': 'Thanh bên',
+        'Collapse sidebar': 'Thu gọn thanh bên', 'Expand sidebar': 'Mở thanh bên', 'file upload': 'Tải file lên',
+        'Add files': 'Thêm file', 'Previous month': 'Tháng trước', 'Next month': 'Tháng sau', 'Next': 'Tiếp',
+        'month': 'Chọn tháng', 'year': 'Chọn năm', 'Show/hide columns': 'Hiện/ẩn cột', 'Download as CSV': 'Tải về CSV',
+        'Search': 'Tìm kiếm', 'Fullscreen': 'Toàn màn hình', 'Close fullscreen': 'Đóng toàn màn hình'
+    };
+    var TIP = {'Show/hide columns': 'Hiện/ẩn cột', 'Download as CSV': 'Tải về CSV', 'Search': 'Tìm kiếm',
+               'Fullscreen': 'Toàn màn hình', 'Close fullscreen': 'Đóng toàn màn hình'};
+    var WD = {Sunday: 'Chủ nhật', Monday: 'Thứ hai', Tuesday: 'Thứ ba', Wednesday: 'Thứ tư', Thursday: 'Thứ năm',
+              Friday: 'Thứ sáu', Saturday: 'Thứ bảy'};
+    var MO = {January: 1, February: 2, March: 3, April: 4, May: 5, June: 6, July: 7, August: 8, September: 9,
+              October: 10, November: 11, December: 12};
+    var DOW = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    var SEG = {day: 'ngày', month: 'tháng', year: 'năm'};
+
+    function trAttr(v) {
+        if (ATTR.hasOwnProperty(v)) return ATTR[v];
+        var m;
+        if ((m = /^Help for (.+)$/.exec(v))) return 'Trợ giúp: ' + m[1];
+        if ((m = /^Remove (.+)$/.exec(v))) return 'Xoá ' + m[1];
+        if ((m = /^(day|month|year), (.+)$/.exec(v))) return SEG[m[1]] + ', ' + m[2];
+        if ((m = /^Choose date, ([A-Za-z]+) (\d{4})$/.exec(v)) && MO[m[1]]) return 'Chọn ngày, tháng ' + MO[m[1]] + ' năm ' + m[2];
+        if ((m = /^(Today, )?([A-Za-z]+), ([A-Za-z]+) (\d{1,2}), (\d{4})( selected)?$/.exec(v)) && WD[m[2]] && MO[m[3]])
+            return (m[1] ? 'Hôm nay, ' : '') + WD[m[2]] + ', ' + m[4] + ' tháng ' + MO[m[3]] + ', ' + m[5] + (m[6] ? ' (đang chọn)' : '');
+        return v;
+    }
+    function setText(node, v) { if (node && node.nodeValue !== v) node.nodeValue = v; }
+    function firstText(e) {
+        for (var c = e.firstChild; c; c = c.nextSibling) { if (c.nodeType === 3 && c.nodeValue.trim()) return c; }
+        return null;
+    }
+    function each(sel, fn, root) {
+        (root || D).querySelectorAll(sel).forEach(function (e) { var t = firstText(e); if (t) fn(t, t.nodeValue.trim(), e); });
+    }
+
+    function fixAttrs() {
+        D.querySelectorAll('[aria-label],[title]').forEach(function (e) {
+            ['aria-label', 'title'].forEach(function (a) {
+                var v = e.getAttribute(a);
+                if (!v) return;
+                var t = trAttr(v);
+                if (t !== v) e.setAttribute(a, t);
+            });
+        });
+    }
+    function fixText() {
+        each('[data-testid="stSkipToContent"]', function (t, s) { if (s === 'Skip to main content') setText(t, 'Bỏ qua tới nội dung chính'); });
+        each('[data-testid="stFileUploaderDropzone"] button p, [data-testid="stFileUploaderDropzone"] button span',
+             function (t, s) { if (s === 'Upload') setText(t, 'Chọn file'); });
+        // dòng "100MB per file • XLS, XLSX" do React dựng thành NHIỀU nút chữ trong cùng một thẻ span → gộp vào nút đầu, xoá phần còn lại
+        D.querySelectorAll('[data-testid="stFileUploaderDropzoneInstructions"] span').forEach(function (e) {
+            var m = /^(?:Limit )?(\d+(?:\.\d+)?\s?[KMGT]?B) per file(?:\s*[•·]\s*([A-Za-z0-9 ,]+))?$/i.exec(e.textContent.trim());
+            if (!m) return;
+            var types = m[2] ? ' · ' + m[2].split(/\s*,\s*/).map(function (x) { return '.' + x.toLowerCase(); }).join(', ') : '';
+            var nodes = [];
+            for (var c = e.firstChild; c; c = c.nextSibling) { if (c.nodeType === 3) nodes.push(c); }
+            if (!nodes.length) return;
+            setText(nodes[0], 'hoặc kéo thả vào đây · tối đa ' + m[1] + '/file' + types);
+            for (var i = 1; i < nodes.length; i++) setText(nodes[i], '');
+        });
+        each('[data-testid="InputInstructions"], [data-testid="InputInstructions"] *', function (t, s) {
+            if (s === 'Press Enter to apply') setText(t, 'Nhấn Enter để áp dụng');
+        });
+        each('[data-testid="stTooltipContent"], [data-testid="stTooltipContent"] *', function (t, s) { if (TIP.hasOwnProperty(s)) setText(t, TIP[s]); });
+        D.querySelectorAll('[data-testid="stDateInputCalendar"]').forEach(function (c) {
+            c.querySelectorAll('th').forEach(function (th, i) {
+                var t = firstText(th);
+                if (t && DOW[i] && /^[A-Z]$/.test(t.nodeValue.trim())) setText(t, DOW[i]);
+            });
+            each('button[aria-label="month"], button[aria-label="Chọn tháng"]', function (t, s) { if (MO[s]) setText(t, 'Tháng ' + MO[s]); }, c);
+            each('h2', function (t, s) {
+                var m = /^(Choose date, )?([A-Za-z]+) (\d{4})$/.exec(s);
+                if (m && MO[m[2]]) setText(t, (m[1] ? 'Chọn ngày, ' : '') + 'tháng ' + MO[m[2]] + ' năm ' + m[3]);
+            }, c);
+        });
+        each('[role="listbox"] [role="option"]', function (t, s) { if (MO[s]) setText(t, 'Tháng ' + MO[s]); });
+    }
+
+    // ── Cấu trúc cho trình đọc màn hình (không đổi hình dáng): ngôn ngữ trang, tiêu đề thật, vùng điều hướng, mục đang mở ──
+    function fixStructure() {
+        var h = D.documentElement;
+        if (h.getAttribute('lang') !== 'vi') h.setAttribute('lang', 'vi');
+        // tên panel Tổng quan là mục cấp 2 (không nhảy cấp h1 → h3)
+        [['.tan-h1', '1'], ['.section-label', '2'], ['.pan-t', '2']].forEach(function (p) {
+            D.querySelectorAll(p[0]).forEach(function (e) {
+                if (e.getAttribute('role') !== 'heading') e.setAttribute('role', 'heading');
+                if (e.getAttribute('aria-level') !== p[1]) e.setAttribute('aria-level', p[1]);
+            });
+        });
+        // biểu tượng Material trong HTML của app chỉ để trang trí: không để trình đọc đọc tên biểu tượng ("settings Cài đặt")
+        D.querySelectorAll('.mi:not([aria-hidden])').forEach(function (e) { e.setAttribute('aria-hidden', 'true'); });
+        var nav = D.querySelector('.st-key-nav');
+        if (nav) {
+            if (nav.getAttribute('role') !== 'navigation') nav.setAttribute('role', 'navigation');
+            if (nav.getAttribute('aria-label') !== 'Điều hướng chính') nav.setAttribute('aria-label', 'Điều hướng chính');
+        }
+        ['dashboard', 'daily', 'regcard'].forEach(function (k) {
+            var b = D.querySelector('.st-key-nav_' + k + ' button');
+            if (!b) return;
+            if (b.getAttribute('kind') === 'primary') { if (b.getAttribute('aria-current') !== 'page') b.setAttribute('aria-current', 'page'); }
+            else if (b.hasAttribute('aria-current')) b.removeAttribute('aria-current');
+        });
+        // huy hiệu số cạnh "Xử lý hàng ngày" được vẽ bằng CSS (::after) nên trình đọc không biết nghĩa của nó → gắn nhãn
+        var db = D.querySelector('.st-key-nav_daily button');
+        if (db) {
+            var m = /^["'](\d+)["']$/.exec(getComputedStyle(db, '::after').content || '');
+            var lab = m ? 'Xử lý hàng ngày, đã xử lý ' + m[1] + ' khách' : null;
+            if (lab && db.getAttribute('aria-label') !== lab) { db.setAttribute('aria-label', lab); db.setAttribute('title', 'Đã xử lý ' + m[1] + ' khách'); db.setAttribute('data-tan-badge', '1'); }
+            else if (!lab && db.hasAttribute('data-tan-badge')) { db.removeAttribute('aria-label'); db.removeAttribute('title'); db.removeAttribute('data-tan-badge'); }
+        }
+    }
+
+    function sweep() { fixAttrs(); fixText(); fixStructure(); }
+    var pend = false;
+    function sched() {
+        if (pend) return;
+        pend = true;
+        (window.requestAnimationFrame || window.setTimeout)(function () { pend = false; try { sweep(); } catch (e) {} });
+    }
+    var mo = new MutationObserver(sched);
+    mo.observe(D.body, {childList: true, subtree: true, characterData: true, attributes: true,
+                        attributeFilter: ['aria-label', 'title', 'kind']});
+    mo.observe(D.head, {childList: true, subtree: true, characterData: true});   // huy hiệu số nằm trong <style id="tan-badge-style">
+    sched();
+})();
+'''
+
     _boot_script = """
 <script>
 (function(){
@@ -2369,6 +2507,7 @@ if not st.session_state.get("_app_scripts_injected"):
         /* thang chữ (1 bộ duy nhất): 12 chỉ cho huy hiệu · 14 chữ phụ · 16 chữ chính/nút · 20 tiêu đề mục · 24 tiêu đề trang · 28 số liệu · 40 số lớn */
         --fs-xs: 12px; --fs-sm: 14px; --fs-md: 16px; --fs-lg: 20px; --fs-xl: 24px; --fs-2xl: 28px; --fs-3xl: 40px;
         --dash-gap: 24px;   /* khe giữa các ô ở Tổng quan (chuẩn 24–32px) */
+        --ctl-bd: #818b9e;   /* viền điều khiển (ô nhập, nút phụ, khung tải file, expander): 3.4:1 trên nền trắng, 3.2:1 trên nền trang — WCAG 1.4.11 */
     }
     html[data-theme="dark"], html[data-theme="dark"] .stApp {
         --bg: #12151d; --surf: #1a1f2b; --surf2: #161b25;
@@ -2493,17 +2632,18 @@ if not st.session_state.get("_app_scripts_injected"):
         font-size: var(--fs-sm); color: var(--tx); padding: 0.15rem 0 0.15rem;
     }
     /* Thanh top bar: nền liền khối + viền dưới, tràn ra sát 2 mép khung nội dung */
-    /* Khung nội dung có padding 96px trên / 80px hai bên — kéo âm đúng bằng đó
-       để thanh chạy sát mép, cộng width bù lại phần margin âm hai bên. */
+    /* Khung nội dung có padding 4.6rem trên / 1.5rem hai bên — kéo âm đúng bằng đó
+       để thanh chạy sát mép, cộng width bù lại phần margin âm hai bên.
+       (lề trong của thanh đặt riêng ở khối "Bố cục" bên dưới: 12×16px) */
     .st-key-tan_topbar {
         background: var(--surf); border-bottom: 1px solid var(--line);
-        margin: -4.6rem -1.6rem 1.1rem !important; width: calc(100% + 3.2rem) !important;
-        max-width: none !important; padding: 0.5rem 1.6rem !important;
+        margin: -4.6rem -1.5rem 1.1rem !important; width: calc(100% + 3rem) !important;
+        max-width: none !important;
     }
     /* Nút "Xuất báo cáo" trên thanh là nút phụ (nút chính là Xử lý hàng ngày) */
     .st-key-tb_report_dl button, .st-key-tb_report_off button {
         background: var(--surf) !important; color: var(--tx) !important;
-        border: 1px solid var(--line) !important; box-shadow: none !important;
+        border: 1px solid var(--ctl-bd) !important; box-shadow: none !important;
         font-weight: 600;
     }
     .tan-crumb {color: var(--tx3);}
@@ -2598,7 +2738,7 @@ if not st.session_state.get("_app_scripts_injected"):
     .tan-hero-split {display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 1rem;
         margin-top: .9rem; padding-top: .75rem; border-top: 1px solid rgba(255,255,255,.22);}
     @container (max-width: 470px) {.tan-hero-split {grid-template-columns: repeat(2, minmax(0, 1fr));}}
-    .tan-hero-ks {font-size: var(--fs-sm); opacity: .8; font-weight: 400; margin-top: 1px; white-space: nowrap;}
+    .tan-hero-ks {font-size: var(--fs-sm); opacity: .8; font-weight: 400; margin-top: 1px; overflow-wrap: anywhere;}
     .tan-hero-k {font-size: var(--fs-sm); opacity: .82; font-weight: 600;}
     .tan-hero-v {font-size: var(--fs-lg); font-weight: 700; margin-top: 1px; letter-spacing: -.02em;}
 
@@ -2682,7 +2822,7 @@ if not st.session_state.get("_app_scripts_injected"):
 
     /* ── Tải file ── */
     div[data-testid="stFileUploader"] {
-        background: var(--surf2); border: 1px dashed var(--line); border-radius: var(--r-md);
+        background: var(--surf2); border: 1px dashed var(--ctl-bd); border-radius: var(--r-md);
         padding: 0.5rem; box-shadow: none;
         transition: border-color 0.12s var(--ease);
     }
@@ -2690,19 +2830,19 @@ if not st.session_state.get("_app_scripts_injected"):
     div[data-testid="stFileUploader"] section {background: transparent; border: none;}
     div[data-testid="stFileUploader"] button {
         background: var(--surf) !important; color: var(--tx) !important;
-        border: 1px solid var(--line) !important; box-shadow: none !important;
+        border: 1px solid var(--ctl-bd) !important; box-shadow: none !important;
         border-radius: var(--r-sm) !important; font-weight: 600;
     }
 
     /* ── Nút ── */
     div[data-testid="stMainBlockContainer"] .stButton button, .stDownloadButton button {
-        border-radius: var(--r-md); font-weight: 600; border: 1px solid var(--line);
-        background: var(--surf); color: var(--tx);
+        border-radius: var(--r-md); font-weight: 600; border: 1px solid var(--ctl-bd);
+        background: var(--chip); color: var(--tx);
         box-shadow: none;
         transition: background 0.12s var(--ease), border-color 0.12s var(--ease), transform 0.1s var(--ease);
     }
     div[data-testid="stMainBlockContainer"] .stButton button:hover, .stDownloadButton button:hover {
-        background: var(--chip); border-color: var(--line);
+        background: var(--line); border-color: var(--ctl-bd);
     }
     div[data-testid="stMainBlockContainer"] .stButton button:active, .stDownloadButton button:active {
         transform: scale(0.985);
@@ -2722,7 +2862,7 @@ if not st.session_state.get("_app_scripts_injected"):
     /* ── Metric ── */
     div[data-testid="stMetric"] {
         background: var(--surf); border: 1px solid var(--line); border-radius: var(--r-md);
-        padding: 0.85rem 0.95rem 0.75rem; box-shadow: var(--sh);
+        padding: 12px 16px; box-shadow: var(--sh);
         transition: box-shadow 0.15s var(--ease);
     }
     div[data-testid="stMetric"]:hover {box-shadow: var(--sh-lg);}
@@ -2808,12 +2948,14 @@ if not st.session_state.get("_app_scripts_injected"):
     html[data-theme="dark"] [data-testid="stDataFrameResizable"] {filter: invert(1) hue-rotate(180deg);}
     /* Biểu tượng mục điều hướng đang mở: ô nền tím nhạt ở giao diện tối nên glyph phải tối (như nút chính) */
     html[data-theme="dark"] section[data-testid="stSidebar"] .stButton button[kind="primary"] [data-testid="stIconMaterial"] {color: #0f172a !important;}
-    /* Viền ô nhập: Streamlit giữ viền "gần trắng" #EDF0F5 của chủ đề sáng (ở nền sáng gần như vô hình) → ở nền tối
-       thành đường trắng chói. Đổi sang xám xanh ≥3:1; trạng thái focus (viền màu chủ đạo) giữ nguyên nhờ :not(:focus-within). */
-    html[data-theme="dark"] :is([data-testid="stTextInputRootElement"], [data-testid="stTextAreaRootElement"],
+    /* Popover (vd. "Tải riêng từng file"): khung nội dung nằm trong portal NGOÀI .stApp, nền sáng của chủ đề gốc → nền thẻ */
+    html[data-theme="dark"] [data-testid="stPopoverBody"] {background: var(--surf) !important; color: var(--tx) !important; border: 1px solid var(--line) !important;}
+    /* Viền ô nhập: Streamlit giữ viền "gần trắng" #EDF0F5 của chủ đề sáng (1.14:1 ở nền sáng — gần như vô hình; ở nền tối
+       thành đường trắng chói). Đổi sang xám xanh ≥3:1 cho CẢ HAI chế độ; trạng thái focus (viền màu chủ đạo) giữ nguyên nhờ :not(:focus-within). */
+    :is([data-testid="stTextInputRootElement"], [data-testid="stTextAreaRootElement"],
         [data-testid="stNumberInputContainer"], [data-testid="stDateInputField"]):not(:focus-within) {border-color: var(--ctl-bd) !important;}
-    /* Expander: viền #D5DAE4 của chủ đề sáng → viền thẻ chuẩn của app, cùng họ với các thẻ khác */
-    html[data-theme="dark"] [data-testid="stExpander"] details {border-color: var(--line) !important;}
+    /* Expander: viền #D5DAE4 của chủ đề sáng (1.4:1) → cùng màu viền điều khiển ≥3:1; đường kẻ ngăn bên trong giữ màu nhạt của thẻ */
+    [data-testid="stExpander"] details {border-color: var(--ctl-bd) !important;}
     html[data-theme="dark"] [data-testid="stExpanderDetails"] {border-top-color: var(--line) !important;}
     /* Lịch chọn ngày (st.date_input): Streamlit mới không còn dùng BaseWeb nên các quy tắc div[data-baseweb="calendar"]
        ở trên hết tác dụng — khung lịch (nằm trong portal NGOÀI .stApp) vẫn nền sáng + chữ tối của chủ đề gốc */
@@ -2828,20 +2970,26 @@ if not st.session_state.get("_app_scripts_injected"):
     html[data-theme="dark"] [data-testid^="stDataFrame"][data-testid$="Menu"] {background: var(--surf) !important; border-color: var(--line) !important;}
     html[data-theme="dark"] [data-testid^="stDataFrame"][data-testid$="Menu"] > * {filter: invert(1) hue-rotate(180deg);}
     /* Xem bảng toàn màn hình (nút ⛶): khung phủ kín màn hình mang nền sáng của chủ đề gốc */
-    html[data-theme="dark"] [data-testid="stFullScreenFrame"]:has([aria-label="Close fullscreen"]) {background: var(--surf) !important;}
+    html[data-theme="dark"] [data-testid="stFullScreenFrame"]:has([aria-label="Close fullscreen"], [aria-label="Đóng toàn màn hình"]) {background: var(--surf) !important;}
     /* "Xuất báo cáo" trên thanh trên là nút PHỤ (nền --surf, có viền): quy tắc "chữ tối cho nút tải" ở trên là
        dành cho nút chính nền tím nhạt, áp vào đây thành chữ tối trên nền tối (1.08:1) — trả về chữ sáng */
     html[data-theme="dark"] .st-key-tb_report_dl button, html[data-theme="dark"] .st-key-tb_report_dl button * {color: var(--tx) !important;}
 
     /* ── Bố cục ── */
-    div[data-testid="stMainBlockContainer"] {max-width: 1320px; padding: 4.6rem 1.6rem 2.5rem;}
+    div[data-testid="stMainBlockContainer"] {max-width: 1320px; padding: 4.6rem 1.5rem 2.5rem;}
     section[data-testid="stSidebar"] {width: 252px !important; min-width: 252px !important;}
-    /* Khe giữa các thẻ = 13px như bản dựng (trừ cụm nút giao diện ở sidebar) */
-    div[data-testid="stMain"] div[data-testid="stHorizontalBlock"] {gap: 0.82rem;}
-    /* Padding trong thẻ có viền: gọn lại cho khớp bản dựng */
+    /* Thu gọn thanh bên phải NHẢ chỗ: luật 252px ở trên giữ nguyên bề rộng cả khi đã thu gọn nên cột trống 252px
+       vẫn chiếm chỗ, nút thu gọn không có tác dụng (nội dung không rộng ra). */
+    section[data-testid="stSidebar"][data-collapsed="true"] {width: 0 !important; min-width: 0 !important; border-right-width: 0 !important;}
+    /* Khe giữa các cột/thẻ ngang = 16px (lưới 4px; trùng khe dọc mặc định của Streamlit) */
+    [data-testid="stMain"] div[data-testid="stHorizontalBlock"] {gap: 1rem;}
+    /* Lề trong thẻ có viền: lề ngoài PHẢI lớn hơn khe giữa các phần tử (16px) thì nhóm mới tách rõ —
+       khung trang 32px · thẻ con 24px · thanh trên 12×16px (spacing-principles: outer padding > inner gap). */
     div[data-testid="stVerticalBlock"][overflow] {
-        padding: 0.85rem 1rem !important; display: flex; flex-direction: column;
+        padding: 24px !important; display: flex; flex-direction: column;
     }
+    div[data-testid="stVerticalBlock"][overflow]:has(.tan-h1) {padding: 32px !important;}
+    div[data-testid="stVerticalBlock"][overflow].st-key-tan_topbar {padding: 12px 16px !important;}
     /* Link "Xem tất cả" ở đầu panel: nút nhưng nhìn như link, đúng bản dựng */
     .st-key-dash_seeall button {
         background: transparent !important; border: none !important; box-shadow: none !important;
@@ -2864,7 +3012,6 @@ if not st.session_state.get("_app_scripts_injected"):
         flex: 1 1 calc(50% - var(--dash-gap) / 2) !important; width: calc(50% - var(--dash-gap) / 2) !important;
         min-width: calc(50% - var(--dash-gap) / 2) !important;
     }
-    .st-key-dash_tasks, .st-key-dash_alerts {padding: 1.25rem !important;}
     .st-key-dash_tasks [data-testid="stHorizontalBlock"], .st-key-dash_alerts [data-testid="stHorizontalBlock"] {
         min-height: 44px; align-items: center; gap: 0.5rem !important;   /* tiêu đề 2 panel cùng trục */
     }
@@ -2882,14 +3029,32 @@ if not st.session_state.get("_app_scripts_injected"):
             flex: 1 1 100% !important; width: 100% !important; min-width: 100% !important;
         }
     }
+    .tan-row1 {container-type: inline-size;}
+    @container (max-width: 600px) {.tan-kpis {grid-template-columns: 1fr;}}   /* hàng hẹp (thanh bên mở ở 820px): thẻ KPI không bị bóp còn ~210px, chữ không gãy 5 dòng */
     @media (min-width: 641px) and (max-width: 1100px) {   /* thanh trên: nút giữ đủ nhãn, bỏ chip ngày (đã có ở dòng phụ tiêu đề) */
         .st-key-tan_topbar [data-testid="stColumn"]:first-child {flex: 1 1 0 !important; min-width: 0 !important; width: auto !important;}
         .st-key-tan_topbar [data-testid="stColumn"]:not(:first-child) {flex: 0 0 auto !important; min-width: 0 !important; width: auto !important;}
         .st-key-tan_topbar .stButton button, .st-key-tan_topbar .stDownloadButton button {white-space: nowrap;}
         .tan-topbar-r {display: none;}
     }
+    @media (max-width: 1100px) {
+        div[data-testid="stVerticalBlock"][overflow]:has(.tan-h1) {padding: 24px !important;}
+    }
+    @media (max-width: 640px) {   /* điện thoại: thanh trên 1 hàng (tên trang + nút biểu tượng 44px) thay vì 3 hàng xếp chồng cao 161px */
+        .st-key-tan_topbar [data-testid="stHorizontalBlock"] {flex-wrap: nowrap !important; align-items: center !important; gap: 8px !important;}
+        .st-key-tan_topbar [data-testid="stColumn"] {flex: 0 0 auto !important; width: auto !important; min-width: 0 !important;}
+        .st-key-tan_topbar [data-testid="stColumn"]:first-child {flex: 1 1 0 !important;}
+        .st-key-tan_topbar .stButton button, .st-key-tan_topbar .stDownloadButton button {
+            position: relative; width: 44px !important; min-width: 44px !important; padding: 0 !important;}
+        /* ẩn chữ nút bằng cách thu về 1px (KHÔNG dùng display:none) để trình đọc màn hình vẫn đọc được tên nút */
+        .st-key-tan_topbar button p {position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden;
+            clip: rect(0 0 0 0); white-space: nowrap;}
+        .tan-topbar-r {display: none;}
+    }
     @media (max-width: 640px) {
-        div[data-testid="stVerticalBlock"][overflow]:has(.tan-row1) {padding: 1rem !important;}
+        /* điện thoại: lề khung trang 20px (> khe 16px); thẻ con 16px với khe 12px để lề vẫn lớn hơn khe */
+        div[data-testid="stVerticalBlock"][overflow]:has(.tan-h1) {padding: 20px !important;}
+        div[data-testid="stVerticalBlock"][overflow]:not(:has(.tan-h1)):not(.st-key-tan_topbar) {padding: 16px !important; gap: 12px !important;}
         .tan-kpis {grid-template-columns: 1fr;}
     }
     div[data-testid="stElementContainer"]:has(iframe[height="1"]) {display: none;}
@@ -2903,10 +3068,71 @@ if not st.session_state.get("_app_scripts_injected"):
 
     @media (max-width: 768px) {
         div[data-testid="stMainBlockContainer"] {padding-left: 1rem; padding-right: 1rem;}
-        .st-key-tan_topbar {margin: -4.6rem -1rem 0.9rem !important; width: calc(100% + 2rem) !important; padding: 0.45rem 1rem !important;}
+        .st-key-tan_topbar {margin: -4.6rem -1rem 0.9rem !important; width: calc(100% + 2rem) !important;}
+        div[data-testid="stVerticalBlock"][overflow].st-key-tan_topbar {padding: 8px 16px !important;}
         .tan-hero-val {font-size: var(--fs-2xl);}
         .tan-hero-split {gap: 1.1rem;}
-        div[data-testid="stMetric"] {padding: 0.6rem 0.7rem 0.55rem;}
+        div[data-testid="stMetric"] {padding: 8px 12px;}
+    }
+
+    /* ── Luồng "xử lý xong → kết quả lên đầu" (Xử lý hàng ngày + Regcard): 3 bước, dòng "Đã dùng", thanh hành động dính ── */
+    .flow-steps {display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 1rem;}   /* margin-bottom bù -16px mặc định của stMarkdownContainer */
+    .flow-step {display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-sm); font-weight: 600; color: var(--tx2);}
+    .flow-step span {display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+        border-radius: 50%; font-size: var(--fs-xs); font-weight: 700; background: var(--chip); color: var(--tx2);}
+    .flow-step.done span {background: var(--ok-tx); color: var(--surf);}   /* --ok-tx: nền xanh đủ đậm để dấu ✓ trắng ≥4.5:1 (--ok chỉ 3.8:1) */
+    .flow-step.now {color: var(--tx);}
+    .flow-step.now span {background: linear-gradient(135deg, var(--acc), var(--acc2)); color: #fff;}
+    html[data-theme="dark"] .flow-step.now span {color: #0f172a;}
+    html[data-theme="dark"] .flow-step.done span {color: var(--surf);}   /* quy tắc chữ chung của chế độ tối (span → màu chữ sáng) đè lên dấu ✓ → 1.7:1; trả về chữ tối trên nền xanh */
+    .flow-sep {width: 32px; height: 2px; background: var(--line); border-radius: 2px;}
+    /* khung đặt chỗ (đầu trang / form) chỉ để sắp thứ tự hiển thị — không phải thẻ: bỏ viền, nền, lề để khỏi thành "thẻ trong thẻ" */
+    div[data-testid="stVerticalBlock"][overflow]:is(.st-key-daily_head, .st-key-daily_form, .st-key-rc_head, .st-key-rc_form, .st-key-nav) {
+        background: transparent; border: none !important; border-radius: 0 !important; box-shadow: none; padding: 0 !important;}
+    div[data-testid="stVerticalBlock"][overflow]:is(.st-key-daily_sum, .st-key-rc_sum) {padding: 12px 16px !important;}
+    .flow-sum {display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem;}
+    .flow-sum-t {font-size: var(--fs-md); font-weight: 700; color: var(--tx); margin-right: 4px;}
+    .flow-pill {display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; background: var(--chip);
+        border-radius: var(--r-pill); font-size: var(--fs-sm); color: var(--tx2); overflow-wrap: anywhere;}
+    .flow-pill b {color: var(--tx); font-weight: 600;}
+    .flow-status {display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--fs-md); font-weight: 700; color: var(--ok-tx); margin-bottom: 1rem;}
+    .flow-status .mi {margin: 0; font-size: 24px;}
+    /* nút mở popover ("Tải riêng từng file") không phải .stButton nên không dính luật nút phụ (ở chế độ tối thành ô sáng, chữ không đọc được) — dựng cùng kiểu */
+    [data-testid="stPopoverButton"] {background: var(--chip) !important; color: var(--tx) !important; border: 1px solid var(--ctl-bd) !important;
+        border-radius: var(--r-md) !important; box-shadow: none !important; min-height: 44px;}
+    [data-testid="stPopoverButton"]:hover {background: var(--line) !important;}
+    [data-testid="stPopoverButton"] * {color: var(--tx) !important;}
+    [data-testid="stPopoverButton"] p {font-size: var(--fs-md) !important; font-weight: 600 !important;}
+    /* thanh hành động: dính ở đầu khung cuộn (đặt sticky cả trên khối lẫn lớp bọc của nó vì lớp bọc mới là con trực tiếp của thẻ trang) */
+    div[data-testid="stVerticalBlock"][overflow]:is(.st-key-daily_bar, .st-key-rc_bar):has(.flow-status) {
+        box-shadow: var(--sh-lg); padding: 12px 16px !important; position: sticky; top: 12px; z-index: 30;}
+    div[data-testid="stLayoutWrapper"]:has(> :is(.st-key-daily_bar, .st-key-rc_bar) .flow-status) {position: sticky; top: 12px; z-index: 30;}
+    :is(.st-key-daily_bar, .st-key-rc_bar):not(:has(.flow-status)) {display: none !important;}
+    div[data-testid="stLayoutWrapper"]:has(> :is(.st-key-daily_bar, .st-key-rc_bar):not(:has(.flow-status))) {display: none;}
+    /* bố cục thanh hành động / dòng "Đã dùng" theo bề rộng THẬT của thẻ (không theo cửa sổ): cột hẹp quá thì xuống hàng, không bị bóp chữ */
+    :is(.st-key-daily_bar, .st-key-rc_bar, .st-key-daily_sum, .st-key-rc_sum) [data-testid="stHorizontalBlock"] {flex-wrap: wrap !important; gap: 8px 16px !important;}
+    :is(.st-key-daily_bar, .st-key-rc_bar) [data-testid="stColumn"]:first-child {flex: 3 1 min(260px, 100%) !important; min-width: min(260px, 100%) !important; width: auto !important;}
+    :is(.st-key-daily_bar, .st-key-rc_bar) [data-testid="stColumn"]:not(:first-child) {flex: 1 1 170px !important; min-width: 170px !important; width: auto !important;}
+    :is(.st-key-daily_sum, .st-key-rc_sum) [data-testid="stColumn"]:first-child {flex: 5 1 min(320px, 100%) !important; min-width: min(320px, 100%) !important; width: auto !important;}
+    :is(.st-key-daily_sum, .st-key-rc_sum) [data-testid="stColumn"]:last-child {flex: 1 1 160px !important; min-width: 160px !important; width: auto !important;}
+    /* form gập lại khi đã có kết quả — các ô vẫn nằm trong trang (chỉ ẩn bằng CSS) nên file đã tải không mất */
+    div[data-testid="stElementContainer"]:has(.flow-collapsed) {display: none;}
+    [data-testid="stMain"]:has(.flow-collapsed) :is(.st-key-daily_form, .st-key-rc_form) {display: none;}
+    [data-testid="stMain"]:has(.flow-collapsed) div[data-testid="stLayoutWrapper"]:has(> :is(.st-key-daily_form, .st-key-rc_form)) {display: none;}
+    @media (max-width: 640px) {
+        .flow-sep {width: 16px;}
+        /* ô số liệu: 2 cột thay vì 1 cột dài */
+        [data-testid="stMain"] [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {flex-wrap: wrap !important; gap: 8px !important;}
+        [data-testid="stMain"] [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) > [data-testid="stColumn"] {
+            flex: 1 1 calc(50% - 4px) !important; min-width: calc(50% - 4px) !important; width: calc(50% - 4px) !important;}
+        /* thanh hành động gọn: trạng thái 1 hàng, 2 nút tải cạnh nhau */
+        div[data-testid="stVerticalBlock"][overflow]:is(.st-key-daily_bar, .st-key-rc_bar):has(.flow-status) {padding: 12px !important; top: 8px;}
+        div[data-testid="stLayoutWrapper"]:has(> :is(.st-key-daily_bar, .st-key-rc_bar) .flow-status) {top: 8px;}
+        :is(.st-key-daily_bar, .st-key-rc_bar) [data-testid="stHorizontalBlock"] {flex-wrap: wrap !important; gap: 8px !important;}
+        :is(.st-key-daily_bar, .st-key-rc_bar) [data-testid="stColumn"]:first-child {flex: 1 1 100% !important; min-width: 100% !important; width: 100% !important;}
+        :is(.st-key-daily_bar, .st-key-rc_bar) [data-testid="stColumn"]:not(:first-child) {
+            flex: 1 1 calc(50% - 4px) !important; min-width: calc(50% - 4px) !important; width: calc(50% - 4px) !important;}
+        div[data-testid="stVerticalBlock"][overflow]:is(.st-key-daily_sum, .st-key-rc_sum) {padding: 12px !important;}
     }
 
     /* ── Biểu tượng Material Symbols dùng trong HTML (thay emoji; font đã được Streamlit nạp sẵn) ── */
@@ -2925,6 +3151,11 @@ if not st.session_state.get("_app_scripts_injected"):
     .st-key-tan_topbar button p {font-size: var(--fs-md); font-weight: 600;}
     div[data-testid="stMainBlockContainer"] .stButton button p, .stDownloadButton button p {font-size: var(--fs-md) !important; font-weight: 600 !important;}
     div[data-testid="stMainBlockContainer"] .stButton button, .stDownloadButton button {min-height: 44px;}
+    /* nhãn nút dài (khổ hẹp, tên file dài) phải xuống dòng, không bị cắt thành "chuyể…"; thanh trên giữ 1 dòng như cũ */
+    div[data-testid="stMainBlockContainer"] :is(.stButton, .stDownloadButton, [data-testid="stPopover"]) button :is([data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] p) {
+        white-space: normal !important; overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere; text-align: center;}
+    div[data-testid="stMainBlockContainer"] .st-key-tan_topbar button :is([data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] p) {
+        white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important;}
     .st-key-dash_seeall button p {font-size: var(--fs-sm) !important;}
     [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * {font-size: var(--fs-sm) !important;}
     .stTextInput input, .stNumberInput input, .stTextArea textarea, [data-testid="stDateInputField"] {font-size: var(--fs-md) !important;}
@@ -2935,6 +3166,41 @@ if not st.session_state.get("_app_scripts_injected"):
     /* bo góc theo bậc: khung ngoài của trang 16 → thẻ/ô 12 → hộp tải file 8 */
     div[data-testid="stMainBlockContainer"] > div[data-testid="stVerticalBlock"] > div[data-testid="stLayoutWrapper"] > div[data-testid="stVerticalBlock"][overflow] {border-radius: var(--r-lg) !important;}
     [data-testid="stFileUploaderDropzone"] {border-radius: var(--r-sm) !important;}
+
+    /* ── Vùng bấm của các nút nhỏ do Streamlit dựng (dấu ?, ×, +, lịch, −/+, thu gọn thanh bên): chỉ 16–32px → mở rộng bằng
+       ::after trong suốt, KHÔNG đổi hình dáng. Chỗ có nút/ô khác sát cạnh chỉ mở tới 32px (không đè vùng bấm của nhau;
+       WCAG 2.5.8 cần ≥24px), chỗ trống mới mở tới 44px. ── */
+    :is([data-testid="stTooltipHoverTarget"] button, [data-testid="stDateInputCalendarButton"],
+        [data-testid="stFileChip"] [data-testid="stBaseButton-minimal"], [data-testid="stBaseButton-borderlessIcon"],
+        [data-testid="stNumberInputStepDown"], [data-testid="stNumberInputStepUp"],
+        [data-testid="stSidebarCollapseButton"] button, [data-testid="stExpandSidebarButton"]) {position: relative; overflow: visible;}
+    :where([data-testid="stTooltipHoverTarget"] button, [data-testid="stDateInputCalendarButton"],
+        [data-testid="stFileChip"] [data-testid="stBaseButton-minimal"], [data-testid="stBaseButton-borderlessIcon"],
+        [data-testid="stNumberInputStepDown"], [data-testid="stNumberInputStepUp"],
+        [data-testid="stSidebarCollapseButton"] button, [data-testid="stExpandSidebarButton"])::after {
+        content: ""; position: absolute; left: 50%; top: 50%; width: 32px; height: 32px; transform: translate(-50%, -50%);}   /* :where → độ ưu tiên thấp để các dòng chỉnh riêng bên dưới thắng */
+    [data-testid="stDateInputCalendarButton"]::after {width: 32px; height: 44px;}   /* cao bằng ô ngày; không lấn sang số năm bên cạnh */
+    :is([data-testid="stNumberInputStepDown"], [data-testid="stNumberInputStepUp"])::after {width: 100%; height: 44px;}
+    :is([data-testid="stSidebarCollapseButton"] button, [data-testid="stExpandSidebarButton"])::after {width: 44px; height: 44px;}
+    [data-testid="stBaseButton-borderlessIcon"]::after {left: -5px; right: 0; top: -5px; bottom: -5px; width: auto; height: auto; transform: none;}   /* sát mép phải khung cuộn: không mở sang phải */
+    [data-testid="stExpander"] summary {min-height: 44px;}
+    /* Chữ hướng dẫn trong khung tải file (đã Việt hoá, dài hơn bản gốc) và nhãn ô số liệu: xuống dòng thay vì bị cắt thành "…" khi hàng hẹp */
+    [data-testid="stFileUploaderDropzoneInstructions"], [data-testid="stFileUploaderDropzoneInstructions"] :is(div, span) {
+        white-space: normal !important; overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere;
+        color: var(--tx2) !important;}   /* chữ hướng dẫn: xám của Streamlit chỉ 4.1:1 → màu chữ phụ của app (7.4:1) */
+    [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] :is(div, p), [data-testid="stMetricValue"] :is(div, p) {
+        white-space: normal !important; overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere;}   /* giá trị "0 + 0" ở 820px: chữ giãn thì xuống dòng, không bị cắt thành "…" */
+    /* Giãn chữ (WCAG 1.4.12): nhãn nút gạt "Tự động | Sáng | Tối" và nút thu gọn thanh bên co giãn theo chữ, không bị cắt */
+    section[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] .stButton button :is([data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] p) {
+        white-space: normal !important; overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere;}
+    [data-testid="stSidebarCollapseButton"] button {height: auto; min-height: 28px; line-height: 1;}   /* hàng tiêu đề expander cao ≥44px (trước 38px) */
+    /* Biểu tượng dấu ? và nút lịch: Streamlit tô cứng rgba(61,68,81,.6) → ở nền tối gần như vô hình (≈1.7:1), ở nền sáng chỉ ≈3.3:1 */
+    [data-testid="stTooltipHoverTarget"] svg {stroke: var(--tx2) !important;}
+    [data-testid="stDateInputCalendarButton"] {color: var(--tx2) !important;}
+    [data-testid="stDateInputCalendarButton"] svg {fill: var(--tx2) !important;}
+    /* ô nhập cao 44px = cao bằng nút (ui-principles: hàng ô nhập + nút cùng chiều cao; vùng bấm ≥44px) */
+    :is([data-testid="stTextInputRootElement"], [data-testid="stNumberInputContainer"], [data-testid="stDateInputField"]) {min-height: 44px;}
+    :is([data-testid="stTextInputRootElement"], [data-testid="stNumberInputContainer"]) input {min-height: 42px;}
 
     @media (prefers-reduced-motion: reduce) {
         .sb-mascot, #bg-sakura-layer .petal,
@@ -2951,6 +3217,11 @@ if not st.session_state.get("_app_scripts_injected"):
     }
     `;
     doc.head.appendChild(css);
+    // Việt hoá chữ tự sinh + trợ năng: script gắn vào <head> TRANG CHA nên sống suốt phiên (xem _UI_FIX_JS)
+    var uiFix = doc.createElement('script');
+    uiFix.id = 'tan-ui-fix';
+    uiFix.textContent = __UI_FIX_JS__;
+    doc.head.appendChild(uiFix);
 
     // ── Hoa anh đào rơi liên tục ở nền — thuần transform/opacity, vô hại hiệu năng ──
     if (!doc.getElementById('bg-sakura-layer')) {
@@ -3194,6 +3465,12 @@ if not st.session_state.get("_app_scripts_injected"):
             '</div>' +
             '<div class="bs-strip">__GREET_CELLS__</div>';
         doc.body.appendChild(el);
+        // Ngữ nghĩa hộp thoại cho trình đọc màn hình (trước đây là một lớp phủ không tên, không nhận tiêu điểm)
+        el.setAttribute('role', 'dialog');
+        el.setAttribute('aria-modal', 'true');
+        el.setAttribute('aria-label', 'Màn chào Tân Hotel — nhấn Enter để vào');
+        el.setAttribute('tabindex', '-1');
+        try { el.focus({preventScroll: true}); } catch (e) {}
 
         // ── Hạt rơi theo mùa — thuần transform/opacity, chạy trên GPU ──
         var BS_PT = {
@@ -3283,6 +3560,7 @@ if not st.session_state.get("_app_scripts_injected"):
 })();
 </script>
 """
+    _boot_script = _boot_script.replace('__UI_FIX_JS__', json.dumps(_UI_FIX_JS))
     _boot_script = _boot_script.replace('__DARK_BG_DATA_URI__', _dark_bg_data_uri())
     _boot_script = _boot_script.replace('__LIGHT_BG_DATA_URI__', _light_bg_data_uri())
 
@@ -3409,18 +3687,19 @@ with st.sidebar:
     ''', unsafe_allow_html=True)
 
     st.markdown('<div class="sb-section">Công cụ</div>', unsafe_allow_html=True)
-    st.button("Tổng quan ca trực", key="nav_dashboard", use_container_width=True,
-              icon=":material/dashboard:",
-              type="primary" if st.session_state.menu == "dashboard" else "secondary",
-              on_click=go_menu, args=("dashboard",))
-    st.button("Xử lý hàng ngày", key="nav_daily", use_container_width=True,
-              icon=":material/checklist:",
-              type="primary" if st.session_state.menu == "daily" else "secondary",
-              on_click=go_menu, args=("daily",))
-    st.button("Regcard + ARR", key="nav_regcard", use_container_width=True,
-              icon=":material/print:",
-              type="primary" if st.session_state.menu == "regcard" else "secondary",
-              on_click=go_menu, args=("regcard",))
+    with st.container(key="nav"):   # khối có khoá để script gắn role="navigation" (vùng điều hướng) + aria-current cho mục đang mở
+        st.button("Tổng quan ca trực", key="nav_dashboard", use_container_width=True,
+                  icon=":material/dashboard:",
+                  type="primary" if st.session_state.menu == "dashboard" else "secondary",
+                  on_click=go_menu, args=("dashboard",))
+        st.button("Xử lý hàng ngày", key="nav_daily", use_container_width=True,
+                  icon=":material/checklist:",
+                  type="primary" if st.session_state.menu == "daily" else "secondary",
+                  on_click=go_menu, args=("daily",))
+        st.button("Regcard + ARR", key="nav_regcard", use_container_width=True,
+                  icon=":material/print:",
+                  type="primary" if st.session_state.menu == "regcard" else "secondary",
+                  on_click=go_menu, args=("regcard",))
 
     st.markdown('<div class="sb-section">Giao diện</div>', unsafe_allow_html=True)
     # Nút gạt 3 trạng thái (segmented) thay cho ô chọn — nhìn gọn và bấm 1 lần
@@ -3889,239 +4168,328 @@ def _render_dashboard():
 if st.session_state.menu == "dashboard":
     _render_dashboard()
 
+# ── Luồng "xử lý xong → kết quả lên đầu" (dùng chung cho Xử lý hàng ngày và Regcard + ARR) ────────────
+# Form (cài đặt + file) gập lại khi đã có kết quả, nhưng các ô VẪN được dựng trong trang (CSS chỉ ẩn đi) nên file
+# đã tải lên không bị mất; nút "Sửa / chạy lại" mở form ra. Đầu trang: 3 bước + dòng "Đã dùng …". Thanh hành động
+# (trạng thái + nút tải) dính ở trên khi cuộn nên nút tải luôn trong tầm tay, không phải cuộn xuống cuối trang.
+def _flow_toggle(key):
+    st.session_state[key] = not st.session_state.get(key, False)
+
+
+def _flow_head(prefix, steps, pills):
+    """Thanh 3 bước + dòng "Đã dùng …" kèm nút Sửa / chạy lại (gọi bên trong khung đầu trang)."""
+    from html import escape as _esc
+    _editing = st.session_state.get(f'{prefix}_edit', False)
+    _s = [f'<div class="flow-step done"><span>✓</span>{_esc(steps[0])}</div>',
+          f'<div class="flow-step done"><span>✓</span>{_esc(steps[1])}</div>',
+          f'<div class="flow-step now" aria-current="step"><span>3</span>{_esc(steps[2])}</div>']
+    st.markdown('<div class="flow-steps">' + '<div class="flow-sep"></div>'.join(_s) + '</div>', unsafe_allow_html=True)
+    with st.container(key=f"{prefix}_sum"):
+        _l, _r = st.columns([5, 1.4], vertical_alignment="center")
+        _l.markdown('<div class="flow-sum"><b class="flow-sum-t">Đã dùng</b>' + ''.join(
+            f'<span class="flow-pill">{_esc(k)} <b>{_esc(str(v))}</b></span>' for k, v in pills if v not in (None, ''))
+            + '</div>', unsafe_allow_html=True)
+        _r.button("Thu gọn" if _editing else "Sửa / chạy lại", key=f"{prefix}_edit_btn", use_container_width=True,
+                  icon=":material/expand_less:" if _editing else ":material/edit:",
+                  on_click=_flow_toggle, args=(f'{prefix}_edit',))
+    if not _editing:   # dấu cho CSS: gập form lại
+        st.markdown('<span class="flow-collapsed"></span>', unsafe_allow_html=True)
+
+
+def _flow_status(msg, chips):
+    """Dòng trạng thái của thanh hành động: biểu tượng + câu + chip (chip có chữ rõ nghĩa, không chỉ dựa vào màu)."""
+    return ('<div class="flow-status" role="status"><span class="mi">check_circle</span>' + msg + ''.join(
+        f'<span class="tan-chip {c}">{t}</span>' for c, t in chips) + '</div>')
+
+
+def _flow_scroll_top():
+    """Kéo khung nội dung về đầu trang (sau khi xử lý xong form gập lại, kết quả nằm trên cùng)."""
+    st.iframe("""<script>(function(){var m = window.parent.document.querySelector('[data-testid="stMain"]');
+        if (m) { m.scrollTo({top: 0, behavior: 'smooth'}); }})();</script>""", height=1)
+
+
+def _daily_bar(bar_box, _dr):
+    """Thanh hành động dính của Xử lý hàng ngày: trạng thái + "Tải riêng từng file" + "Tải về tất cả (ZIP)"."""
+    _chips = []
+    _iss = _dr.get('issues')
+    if _dr.get('has_xlsx') and _iss is not None:
+        _n_red = int((_iss['Mức độ'] == '🔴').sum()) if len(_iss) else 0
+        _n_yel = int((_iss['Mức độ'] == '🟡').sum()) if len(_iss) else 0
+        _chips += [('err' if _n_red else 'ok', f'{_n_red} lỗi'), ('warn' if _n_yel else 'ok', f'{_n_yel} cảnh báo')]
+    if _dr.get('has_dk14'):
+        _n_w = sum(1 for t, *_ in (_dr.get('dk14_issues') or []) if t == 'warn')
+        _chips.append(('warn', f'ĐK14: {_n_w} cần xem') if _n_w else ('ok', 'ĐK14 sạch'))
+    with bar_box:
+        _c1, _c2, _c3 = st.columns([3.4, 1.4, 1.6], vertical_alignment="center")
+        _c1.markdown(_flow_status('Xử lý hoàn tất', _chips), unsafe_allow_html=True)
+        with _c2:
+            if _dr.get('files'):
+                with st.popover("Tải riêng từng file", icon=":material/folder_zip:", use_container_width=True):
+                    for _fn, _fb in _dr['files'].items():
+                        st.download_button(_fn, _fb, icon=":material/download:", file_name=_fn,
+                                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                           use_container_width=True, key=f"dl_single_{_fn}", on_click="ignore")
+        _c3.download_button("Tải về tất cả (ZIP)", icon=":material/download:", data=_dr['zip'],
+                            file_name=f"hotel_{_dr['date_str']}.zip", mime="application/zip",
+                            use_container_width=True, type="primary", key="dl_daily_zip", on_click="ignore")
+
+
 # ── Daily processing screen ───────────────────────────────────────────────
 @st.fragment
 def _render_daily():
-    st.markdown('<div class="tan-h1">Xử lý hàng ngày</div>'
-                '<div class="tan-h1sub">Tải file khách và file IH, kiểm tra dữ liệu rồi tải về KBTT · VNM · ĐK14</div>',
-                unsafe_allow_html=True)
-    st.markdown('<div class="section-label"><span class="mi">settings</span>Cài đặt</div>', unsafe_allow_html=True)
-    with st.container(border=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            if 'rate_input' not in st.session_state:
-                st.session_state.rate_input = 29535.15
-            def _apply_vcb_rate():
-                try:
-                    _rates, _ts = fetch_vcb_rates()
-                    st.session_state.rate_input = _rates['USD']
-                    _eur = f" · EUR {_rates['EUR']:,.2f}" if _rates.get('EUR') else ''
-                    st.session_state['vcb_note'] = (
-                        f"Tỷ giá chuyển khoản VCB lúc {_ts}: USD {_rates['USD']:,.2f}{_eur} "
-                        f"— đã điền USD vào ô tỷ giá.")
-                except Exception as _e:
-                    st.session_state['vcb_note'] = (
-                        f"Không lấy được tỷ giá VCB ({_e}) — nhập tay như bình thường.")
-            rate = st.number_input("Tỷ giá USD/EUR → VNĐ", step=0.01, format="%.2f", key="rate_input")
-            st.button("Lấy tỷ giá VCB (chuyển khoản)", icon=":material/sync:", on_click=_apply_vcb_rate, key="btn_vcb")
-            if st.session_state.get('vcb_note'):
-                st.caption(st.session_state['vcb_note'])
-        with col2:
-            today = today_vn()
-            date_str = st.text_input("Ngày (dùng cho tên file)", value=f"{today.day}_{today.month:02d}")
-
-    st.write("")
-    st.markdown('<div class="section-label"><span class="mi">local_police</span>Cài đặt ĐK14</div>', unsafe_allow_html=True)
-    with st.container(border=True):
-        col_n, col_c = st.columns(2)
-        with col_n:
-            dk_notifier = st.text_input(
-                "Người thông báo lưu trú", value="Đỗ Duy Tân", key="dk_notifier",
-                help="Điền vào cột (11) khi file nguồn không có sẵn tên. Đổi được tuỳ ý.")
-        with col_c:
-            dk_checkin = st.date_input(
-                "Ngày check-in mặc định", value=today, key="dk_checkin", format="DD/MM/YYYY",
-                help="Dùng cho ô 'Từ ngày' ở đầu sổ, và cho khách thiếu ngày đến trong file nguồn.")
-
-    st.write("")
-    st.markdown('<div class="section-label"><span class="mi">upload_file</span>Tải file lên</div>', unsafe_allow_html=True)
-    with st.container(border=True):
-        col_x, col_s = st.columns(2)
-        with col_x:
-            xlsx_file = st.file_uploader("File XLSX — Dữ liệu khách (bắt buộc)", type=['xlsx'], key="daily_xlsx")
-        with col_s:
-            xls_file = st.file_uploader("File IH — Nguồn ĐK14 (tùy chọn)", type=['xls', 'xlsx'], key="daily_xls")
-
-        visa_file = st.file_uploader(
-            "File Visa — dữ liệu thô date visa (tùy chọn, để tự điền cột 'Thời hạn tạm trú tại VN' trong KBTT)",
-            type=['xlsx'], key="daily_visa")
-
-    st.write("")
-
-    if st.button("Bắt đầu xử lý", icon=":material/bolt:", type="primary", disabled=(xlsx_file is None and xls_file is None), use_container_width=True):
-        with st.spinner("Đang xử lý..."):
-            try:
-                progress = st.progress(0, text="Bắt đầu...")
-                zip_buf = io.BytesIO()
-                files_made = []
-                has_xlsx = xlsx_file is not None
-                has_dk14 = False
-                conv = 0; gks_cnt = 0; gbl_cnt = 0
-                df = None; df_intl = None; df_vn = None
-                visa_map = {}; visa_unmatched = []; visa_source = None
-                kbtt_invalid_ids = []; vnm_ward_unmatched = []; dk14_skipped = []; cnt_report = []
-                # Đọc file visa (nếu có) → map tên → date visa
-                if visa_file is not None:
+    # Khung đặt chỗ THEO THỨ TỰ HIỂN THỊ: đầu trang → form → thanh hành động dính; kết quả ghi tiếp ngay bên dưới.
+    # Container tạo trước vẫn điền được SAU khi form chạy xong, nhờ vậy kết quả mới lên đầu trang được.
+    head_box = st.container(key="daily_head")
+    form_box = st.container(key="daily_form")
+    bar_box = st.container(key="daily_bar")
+    _scroll_top = False
+    with head_box:
+        st.markdown('<div class="tan-h1">Xử lý hàng ngày</div>'
+                    '<div class="tan-h1sub">Tải file khách và file IH, kiểm tra dữ liệu rồi tải về KBTT · VNM · ĐK14</div>',
+                    unsafe_allow_html=True)
+    with form_box:
+        st.markdown('<div class="section-label"><span class="mi">settings</span>Cài đặt</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                if 'rate_input' not in st.session_state:
+                    st.session_state.rate_input = 29535.15
+                def _apply_vcb_rate():
                     try:
-                        visa_map = parse_visa_file(visa_file.read())
-                    except Exception as _ve:
-                        st.warning(f"Không đọc được file visa: {_ve}", icon=":material/warning:")
+                        _rates, _ts = fetch_vcb_rates()
+                        st.session_state.rate_input = _rates['USD']
+                        _eur = f" · EUR {_rates['EUR']:,.2f}" if _rates.get('EUR') else ''
+                        st.session_state['vcb_note'] = (
+                            f"Tỷ giá chuyển khoản VCB lúc {_ts}: USD {_rates['USD']:,.2f}{_eur} "
+                            f"— đã điền USD vào ô tỷ giá.")
+                    except Exception as _e:
+                        st.session_state['vcb_note'] = (
+                            f"Không lấy được tỷ giá VCB ({_e}) — nhập tay như bình thường.")
+                rate = st.number_input("Tỷ giá USD/EUR → VNĐ", step=0.01, format="%.2f", key="rate_input")
+                st.button("Lấy tỷ giá VCB (chuyển khoản)", icon=":material/sync:", on_click=_apply_vcb_rate, key="btn_vcb")
+                if st.session_state.get('vcb_note'):
+                    st.caption(st.session_state['vcb_note'])
+            with col2:
+                today = today_vn()
+                date_str = st.text_input("Ngày (dùng cho tên file)", value=f"{today.day}_{today.month:02d}")
 
-                out_files = {}   # tên file → bytes: dùng cho ZIP + nút tải từng file riêng
-                _issues = None; _visa_watch = []
-                with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-                    # ── Xử lý file XLSX (nếu có) ──
+        st.write("")
+        st.markdown('<div class="section-label"><span class="mi">local_police</span>Cài đặt ĐK14</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            col_n, col_c = st.columns(2)
+            with col_n:
+                dk_notifier = st.text_input(
+                    "Người thông báo lưu trú", value="Đỗ Duy Tân", key="dk_notifier",
+                    help="Điền vào cột (11) khi file nguồn không có sẵn tên. Đổi được tuỳ ý.")
+            with col_c:
+                dk_checkin = st.date_input(
+                    "Ngày check-in mặc định", value=today, key="dk_checkin", format="DD/MM/YYYY",
+                    help="Dùng cho ô 'Từ ngày' ở đầu sổ, và cho khách thiếu ngày đến trong file nguồn.")
+
+        st.write("")
+        st.markdown('<div class="section-label"><span class="mi">upload_file</span>Tải file lên</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            col_x, col_s = st.columns(2)
+            with col_x:
+                xlsx_file = st.file_uploader("File XLSX — Dữ liệu khách (bắt buộc)", type=['xlsx'], key="daily_xlsx")
+            with col_s:
+                xls_file = st.file_uploader("File IH — Nguồn ĐK14 (tùy chọn)", type=['xls', 'xlsx'], key="daily_xls")
+
+            visa_file = st.file_uploader(
+                "File Visa — dữ liệu thô date visa (tùy chọn, để tự điền cột 'Thời hạn tạm trú tại VN' trong KBTT)",
+                type=['xlsx'], key="daily_visa")
+
+        st.write("")
+
+        if st.button("Bắt đầu xử lý", icon=":material/bolt:", type="primary", disabled=(xlsx_file is None and xls_file is None), use_container_width=True):
+            with st.spinner("Đang xử lý..."):
+                try:
+                    progress = st.progress(0, text="Bắt đầu...")
+                    zip_buf = io.BytesIO()
+                    files_made = []
+                    has_xlsx = xlsx_file is not None
+                    has_dk14 = False
+                    conv = 0; gks_cnt = 0; gbl_cnt = 0
+                    df = None; df_intl = None; df_vn = None
+                    visa_map = {}; visa_unmatched = []; visa_source = None
+                    kbtt_invalid_ids = []; vnm_ward_unmatched = []; dk14_skipped = []; cnt_report = []
+                    # Đọc file visa (nếu có) → map tên → date visa
+                    if visa_file is not None:
+                        try:
+                            visa_map = parse_visa_file(visa_file.read())
+                        except Exception as _ve:
+                            st.warning(f"Không đọc được file visa: {_ve}", icon=":material/warning:")
+
+                    out_files = {}   # tên file → bytes: dùng cho ZIP + nút tải từng file riêng
+                    _issues = None; _visa_watch = []
+                    with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+                        # ── Xử lý file XLSX (nếu có) ──
+                        if has_xlsx:
+                            progress.progress(10, text="Quy đổi tỷ giá...")
+                            xlsx_bytes = xlsx_file.read()
+                            wb, conv = process_xlsx(xlsx_bytes, rate)
+
+                            # Chia giá phòng connecting SAU khi đã quy đổi tỷ giá — ĐƠN GIÁ
+                            # nguồn có thể vẫn ở dạng ngoại tệ nhỏ (VD "278.35" EUR) lúc này
+                            # còn là số NGUYÊN chưa quy đổi; chia trước rồi mới quy đổi từng
+                            # nửa riêng lẻ sẽ làm tròn 2 lần → sai số hàng nghìn đồng so với
+                            # quy đổi trước rồi mới chia (đã xảy ra thực tế: 278.35 EUR bị cắt
+                            # về 278, chia 139/139, mỗi bên quy đổi ra ~4.150.550đ — lệch hẳn
+                            # so với quy đổi cả 278.35 rồi mới chia đúng 8.313.043 → chia đôi).
+                            progress.progress(15, text="Chia giá phòng connecting...")
+                            wb_bytes_conv = wb_to_bytes(wb)
+                            wb_bytes_conv, cnt_report = split_connecting_room_prices(wb_bytes_conv)
+                            wb = load_workbook(io.BytesIO(wb_bytes_conv))
+                            # Ép các cột dạng mã đọc bằng chuỗi — nếu không, pandas tự suy
+                            # diễn cột "trông giống số" thành float, làm mất số 0 đứng đầu
+                            # (vd số điện thoại "0912345678" → 912345678.0). An toàn kể cả
+                            # khi cột không tồn tại trong file (bỏ qua, không lỗi).
+                            _id_cols = {c: str for c in
+                                       ('SỐ GIẤY TỜ', 'SỐ ĐIỆN THOẠI', 'SỐ PHÒNG', 'MÃ CHECKIN')}
+                            df = pd.read_excel(io.BytesIO(xlsx_bytes), dtype=_id_cols)
+                            df_intl = df[df['LOẠI KHÁCH']=='Quốc tế'].reset_index(drop=True)
+                            df_vn   = df[df['LOẠI KHÁCH']=='Việt Nam'].reset_index(drop=True)
+
+                            progress.progress(25, text="Kiểm tra chất lượng dữ liệu...")
+                            _issues = validate_guests(df)
+                            _visa_watch = check_visa_expiry(df_intl, visa_map=visa_map)
+
+                            progress.progress(35, text="Tách file Quốc tế / Việt Nam...")
+                            wb_intl = split_wb(wb, 'Quốc tế')
+                            wb_vn   = split_wb(wb, 'Việt Nam')
+
+                            progress.progress(50, text="Điền mẫu KBTT...")
+                            wb_kbtt, visa_unmatched, visa_source, kbtt_invalid_ids = build_kbtt(df_intl, visa_map=visa_map)
+
+                            progress.progress(65, text="Điền mẫu Thông báo lưu trú VNM...")
+                            wb_vnm, gks_cnt, gbl_cnt, vnm_ward_unmatched = build_vnm(df_vn)
+
+                            out_files[f'converted_{date_str}.xlsx']      = wb_to_bytes(wb)
+                            out_files[f'KhachQuocTe_{date_str}.xlsx']    = wb_to_bytes(wb_intl)
+                            out_files[f'KhachVietNam_{date_str}.xlsx']   = wb_to_bytes(wb_vn)
+                            out_files[f'ho_so_KBTT_NNN_{date_str}.xlsx'] = wb_to_bytes(wb_kbtt)
+                            out_files[f'thong_bao_luu_tru_VNM_{date_str}.xlsx'] = wb_to_bytes(wb_vnm)
+                            files_made += ["converted (file chung)", "KhachQuocTe", "KhachVietNam",
+                                           "KBTT NNN", "Thông báo lưu trú VNM"]
+
+                        # ── Xử lý file ĐK14 (độc lập, chỉ cần file nguồn IH) ──
+                        if xls_file:
+                            progress.progress(85, text="Điền mẫu ĐK14...")
+                            xls_bytes = xls_file.read()
+                            (dk14_bytes, dk_count, dk14_skipped,
+                             dk14_issues, dk14_map, dk14_stats) = build_dk14(xls_bytes, dk_notifier, dk_checkin)
+                            out_files[f'dk14_{date_str}.xlsx'] = dk14_bytes
+                            has_dk14 = True
+                            files_made.append("ĐK14")
+
+                        for _ofn, _ofb in out_files.items():
+                            zf.writestr(_ofn, _ofb)
+
+                    progress.progress(100, text="Hoàn tất!")
+                    progress.empty()
+
+                    # Lưu kết quả vào session — kết quả & nút tải không biến mất sau rerun
+                    _daily = {'files_made': files_made, 'zip': zip_buf.getvalue(),
+                              'files': out_files, 'rate': rate,
+                              'used': {'rate': rate, 'date': date_str, 'notifier': dk_notifier,
+                                       'files': [_f.name for _f in (xlsx_file, xls_file, visa_file) if _f is not None]},
+                              'date_str': date_str, 'has_xlsx': has_xlsx, 'has_dk14': has_dk14,
+                              'dk14_count': dk_count if has_dk14 else None, 'dk14_skipped': dk14_skipped,
+                              'dk14_issues': dk14_issues if has_dk14 else [],
+                              'dk14_map': dk14_map if has_dk14 else None,
+                              'dk14_stats': dk14_stats if has_dk14 else None,
+                              'cnt_report': cnt_report}
                     if has_xlsx:
-                        progress.progress(10, text="Quy đổi tỷ giá...")
-                        xlsx_bytes = xlsx_file.read()
-                        wb, conv = process_xlsx(xlsx_bytes, rate)
+                        unknown_nats = []
+                        for q in df_intl.get('QUỐC TỊCH', pd.Series([], dtype=str)).dropna().unique():
+                            mapped = lookup_nat_kbtt(q)
+                            if not _re.match(r'^[A-Z]{2,3} - ', str(mapped)):
+                                unknown_nats.append(str(q))
+                        # Thống kê phục vụ báo cáo ngày cho quản lý
+                        _nat_top = (df.get('QUỐC TỊCH', pd.Series(dtype=str)).dropna().astype(str)
+                                    .str.strip().value_counts().head(10))
+                        _arr_s = pd.to_datetime(df.get('NGÀY ĐẾN'), dayfirst=True, errors='coerce')
+                        _dep_col_d = 'NGÀY ÐI' if 'NGÀY ÐI' in df.columns else ('NGÀY ĐI' if 'NGÀY ĐI' in df.columns else None)
+                        _avg_nights = None
+                        if _dep_col_d:
+                            _dep_s = pd.to_datetime(df[_dep_col_d], dayfirst=True, errors='coerce')
+                            _nvals = (_dep_s - _arr_s).dt.days.dropna()
+                            _nvals = _nvals[_nvals > 0]
+                            if len(_nvals):
+                                _avg_nights = round(float(_nvals.mean()), 1)
+                        _rooms_cnt = int(df.get('SỐ PHÒNG', pd.Series(dtype=str)).dropna().astype(str)
+                                         .str.strip().nunique())
+                        # Khách check-in / check-out HÔM NAY — đếm theo ngày đến/đi
+                        # trùng ngày hiện tại (giờ Việt Nam), phục vụ thẻ tổng quan.
+                        _today_ts = pd.Timestamp(today_vn())
+                        _checkin_n = int((_arr_s.dt.normalize() == _today_ts).sum()) if _arr_s is not None else 0
+                        _checkout_n = 0
+                        if _dep_col_d:
+                            _checkout_n = int((pd.to_datetime(df[_dep_col_d], dayfirst=True, errors='coerce')
+                                               .dt.normalize() == _today_ts).sum())
+                        _daily.update({'issues': _issues, 'visa_watch': _visa_watch,
+                                       'nat_top': [(str(k), int(v)) for k, v in _nat_top.items()],
+                                       'avg_nights': _avg_nights, 'rooms_cnt': _rooms_cnt or None,
+                                       'checkin_n': _checkin_n, 'checkout_n': _checkout_n})
+                        _daily.update({'total': len(df), 'intl': len(df_intl), 'vn': len(df_vn),
+                                       'gks': gks_cnt, 'gbl': gbl_cnt, 'conv': conv,
+                                       'unknown_nats': unknown_nats,
+                                       'visa_used': visa_source is not None,
+                                       'visa_source': visa_source,
+                                       'visa_matched': len(df_intl) - len(visa_unmatched) if visa_source else 0,
+                                       'visa_unmatched': visa_unmatched,
+                                       'visa_skipped_vn': visa_map.get('skipped_vn', 0) if isinstance(visa_map, dict) else 0,
+                                       'kbtt_invalid_ids': kbtt_invalid_ids,
+                                       'vnm_ward_unmatched': vnm_ward_unmatched})
+                    st.session_state['daily_results'] = _daily
+                    st.session_state['daily_edit'] = False   # xong → gập form, kết quả lên đầu trang
+                    _scroll_top = True
 
-                        # Chia giá phòng connecting SAU khi đã quy đổi tỷ giá — ĐƠN GIÁ
-                        # nguồn có thể vẫn ở dạng ngoại tệ nhỏ (VD "278.35" EUR) lúc này
-                        # còn là số NGUYÊN chưa quy đổi; chia trước rồi mới quy đổi từng
-                        # nửa riêng lẻ sẽ làm tròn 2 lần → sai số hàng nghìn đồng so với
-                        # quy đổi trước rồi mới chia (đã xảy ra thực tế: 278.35 EUR bị cắt
-                        # về 278, chia 139/139, mỗi bên quy đổi ra ~4.150.550đ — lệch hẳn
-                        # so với quy đổi cả 278.35 rồi mới chia đúng 8.313.043 → chia đôi).
-                        progress.progress(15, text="Chia giá phòng connecting...")
-                        wb_bytes_conv = wb_to_bytes(wb)
-                        wb_bytes_conv, cnt_report = split_connecting_room_prices(wb_bytes_conv)
-                        wb = load_workbook(io.BytesIO(wb_bytes_conv))
-                        # Ép các cột dạng mã đọc bằng chuỗi — nếu không, pandas tự suy
-                        # diễn cột "trông giống số" thành float, làm mất số 0 đứng đầu
-                        # (vd số điện thoại "0912345678" → 912345678.0). An toàn kể cả
-                        # khi cột không tồn tại trong file (bỏ qua, không lỗi).
-                        _id_cols = {c: str for c in
-                                   ('SỐ GIẤY TỜ', 'SỐ ĐIỆN THOẠI', 'SỐ PHÒNG', 'MÃ CHECKIN')}
-                        df = pd.read_excel(io.BytesIO(xlsx_bytes), dtype=_id_cols)
-                        df_intl = df[df['LOẠI KHÁCH']=='Quốc tế'].reset_index(drop=True)
-                        df_vn   = df[df['LOẠI KHÁCH']=='Việt Nam'].reset_index(drop=True)
-
-                        progress.progress(25, text="Kiểm tra chất lượng dữ liệu...")
-                        _issues = validate_guests(df)
-                        _visa_watch = check_visa_expiry(df_intl, visa_map=visa_map)
-
-                        progress.progress(35, text="Tách file Quốc tế / Việt Nam...")
-                        wb_intl = split_wb(wb, 'Quốc tế')
-                        wb_vn   = split_wb(wb, 'Việt Nam')
-
-                        progress.progress(50, text="Điền mẫu KBTT...")
-                        wb_kbtt, visa_unmatched, visa_source, kbtt_invalid_ids = build_kbtt(df_intl, visa_map=visa_map)
-
-                        progress.progress(65, text="Điền mẫu Thông báo lưu trú VNM...")
-                        wb_vnm, gks_cnt, gbl_cnt, vnm_ward_unmatched = build_vnm(df_vn)
-
-                        out_files[f'converted_{date_str}.xlsx']      = wb_to_bytes(wb)
-                        out_files[f'KhachQuocTe_{date_str}.xlsx']    = wb_to_bytes(wb_intl)
-                        out_files[f'KhachVietNam_{date_str}.xlsx']   = wb_to_bytes(wb_vn)
-                        out_files[f'ho_so_KBTT_NNN_{date_str}.xlsx'] = wb_to_bytes(wb_kbtt)
-                        out_files[f'thong_bao_luu_tru_VNM_{date_str}.xlsx'] = wb_to_bytes(wb_vnm)
-                        files_made += ["converted (file chung)", "KhachQuocTe", "KhachVietNam",
-                                       "KBTT NNN", "Thông báo lưu trú VNM"]
-
-                    # ── Xử lý file ĐK14 (độc lập, chỉ cần file nguồn IH) ──
-                    if xls_file:
-                        progress.progress(85, text="Điền mẫu ĐK14...")
-                        xls_bytes = xls_file.read()
-                        (dk14_bytes, dk_count, dk14_skipped,
-                         dk14_issues, dk14_map, dk14_stats) = build_dk14(xls_bytes, dk_notifier, dk_checkin)
-                        out_files[f'dk14_{date_str}.xlsx'] = dk14_bytes
-                        has_dk14 = True
-                        files_made.append("ĐK14")
-
-                    for _ofn, _ofb in out_files.items():
-                        zf.writestr(_ofn, _ofb)
-
-                progress.progress(100, text="Hoàn tất!")
-                progress.empty()
-
-                # Lưu kết quả vào session — kết quả & nút tải không biến mất sau rerun
-                _daily = {'files_made': files_made, 'zip': zip_buf.getvalue(),
-                          'files': out_files, 'rate': rate,
-                          'date_str': date_str, 'has_xlsx': has_xlsx, 'has_dk14': has_dk14,
-                          'dk14_count': dk_count if has_dk14 else None, 'dk14_skipped': dk14_skipped,
-                          'dk14_issues': dk14_issues if has_dk14 else [],
-                          'dk14_map': dk14_map if has_dk14 else None,
-                          'dk14_stats': dk14_stats if has_dk14 else None,
-                          'cnt_report': cnt_report}
-                if has_xlsx:
-                    unknown_nats = []
-                    for q in df_intl.get('QUỐC TỊCH', pd.Series([], dtype=str)).dropna().unique():
-                        mapped = lookup_nat_kbtt(q)
-                        if not _re.match(r'^[A-Z]{2,3} - ', str(mapped)):
-                            unknown_nats.append(str(q))
-                    # Thống kê phục vụ báo cáo ngày cho quản lý
-                    _nat_top = (df.get('QUỐC TỊCH', pd.Series(dtype=str)).dropna().astype(str)
-                                .str.strip().value_counts().head(10))
-                    _arr_s = pd.to_datetime(df.get('NGÀY ĐẾN'), dayfirst=True, errors='coerce')
-                    _dep_col_d = 'NGÀY ÐI' if 'NGÀY ÐI' in df.columns else ('NGÀY ĐI' if 'NGÀY ĐI' in df.columns else None)
-                    _avg_nights = None
-                    if _dep_col_d:
-                        _dep_s = pd.to_datetime(df[_dep_col_d], dayfirst=True, errors='coerce')
-                        _nvals = (_dep_s - _arr_s).dt.days.dropna()
-                        _nvals = _nvals[_nvals > 0]
-                        if len(_nvals):
-                            _avg_nights = round(float(_nvals.mean()), 1)
-                    _rooms_cnt = int(df.get('SỐ PHÒNG', pd.Series(dtype=str)).dropna().astype(str)
-                                     .str.strip().nunique())
-                    # Khách check-in / check-out HÔM NAY — đếm theo ngày đến/đi
-                    # trùng ngày hiện tại (giờ Việt Nam), phục vụ thẻ tổng quan.
-                    _today_ts = pd.Timestamp(today_vn())
-                    _checkin_n = int((_arr_s.dt.normalize() == _today_ts).sum()) if _arr_s is not None else 0
-                    _checkout_n = 0
-                    if _dep_col_d:
-                        _checkout_n = int((pd.to_datetime(df[_dep_col_d], dayfirst=True, errors='coerce')
-                                           .dt.normalize() == _today_ts).sum())
-                    _daily.update({'issues': _issues, 'visa_watch': _visa_watch,
-                                   'nat_top': [(str(k), int(v)) for k, v in _nat_top.items()],
-                                   'avg_nights': _avg_nights, 'rooms_cnt': _rooms_cnt or None,
-                                   'checkin_n': _checkin_n, 'checkout_n': _checkout_n})
-                    _daily.update({'total': len(df), 'intl': len(df_intl), 'vn': len(df_vn),
-                                   'gks': gks_cnt, 'gbl': gbl_cnt, 'conv': conv,
-                                   'unknown_nats': unknown_nats,
-                                   'visa_used': visa_source is not None,
-                                   'visa_source': visa_source,
-                                   'visa_matched': len(df_intl) - len(visa_unmatched) if visa_source else 0,
-                                   'visa_unmatched': visa_unmatched,
-                                   'visa_skipped_vn': visa_map.get('skipped_vn', 0) if isinstance(visa_map, dict) else 0,
-                                   'kbtt_invalid_ids': kbtt_invalid_ids,
-                                   'vnm_ward_unmatched': vnm_ward_unmatched})
-                st.session_state['daily_results'] = _daily
-
-                def _mark_daily_done(state, _daily=_daily, has_xlsx=has_xlsx, has_dk14=has_dk14):
-                    task = {'done': True, 'time': now_vn().strftime('%H:%M:%S'),
-                            'has_xlsx': has_xlsx, 'has_dk14': has_dk14}
-                    summary = None
-                    if has_xlsx:
-                        iss = _daily.get('issues')
-                        summary = {
-                            'total': _daily.get('total'), 'intl': _daily.get('intl'), 'vn': _daily.get('vn'),
-                            'gks': _daily.get('gks'), 'gbl': _daily.get('gbl'), 'conv': _daily.get('conv'),
-                            'red_issues': int((iss['Mức độ'] == '🔴').sum()) if iss is not None and len(iss) else 0,
-                            'yellow_issues': int((iss['Mức độ'] == '🟡').sum()) if iss is not None and len(iss) else 0,
-                            'visa_watch_count': len(_daily.get('visa_watch') or []),
-                            'rooms_cnt': _daily.get('rooms_cnt'),
-                            'checkin_n': _daily.get('checkin_n'), 'checkout_n': _daily.get('checkout_n'),
-                        }
-                    # Số khách/phòng từ ĐK14 (chỉ để hiện ở Tổng quan) — chạy XLSX sau đó
-                    # không được làm mất nó.
-                    dk = _daily.get('dk14_stats') or (
-                        ((state.get('tasks') or {}).get('daily') or {}).get('summary') or {}).get('dk14')
-                    if dk:
-                        summary = dict(summary or {}, dk14=dk)
-                    if summary is not None:
-                        task['summary'] = summary
-                    state.setdefault('tasks', {})['daily'] = task
-                _progress_update(_mark_daily_done)
-            except Exception as e:
-                st.session_state.pop('daily_results', None)
-                st.error(f"Lỗi: {e}", icon=":material/error:")
-                st.exception(e)
+                    def _mark_daily_done(state, _daily=_daily, has_xlsx=has_xlsx, has_dk14=has_dk14):
+                        task = {'done': True, 'time': now_vn().strftime('%H:%M:%S'),
+                                'has_xlsx': has_xlsx, 'has_dk14': has_dk14}
+                        summary = None
+                        if has_xlsx:
+                            iss = _daily.get('issues')
+                            summary = {
+                                'total': _daily.get('total'), 'intl': _daily.get('intl'), 'vn': _daily.get('vn'),
+                                'gks': _daily.get('gks'), 'gbl': _daily.get('gbl'), 'conv': _daily.get('conv'),
+                                'red_issues': int((iss['Mức độ'] == '🔴').sum()) if iss is not None and len(iss) else 0,
+                                'yellow_issues': int((iss['Mức độ'] == '🟡').sum()) if iss is not None and len(iss) else 0,
+                                'visa_watch_count': len(_daily.get('visa_watch') or []),
+                                'rooms_cnt': _daily.get('rooms_cnt'),
+                                'checkin_n': _daily.get('checkin_n'), 'checkout_n': _daily.get('checkout_n'),
+                            }
+                        # Số khách/phòng từ ĐK14 (chỉ để hiện ở Tổng quan) — chạy XLSX sau đó
+                        # không được làm mất nó.
+                        dk = _daily.get('dk14_stats') or (
+                            ((state.get('tasks') or {}).get('daily') or {}).get('summary') or {}).get('dk14')
+                        if dk:
+                            summary = dict(summary or {}, dk14=dk)
+                        if summary is not None:
+                            task['summary'] = summary
+                        state.setdefault('tasks', {})['daily'] = task
+                    _progress_update(_mark_daily_done)
+                except Exception as e:
+                    st.session_state.pop('daily_results', None)
+                    st.error(f"Lỗi: {e}", icon=":material/error:")
+                    st.exception(e)
 
     _dr = st.session_state.get('daily_results')
     if _dr:
-        st.success("Xử lý hoàn tất!", icon=":material/check_circle:")
+        _u = _dr.get('used') or {}
+        with head_box:
+            _flow_head('daily', ('Cài đặt', 'Tải file', 'Kết quả'), [
+                ('Tỷ giá', f"{_u['rate']:,.2f}" if _dr.get('has_xlsx') and _u.get('rate') else None),
+                ('Ngày', _u.get('date')),
+                ('Người thông báo', _u.get('notifier') if _dr.get('has_dk14') else None),
+                (f"{len(_u.get('files') or [])} file", ' · '.join(_u.get('files') or []))])
+        _daily_bar(bar_box, _dr)
+        if _scroll_top:
+            _flow_scroll_top()
         if _dr['has_xlsx']:
+            st.markdown('<div class="section-label"><span class="mi">table_view</span>Kết quả file khách (XLSX)</div>',
+                        unsafe_allow_html=True)
             c1,c2,c3,c4 = st.columns(4)
             c1.metric("Tổng khách", _dr['total'])
             c2.metric("Quốc tế", _dr['intl'])
@@ -4208,6 +4576,9 @@ def _render_daily():
             st.info("Chỉ tạo file ĐK14 (không có file XLSX dữ liệu khách).", icon=":material/info:")
 
         if _dr.get('has_dk14'):
+            st.write("")
+            st.markdown('<div class="section-label"><span class="mi">local_police</span>Kết quả ĐK14 (file IH)</div>',
+                        unsafe_allow_html=True)
             _dk_iss = _dr.get('dk14_issues') or []
             _n_skip = len(_dr.get('dk14_skipped') or [])
             _n_fix = sum(1 for t, *_ in _dk_iss if t == 'fix')
@@ -4251,84 +4622,99 @@ def _render_daily():
 
         st.markdown("**File đã tạo:** " + " · ".join(_dr['files_made']))
 
-        st.download_button(
-            label="Tải về tất cả file (ZIP)", icon=":material/download:",
-            data=_dr['zip'],
-            file_name=f"hotel_{_dr['date_str']}.zip",
-            mime="application/zip",
-            use_container_width=True,
-            type="primary"
-        )
-
-        # ── Tải riêng từng file (không cần giải nén ZIP) ──
-        if _dr.get('files'):
-            with st.expander("Tải riêng từng file", icon=":material/download:"):
-                for _fn, _fb in _dr['files'].items():
-                    st.download_button(_fn, _fb, icon=":material/download:", file_name=_fn,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True, key=f"dl_single_{_fn}")
-
 if st.session_state.menu == "daily":
     _render_daily()
+
+def _rc_bar(bar_box, _res):
+    """Thanh hành động dính của Regcard + ARR: trạng thái + 2 nút tải (PDF, ARR)."""
+    with bar_box:
+        _c1, _c2, _c3 = st.columns([3.4, 1.5, 1.5], vertical_alignment="center")
+        _c1.markdown(_flow_status(f"Đã tạo {_res['count']} regcard" + (" + file ARR" if _res['arr'] else ""), []),
+                     unsafe_allow_html=True)
+        _c2.download_button(f"Tải {_res['count']} Regcard (PDF)", icon=":material/download:", data=_res['pdf'],
+                            file_name=f"regcards_{_res['date']}.pdf", mime="application/pdf",
+                            use_container_width=True, type="primary", key="dl_rc_pdf", on_click="ignore")
+        if _res['arr']:
+            _c3.download_button("Tải file ARR (Excel)", icon=":material/download:", data=_res['arr'],
+                                file_name=f"Arr {_res['arr_date']}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True, type="primary", key="dl_rc_arr", on_click="ignore")
+
 
 # ── Regcard screen ────────────────────────────────────────────────────────
 @st.fragment
 def _render_regcard():
-    st.markdown('<div class="tan-h1">Regcard + ARR</div>'
-                '<div class="tan-h1sub">Tạo Registration Card (PDF) và file ARR từ file Arrival Smile</div>',
-                unsafe_allow_html=True)
-    st.caption("Điền dữ liệu từ file Arrival Smile lên mẫu Regcard PDF gốc, đồng thời tạo file ARR "
-               "(đúng định dạng ARR Converter — nhóm Conf# · đếm phòng · Cà Thẻ / Thu Tiền / Xem Lại BU / FOC Late C/O) — ra cùng lúc 2 file.")
+    # Cùng mẫu với Xử lý hàng ngày: khung đặt chỗ theo thứ tự hiển thị (đầu trang → form → thanh hành động dính)
+    head_box = st.container(key="rc_head")
+    form_box = st.container(key="rc_form")
+    bar_box = st.container(key="rc_bar")
+    _scroll_top = False
+    with head_box:
+        st.markdown('<div class="tan-h1">Regcard + ARR</div>'
+                    '<div class="tan-h1sub">Tạo Registration Card (PDF) và file ARR từ file Arrival Smile</div>',
+                    unsafe_allow_html=True)
+        st.caption("Điền dữ liệu từ file Arrival Smile lên mẫu Regcard PDF gốc, đồng thời tạo file ARR "
+                   "(đúng định dạng ARR Converter — nhóm Conf# · đếm phòng · Cà Thẻ / Thu Tiền / Xem Lại BU / FOC Late C/O) — ra cùng lúc 2 file.")
 
-    with st.container(border=True):
-        rc_file = st.file_uploader("File Excel dữ liệu booking (.xlsx)", type=['xlsx'], key="rc_xlsx")
+    with form_box:
+        with st.container(border=True):
+            rc_file = st.file_uploader("File Excel dữ liệu booking (.xlsx)", type=['xlsx'], key="rc_xlsx")
 
-        only_main = st.checkbox("Chỉ tạo cho khách chính (có mã Conf#)", value=True,
-                                help="Bỏ chọn để tạo regcard cho tất cả khách, kể cả khách đi cùng phòng")
+            only_main = st.checkbox("Chỉ tạo cho khách chính (có mã Conf#)", value=True,
+                                    help="Bỏ chọn để tạo regcard cho tất cả khách, kể cả khách đi cùng phòng")
 
-    st.write("")
+        st.write("")
 
-    if st.button("Tạo Regcard PDF + file ARR", icon=":material/print:", type="primary", disabled=rc_file is None, use_container_width=True):
-        with st.spinner("Đang tạo Regcard PDF và file ARR..."):
-            try:
-                rc_bytes = rc_file.read()
-                pdf_data, count = build_regcards(rc_bytes, only_main=only_main)
-
-                # Tạo file ARR từ cùng file đầu vào (lỗi ARR không làm hỏng PDF)
-                arr_bytes, arr_stats, arr_err = None, None, None
+        if st.button("Tạo Regcard PDF + file ARR", icon=":material/print:", type="primary", disabled=rc_file is None, use_container_width=True):
+            with st.spinner("Đang tạo Regcard PDF và file ARR..."):
                 try:
-                    wb_arr, arr_stats = build_arr(rc_bytes)
-                    arr_bytes = wb_to_bytes(wb_arr)
-                except Exception as _e:
-                    arr_err = str(_e)
+                    rc_bytes = rc_file.read()
+                    pdf_data, count = build_regcards(rc_bytes, only_main=only_main)
 
-                st.session_state['rc_results'] = {
-                    'pdf': pdf_data, 'count': count,
-                    'arr': arr_bytes, 'arr_stats': arr_stats, 'arr_err': arr_err,
-                    'date': today_vn().strftime('%d_%m'),
-                    'arr_date': today_vn().strftime('%d.%m.%Y'),
-                }
+                    # Tạo file ARR từ cùng file đầu vào (lỗi ARR không làm hỏng PDF)
+                    arr_bytes, arr_stats, arr_err = None, None, None
+                    try:
+                        wb_arr, arr_stats = build_arr(rc_bytes)
+                        arr_bytes = wb_to_bytes(wb_arr)
+                    except Exception as _e:
+                        arr_err = str(_e)
 
-                def _mark_regcard_done(state, count=count, arr_stats=arr_stats):
-                    task = {'done': True, 'time': now_vn().strftime('%H:%M:%S'), 'regcards': count}
-                    if arr_stats:
-                        task['summary'] = {k: arr_stats.get(k) for k in
-                                           ('bookings', 'rooms', 'ota', 'ca_the', 'thu_tien', 'xem_lai_bu', 'foc_lco')}
-                    state.setdefault('tasks', {})['regcard'] = task
-                _progress_update(_mark_regcard_done)
-            except Exception as e:
-                st.session_state.pop('rc_results', None)
-                st.error(f"Lỗi: {e}", icon=":material/error:")
-                st.exception(e)
+                    st.session_state['rc_results'] = {
+                        'pdf': pdf_data, 'count': count,
+                        'arr': arr_bytes, 'arr_stats': arr_stats, 'arr_err': arr_err,
+                        'date': today_vn().strftime('%d_%m'),
+                        'arr_date': today_vn().strftime('%d.%m.%Y'),
+                        'used': {'file': rc_file.name, 'only_main': only_main},
+                    }
+                    st.session_state['rc_edit'] = False   # xong → gập form, kết quả lên đầu trang
+                    _scroll_top = True
 
-    # Kết quả lưu trong session — 2 nút tải không biến mất sau khi bấm 1 nút
+                    def _mark_regcard_done(state, count=count, arr_stats=arr_stats):
+                        task = {'done': True, 'time': now_vn().strftime('%H:%M:%S'), 'regcards': count}
+                        if arr_stats:
+                            task['summary'] = {k: arr_stats.get(k) for k in
+                                               ('bookings', 'rooms', 'ota', 'ca_the', 'thu_tien', 'xem_lai_bu', 'foc_lco')}
+                        state.setdefault('tasks', {})['regcard'] = task
+                    _progress_update(_mark_regcard_done)
+                except Exception as e:
+                    st.session_state.pop('rc_results', None)
+                    st.error(f"Lỗi: {e}", icon=":material/error:")
+                    st.exception(e)
+
+    # Kết quả lưu trong session — các nút tải (ở thanh dính) không biến mất sau khi bấm 1 nút
     _res = st.session_state.get('rc_results')
     if _res:
         if _res['count'] == 0:
             st.warning("Không tìm thấy khách nào để tạo regcard. Kiểm tra lại file.", icon=":material/warning:")
         else:
-            st.success(f"Đã tạo {_res['count']} regcard"
-                       + (" + file ARR!" if _res['arr'] else "!"), icon=":material/check_circle:")
+            _u = _res.get('used') or {}
+            with head_box:
+                _flow_head('rc', ('Tải file', 'Tạo Regcard', 'Kết quả'), [
+                    ('File', _u.get('file')),
+                    ('Phạm vi', ('chỉ khách chính' if _u['only_main'] else 'tất cả khách') if 'only_main' in _u else None)])
+            _rc_bar(bar_box, _res)
+            if _scroll_top:
+                _flow_scroll_top()
             if _res['arr_stats']:
                 a1, a2, a3, a4, a5 = st.columns(5)
                 a1.metric("Regcard", _res['count'])
@@ -4341,22 +4727,6 @@ def _render_regcard():
             else:
                 st.metric("Số regcard", _res['count'])
 
-            d1, d2 = st.columns(2)
-            with d1:
-                st.download_button(
-                    label=f"Tải {_res['count']} Regcard (PDF)", icon=":material/download:",
-                    data=_res['pdf'],
-                    file_name=f"regcards_{_res['date']}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True, type="primary", key="dl_rc_pdf")
-            with d2:
-                if _res['arr']:
-                    st.download_button(
-                        label="Tải file ARR (Excel)", icon=":material/download:",
-                        data=_res['arr'],
-                        file_name=f"Arr {_res['arr_date']}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True, type="primary", key="dl_rc_arr")
             if _res['arr_err']:
                 st.warning(f"Không tạo được file ARR: {_res['arr_err']}", icon=":material/warning:")
 
