@@ -519,6 +519,7 @@ NAT_NORM = {
     "netherland": "NLD - Netherland",
     "netherlandantilles": "NLD - Netherland",
     "newzealand": "NZL - New Zealand",
+    "nga": "RUS - Russia",
     "nhatban": "JPN - Japan",
     "nicaragoa": "NIC - Nicaragua",
     "nicaragua": "NIC - Nicaragua",
@@ -547,6 +548,7 @@ NAT_NORM = {
     "phap": "FRA - France",
     "philippin": "PHL - Philippines",
     "philippine": "PHL - Philippines",
+    "philippines": "PHL - Philippines",
     "poland": "POL - Poland",
     "portugal": "PRT - Portugal",
     "qatar": "QAT - Qatar",
@@ -559,6 +561,7 @@ NAT_NORM = {
     "ruana": "RWA - Rwanda",
     "rumani": "ROU - Romania",
     "russia": "RUS - Russia",
+    "russianfederation": "RUS - Russia",
     "rwanda": "RWA - Rwanda",
     "saintlucia": "LCA - Saint Lucia",
     "sanmarino": "SMR - San Marino",
@@ -648,6 +651,10 @@ def lookup_nat_kbtt(raw):
     if not raw: return ''
     raw = str(raw).strip()
     key = _norm_nat(raw)
+    # "Đức" và "Úc" cùng chuẩn hoá thành "uc" (chữ Đ không có dạng tách dấu nên bị bỏ) → nhìn chữ Đ gốc để phân biệt:
+    # có Đ = Đức (Germany, theo bảng); không có Đ = Úc (Australia). Trước đây khách Úc bị ra "D - Germany".
+    if key == 'uc' and 'đ' not in raw.lower():
+        return NAT_NORM['australia']
     if key in NAT_NORM:
         return NAT_NORM[key]
     # already in CODE - Name form?
